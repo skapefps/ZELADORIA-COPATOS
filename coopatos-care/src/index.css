@@ -1,0 +1,108 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+@import url('https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@400;500;600;700;800&display=swap');
+
+@layer base {
+  :root {
+    --background: 210 20% 97%;
+    --foreground: 213 56% 24%;
+
+    --card: 0 0% 100%;
+    --card-foreground: 213 56% 24%;
+
+    --popover: 0 0% 100%;
+    --popover-foreground: 213 56% 24%;
+
+    --primary: 213 56% 24%;
+    --primary-foreground: 0 0% 100%;
+
+    --secondary: 73 75% 43%;
+    --secondary-foreground: 0 0% 100%;
+
+    --muted: 210 20% 93%;
+    --muted-foreground: 213 20% 46%;
+
+    --accent: 73 75% 93%;
+    --accent-foreground: 213 56% 24%;
+
+    --destructive: 0 72% 51%;
+    --destructive-foreground: 0 0% 100%;
+
+    --border: 213 20% 88%;
+    --input: 213 20% 88%;
+    --ring: 213 56% 24%;
+
+    --radius: 0.75rem;
+
+    --sidebar-background: 213 56% 24%;
+    --sidebar-foreground: 0 0% 95%;
+    --sidebar-primary: 73 75% 43%;
+    --sidebar-primary-foreground: 0 0% 100%;
+    --sidebar-accent: 213 56% 30%;
+    --sidebar-accent-foreground: 0 0% 95%;
+    --sidebar-border: 213 40% 32%;
+    --sidebar-ring: 73 75% 43%;
+
+    /* Custom tokens */
+    --success: 152 60% 40%;
+    --success-foreground: 0 0% 100%;
+    --warning: 38 92% 50%;
+    --warning-foreground: 0 0% 100%;
+    --info: 210 80% 52%;
+    --info-foreground: 0 0% 100%;
+
+    /* Priority colors */
+    --priority-critical: 0 72% 51%;
+    --priority-high: 25 95% 53%;
+    --priority-medium: 38 92% 50%;
+    --priority-low: 210 80% 52%;
+    --priority-minimal: 152 60% 40%;
+  }
+
+  .dark {
+    --background: 213 56% 8%;
+    --foreground: 210 20% 95%;
+    --card: 213 56% 12%;
+    --card-foreground: 210 20% 95%;
+    --popover: 213 56% 12%;
+    --popover-foreground: 210 20% 95%;
+    --primary: 73 75% 43%;
+    --primary-foreground: 0 0% 100%;
+    --secondary: 213 56% 24%;
+    --secondary-foreground: 0 0% 100%;
+    --muted: 213 40% 18%;
+    --muted-foreground: 210 15% 60%;
+    --accent: 213 56% 18%;
+    --accent-foreground: 210 20% 95%;
+    --destructive: 0 62% 30%;
+    --destructive-foreground: 210 40% 98%;
+    --border: 213 40% 20%;
+    --input: 213 40% 20%;
+    --ring: 73 75% 43%;
+  }
+}
+
+@layer base {
+  * {
+    @apply border-border;
+  }
+
+  body {
+    @apply bg-background text-foreground font-sans antialiased;
+    font-family: 'Plus Jakarta Sans', sans-serif;
+  }
+}
+
+@layer utilities {
+  .gradient-primary {
+    background: linear-gradient(135deg, hsl(213 56% 24%), hsl(213 56% 32%));
+  }
+  .gradient-secondary {
+    background: linear-gradient(135deg, hsl(73 75% 43%), hsl(73 75% 50%));
+  }
+  .gradient-hero {
+    background: linear-gradient(135deg, hsl(213 56% 20%), hsl(213 56% 28%), hsl(213 56% 24%));
+  }
+}
