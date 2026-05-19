@@ -12,15 +12,41 @@ const EmployeeLogin = () => {
   const { loginEmployee } = useAuth();
   const navigate = useNavigate();
 
-  const handleSubmit = (e: React.FormEvent) => {
-    e.preventDefault();
-    if (!matricula.trim() || matricula.trim().length < 3) {
-      setError("Insira uma matrícula válida (mín. 3 dígitos)");
+  const handleSubmit = async (e: React.FormEvent) => {
+  e.preventDefault();
+
+  if (!matricula.trim() || matricula.trim().length < 3) {
+    setError("Insira uma matrícula válida (mín. 3 dígitos)");
+    return;
+  }
+
+  try {
+    const response = await fetch("http://localhost:3333/employee-login", {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+      },
+      body: JSON.stringify({
+        registrationNumber: matricula.trim(),
+      }),
+    });
+
+    const data = await response.json();
+
+    if (!response.ok) {
+      setError(data.error || "Matrícula não encontrada");
       return;
     }
+
+    localStorage.setItem("employee", JSON.stringify(data.employee));
+
     loginEmployee(matricula.trim());
+
     navigate("/funcionario");
-  };
+  } catch (error) {
+    setError("Erro ao conectar com o servidor");
+  }
+};
 
   return (
     <div className="min-h-screen flex flex-col items-center justify-center gradient-hero px-4">
