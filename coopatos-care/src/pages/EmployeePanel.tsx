@@ -13,6 +13,7 @@ import {
   Droplets,
   Zap,
   Mountain,
+  Expand,
   Shield,
   TreePine,
   HelpCircle,
@@ -99,6 +100,7 @@ const API_URL =
   const employeeName = employee.name || "";
   const navigate = useNavigate();
   const { toast } = useToast();
+  const [expandedImage, setExpandedImage] = useState<string | null>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
 
   const [tab, setTab] = useState<"new" | "history">("new");
@@ -463,7 +465,8 @@ const getStatusStyle = (status: string) => {
 };
 
   return (
-    <div className="min-h-screen bg-background flex flex-col max-w-lg mx-auto">
+      <div className="min-h-screen bg-background">
+  <div className="mx-auto w-full max-w-lg lg:max-w-6xl lg:px-8"></div>
       {/* Header */}
       <header className="gradient-primary px-4 py-3 flex items-center justify-between sticky top-0 z-10">
         <div className="flex items-center gap-2">
@@ -520,7 +523,7 @@ const getStatusStyle = (status: string) => {
       </div>
 
       {/* Content */}
-      <div className="flex-1 p-4">
+      <div className="flex-1 p-4 lg:py-8">
         <AnimatePresence mode="wait">
           {tab === "new" ? (
             <motion.form
@@ -529,7 +532,7 @@ const getStatusStyle = (status: string) => {
               animate={{ opacity: 1, x: 0 }}
               exit={{ opacity: 0, x: 20 }}
               onSubmit={handleSubmit}
-              className="space-y-4"
+              className="space-y-4 lg:max-w-2xl lg:mx-auto"
             >
               {/* Image Upload */}
               <div>
@@ -672,7 +675,7 @@ const getStatusStyle = (status: string) => {
               initial={{ opacity: 0, x: 20 }}
               animate={{ opacity: 1, x: 0 }}
               exit={{ opacity: 0, x: -20 }}
-              className="space-y-3"
+              className="space-y-3 lg:grid lg:grid-cols-3 lg:gap-4 lg:space-y-0"
             >
               {myReports.length === 0 ? (
                 <div className="text-center py-12 text-muted-foreground">
@@ -743,7 +746,7 @@ const getStatusStyle = (status: string) => {
 
         {selectedReport && (
   <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4">
-    <div className="bg-card rounded-2xl p-5 w-full max-w-lg max-h-[90vh] overflow-y-auto shadow-2xl border border-border">
+    <div className="bg-card rounded-2xl p-5 w-full max-w-lg lg:max-w-3xl max-h-[90vh] overflow-y-auto shadow-2xl border border-border">
      <div className="mb-5">
   <p className="text-xs text-muted-foreground">Detalhes do chamado</p>
   <h2 className="text-xl font-bold text-foreground">
@@ -759,10 +762,21 @@ const getStatusStyle = (status: string) => {
   "/upload/",
   "/upload/w_900,q_auto,f_auto/"
 )}
-        alt="Imagem do chamado"
-        className="w-full h-64 object-cover rounded-lg"
-      />
 
+        alt="Imagem do chamado"
+        className="w-full h-64 lg:h-96 object-cover rounded-lg"
+      />
+<button
+  type="button"
+  onClick={() =>
+    setExpandedImage(
+      selectedReport.images![detailImageIndex].imageUrl
+    )
+  }
+  className="absolute top-2 right-2 bg-black/60 hover:bg-black/80 text-white rounded-full w-9 h-9 flex items-center justify-center transition-colors"
+>
+  <Expand className="w-4 h-4" />
+</button>
       {selectedReport.images.length > 1 && (
         <>
           <button
@@ -1025,6 +1039,25 @@ const getStatusStyle = (status: string) => {
   )}
 </div>
     </div>
+  </div>
+)}{expandedImage && (
+  <div
+    className="fixed inset-0 z-[9999] bg-black/90 flex items-center justify-center p-4"
+    onClick={() => setExpandedImage(null)}
+  >
+    <img
+      src={expandedImage}
+      alt="Imagem ampliada"
+      className="max-w-full max-h-full object-contain rounded-lg"
+    />
+
+    <button
+      type="button"
+      onClick={() => setExpandedImage(null)}
+      className="absolute top-4 right-4 bg-black/60 hover:bg-black/80 text-white rounded-full w-10 h-10 flex items-center justify-center text-xl"
+    >
+      ✕
+    </button>
   </div>
 )}
       </div>
