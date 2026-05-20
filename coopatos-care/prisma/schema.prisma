@@ -103,16 +103,19 @@ model Report {
 }
 
 model ReportImage {
-  id          Int      @id @default(autoincrement())
+  id           Int      @id @default(autoincrement())
 
-  reportId    Int
-  imageUrl    String
+  reportId     Int
+  imageUrl     String
+  publicId     String?
+  resourceType String?  @default("image")
 
-  report      Report @relation(fields: [reportId], references: [id])
+  report       Report @relation(fields: [reportId], references: [id])
 
-  createdAt   DateTime @default(now())
+  createdAt    DateTime @default(now())
 
   @@index([reportId])
+  @@index([publicId])
 }
 
 enum UserRole {

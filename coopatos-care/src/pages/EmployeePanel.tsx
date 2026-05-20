@@ -17,6 +17,7 @@ import {
   Shield,
   TreePine,
   HelpCircle,
+  Trash2,
 } from "lucide-react";
 
 import { Button } from "@/components/ui/button";
@@ -61,9 +62,11 @@ type Report = {
   };
 
   images?: {
-    id: number;
-    imageUrl: string;
-  }[];
+  id: number;
+  imageUrl: string;
+  publicId?: string | null;
+  resourceType?: string | null;
+}[];
 };
 
 const categoryIcons: Record<string, React.ReactNode> = {
@@ -106,7 +109,10 @@ const API_URL =
   const employeeName = employee.name || "";
   const navigate = useNavigate();
   const { toast } = useToast();
-  const [expandedImage, setExpandedImage] = useState<string | null>(null);
+  const [expandedMedia, setExpandedMedia] = useState<{
+  url: string;
+  type?: string | null;
+} | null>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
 
   const [tab, setTab] = useState<"new" | "history">("new");
@@ -302,7 +308,9 @@ const uploadImageToCloudinary = async (file: File) => {
   );
 
   const response = await fetch(
-    `https://api.cloudinary.com/v1_1/${import.meta.env.VITE_CLOUDINARY_CLOUD_NAME}/image/upload`,
+    `https://api.cloudinary.com/v1_1/${
+      import.meta.env.VITE_CLOUDINARY_CLOUD_NAME
+    }/auto/upload`,
     {
       method: "POST",
       body: formData,
@@ -311,13 +319,17 @@ const uploadImageToCloudinary = async (file: File) => {
 
   const data = await response.json();
 
-  console.log("Cloudinary response:", data);
-
   if (!response.ok || !data.secure_url) {
-    throw new Error(data.error?.message || "Erro ao enviar imagem para o Cloudinary");
+    throw new Error(
+      data.error?.message || "Erro ao enviar arquivo para o Cloudinary"
+    );
   }
 
-  return data.secure_url;
+  return {
+    imageUrl: data.secure_url,
+    publicId: data.public_id,
+    resourceType: data.resource_type || "image",
+  };
 };
 
   // =========================
@@ -379,7 +391,7 @@ let imageUrl = null;
 
 console.log("URL da imagem enviada:", imageUrl);
 
-const imageUrls = await Promise.all(
+const mediaItems = await Promise.all(
   selectedFiles.map((file) => uploadImageToCloudinary(file))
 );
 
@@ -396,7 +408,7 @@ const imageUrls = await Promise.all(
   latitude: loc.lat,
   longitude: loc.lng,
   address: finalAddress,
-  imageUrls,
+  mediaItems,
 }),
       });
 
@@ -731,7 +743,7 @@ const getStatusStyle = (status: string) => {
                 <input
   ref={fileInputRef}
   type="file"
-  accept="image/*"
+ accept="image/*,video/*"
   multiple
   className="hidden"
   onChange={handleImageChange}
@@ -739,13 +751,22 @@ const getStatusStyle = (status: string) => {
 
                 {imagePreviews.length > 0 ? (
   <div className="relative rounded-lg overflow-hidden">
-    <img
-  src={imagePreviews[currentImageIndex]}
-  alt="Preview"
-  loading="lazy"
-  decoding="async"
-  className="w-full h-48 object-cover"
-/>
+    {selectedFiles[currentImageIndex]?.type.startsWith("video/") ? (
+  <video
+    src={imagePreviews[currentImageIndex]}
+    controls
+    preload="metadata"
+    className="w-full h-48 object-cover rounded-lg bg-black"
+  />
+) : (
+  <img
+    src={imagePreviews[currentImageIndex]}
+    alt="Preview"
+    loading="lazy"
+    decoding="async"
+    className="w-full h-48 object-cover rounded-lg"
+  />
+)}
 
     {imagePreviews.length > 1 && (
       <>
@@ -898,20 +919,33 @@ const getStatusStyle = (status: string) => {
                     className="bg-card rounded-lg p-4 border border-border"
                     
                   >
-                    {report.images?.[0]?.imageUrl && (
-  <div className="mb-3 rounded-lg overflow-hidden border border-border">
-    <img
-  src={report.images[0].imageUrl.replace(
-    "/upload/",
-    "/upload/w_500,q_auto,f_auto/"
+                    <div className="mb-3 h-32 rounded-lg overflow-hidden border border-border bg-muted/30 flex items-center justify-center">
+  {report.images?.[0]?.imageUrl ? (
+    report.images[0].resourceType === "video" ? (
+      <video
+        src={report.images[0].imageUrl}
+        controls
+        preload="metadata"
+        className="w-full h-32 object-cover bg-black"
+      />
+    ) : (
+      <img
+        src={report.images[0].imageUrl.replace(
+          "/upload/",
+          "/upload/w_500,q_auto,f_auto/"
+        )}
+        alt="Preview do chamado"
+        loading="lazy"
+        decoding="async"
+        className="w-full h-32 object-cover"
+      />
+    )
+  ) : (
+    <span className="text-xs text-muted-foreground">
+      Sem mídia
+    </span>
   )}
-  alt="Preview do chamado"
-  loading="lazy"
-  decoding="async"
-  className="w-full h-32 object-cover"
-/>
-  </div>
-)}
+</div>
                     <div className="flex items-start justify-between mb-2">
                       <div>
                         <span className="text-xs text-muted-foreground">
@@ -968,26 +1002,36 @@ const getStatusStyle = (status: string) => {
   </h2>
 </div>
 
-      {selectedReport.images && selectedReport.images.length > 0 && (
+     {selectedReport.images && selectedReport.images.length > 0 && (
   <>
     <div className="relative mb-4 rounded-lg overflow-hidden">
-      <img
-  src={selectedReport.images[detailImageIndex].imageUrl.replace(
-    "/upload/",
-    "/upload/w_900,q_auto,f_auto/"
-  )}
-  alt="Imagem do chamado"
-  loading="lazy"
-  decoding="async"
-  className="w-full h-64 lg:h-96 object-cover rounded-lg"
-/>
+      {selectedReport.images[detailImageIndex].resourceType === "video" ? (
+        <video
+          src={selectedReport.images[detailImageIndex].imageUrl}
+          controls
+          preload="metadata"
+          className="w-full h-64 lg:h-96 object-cover rounded-lg bg-black"
+        />
+      ) : (
+        <img
+          src={selectedReport.images[detailImageIndex].imageUrl.replace(
+            "/upload/",
+            "/upload/w_900,q_auto,f_auto/"
+          )}
+          alt="Imagem do chamado"
+          loading="lazy"
+          decoding="async"
+          className="w-full h-64 lg:h-96 object-cover rounded-lg"
+        />
+)}
 <button
   type="button"
   onClick={() =>
-    setExpandedImage(
-      selectedReport.images![detailImageIndex].imageUrl
-    )
-  }
+  setExpandedMedia({
+    url: selectedReport.images![detailImageIndex].imageUrl,
+    type: selectedReport.images![detailImageIndex].resourceType,
+  })
+}
   className="absolute top-2 right-2 bg-black/60 hover:bg-black/80 text-white rounded-full w-9 h-9 flex items-center justify-center transition-colors"
 >
   <Expand className="w-4 h-4" />
@@ -1029,21 +1073,20 @@ const getStatusStyle = (status: string) => {
       )}
     </div>
 
-    {isEditing && selectedReport.images?.[detailImageIndex] && (
+    {isEditing && (
+  <div className="mb-4 space-y-2">
+    {selectedReport.images?.[detailImageIndex] && (
       <Button
-        variant="destructive"
+        variant="outline"
         size="sm"
-        className="mb-4 w-full"
+        className="w-full border-red-200 text-red-600 hover:bg-red-50 hover:text-red-700"
         onClick={async () => {
           const imageId =
             selectedReport.images![detailImageIndex].id;
 
-          await fetch(
-            `${API_URL}/report-images/${imageId}`,
-            {
-              method: "DELETE",
-            }
-          );
+          await fetch(`${API_URL}/report-images/${imageId}`, {
+            method: "DELETE",
+          });
 
           const updatedImages =
             selectedReport.images!.filter(
@@ -1056,6 +1099,7 @@ const getStatusStyle = (status: string) => {
           };
 
           setSelectedReport(updatedReport);
+
           setMyReports((prev) =>
             prev.map((report) =>
               report.id === selectedReport.id
@@ -1067,15 +1111,23 @@ const getStatusStyle = (status: string) => {
           setDetailImageIndex(0);
         }}
       >
-        Remover imagem atual
+        <span className="flex items-center justify-center gap-2">
+          <Trash2 className="w-4 h-4" />
+          Remover mídia
+        </span>
       </Button>
     )}
-     <label
+
+    <label
       htmlFor="edit-images-input"
-      className="w-full inline-flex items-center justify-center rounded-md bg-green-600 hover:bg-green-700 text-white px-4 py-2 text-sm font-medium cursor-pointer transition-colors"
+      className="w-full inline-flex items-center justify-center gap-2 rounded-md border border-green-200 bg-green-50 px-4 py-2 text-sm font-medium text-green-700 cursor-pointer transition-colors hover:bg-green-100"
     >
-      + Adicionar novas fotos
+      <Plus className="w-4 h-4" />
+      Adicionar mídia
     </label>
+  </div>
+)}
+     
   </>
 )}
       <div className="mb-4">
@@ -1189,7 +1241,7 @@ const getStatusStyle = (status: string) => {
   <div className="mb-4">
     <Input
       type="file"
-      accept="image/*"
+      accept="image/*,video/*"
       multiple
       className="hidden"
       id="edit-images-input"
@@ -1199,9 +1251,9 @@ const getStatusStyle = (status: string) => {
         if (files.length === 0 || !selectedReport) return;
 
         try {
-          const imageUrls = await Promise.all(
-            files.map((file) => uploadImageToCloudinary(file))
-          );
+          const mediaItems = await Promise.all(
+  files.map((file) => uploadImageToCloudinary(file))
+);
 
           const response = await fetch(
             `${API_URL}/reports/${selectedReport.id}/images`,
@@ -1210,7 +1262,7 @@ const getStatusStyle = (status: string) => {
               headers: {
                 "Content-Type": "application/json",
               },
-              body: JSON.stringify({ imageUrls }),
+              body: JSON.stringify({ mediaItems }),
             }
           );
 
@@ -1225,7 +1277,7 @@ const getStatusStyle = (status: string) => {
           );
 
           setDetailImageIndex(
-            updatedReport.images.length - imageUrls.length
+            updatedReport.images.length - mediaItems.length
           );
 
           toast({
@@ -1240,7 +1292,8 @@ const getStatusStyle = (status: string) => {
           });
         }
       }}
-    />
+     />
+
   </div>
 )}
 
@@ -1327,28 +1380,40 @@ const getStatusStyle = (status: string) => {
   </div>
 )}
 
-{expandedImage && (
+{expandedMedia && (
   <div
     className="fixed inset-0 z-[9999] bg-black/90 flex items-center justify-center p-4"
-    onClick={() => setExpandedImage(null)}
+    onClick={() => setExpandedMedia(null)}
   >
-    <img
-  src={expandedImage}
-  alt="Imagem ampliada"
-  loading="lazy"
-  decoding="async"
-  className="max-w-full max-h-full object-contain rounded-lg"
-/>
+    {expandedMedia.type === "video" ? (
+      <video
+        src={expandedMedia.url}
+        controls
+        autoPlay
+        className="max-w-full max-h-full object-contain rounded-lg bg-black"
+        onClick={(e) => e.stopPropagation()}
+      />
+    ) : (
+      <img
+        src={expandedMedia.url}
+        alt="Mídia ampliada"
+        loading="lazy"
+        decoding="async"
+        className="max-w-full max-h-full object-contain rounded-lg"
+        onClick={(e) => e.stopPropagation()}
+      />
+    )}
 
     <button
       type="button"
-      onClick={() => setExpandedImage(null)}
+      onClick={() => setExpandedMedia(null)}
       className="absolute top-4 right-4 bg-black/60 hover:bg-black/80 text-white rounded-full w-10 h-10 flex items-center justify-center text-xl"
     >
       ✕
     </button>
   </div>
 )}
+
       </div>
     </div>
   );
