@@ -48,6 +48,9 @@ type Report = {
   title?: string | null;
   referencePoint?: string | null;
   latitude?: number | null;
+  _count?: {
+  messages: number;
+};
   longitude?: number | null;
   address?: string | null;
   createdAt: string;
@@ -290,6 +293,31 @@ const sendMessage = async () => {
     }
 
     setMessages((prev) => [...prev, data]);
+    setMyReports((prev) =>
+  prev.map((report) =>
+    report.id === data.reportId
+      ? {
+          ...report,
+          _count: {
+            messages: (report._count?.messages || 0) + 1,
+          },
+        }
+      : report
+  )
+);
+
+setAllReports((prev) =>
+  prev.map((report) =>
+    report.id === data.reportId
+      ? {
+          ...report,
+          _count: {
+            messages: (report._count?.messages || 0) + 1,
+          },
+        }
+      : report
+  )
+);
     setNewMessage("");
   } catch (error) {
     console.error(error);
@@ -1213,9 +1241,16 @@ const getStatusStyle = (status: string) => {
                         </div>
 
                         <p className="text-xs text-muted-foreground">
-                          {new Date(report.createdAt).toLocaleDateString("pt-BR")}
-                          {report.referencePoint ? ` • ${report.referencePoint}` : ""}
-                        </p>
+  {new Date(report.createdAt).toLocaleDateString("pt-BR")}
+  {report.referencePoint ? ` • ${report.referencePoint}` : ""}
+</p>
+
+{report._count?.messages ? (
+  <p className="text-xs text-secondary font-medium">
+    {report._count.messages} mensagem
+    {report._count.messages > 1 ? "s" : ""}
+  </p>
+) : null}
                       </div>
 
                       <span
@@ -1309,9 +1344,16 @@ const getStatusStyle = (status: string) => {
                         </div>
 
                         <p className="text-xs text-muted-foreground">
-                          {new Date(report.createdAt).toLocaleDateString("pt-BR")}
-                          {report.referencePoint ? ` • ${report.referencePoint}` : ""}
-                        </p>
+  {new Date(report.createdAt).toLocaleDateString("pt-BR")}
+  {report.referencePoint ? ` • ${report.referencePoint}` : ""}
+</p>
+
+{report._count?.messages ? (
+  <p className="text-xs text-secondary font-medium">
+    {report._count.messages} mensagen
+    {report._count.messages > 1 ? "s" : ""}
+  </p>
+) : null}
                       </div>
 
                       <span
@@ -1687,7 +1729,7 @@ const getStatusStyle = (status: string) => {
 )}
 
 <div className="mt-6 border-t border-border pt-4">
-  <h3 className="text-sm font-semibold mb-3">Atualizações</h3>
+  <h3 className="text-sm font-semibold mb-3">Mensagens</h3>
 
   <div className="space-y-3 max-h-56 overflow-y-auto rounded-lg bg-muted/20 p-3">
     {loadingMessages ? (
@@ -1697,7 +1739,7 @@ const getStatusStyle = (status: string) => {
       </div>
     ) : messages.length === 0 ? (
       <p className="text-sm text-muted-foreground text-center py-4">
-        Nenhuma atualização ainda.
+        Nenhuma mensagem ainda.
       </p>
     ) : (
       messages.map((msg) => {
@@ -1719,20 +1761,26 @@ const getStatusStyle = (status: string) => {
                 {msg.senderName} •{" "}
                 {new Date(msg.createdAt).toLocaleString("pt-BR")}
               </div>
+              
 
               <p className="whitespace-pre-wrap">{msg.message}</p>
             </div>
           </div>
+          
         );
+        
       })
+      
     )}
+    
   </div>
+  
 
   <div className="mt-3 flex gap-2">
     <Input
       value={newMessage}
       onChange={(e) => setNewMessage(e.target.value)}
-      placeholder="Escreva uma atualização..."
+      placeholder="Escreva uma mensagem."
       onKeyDown={(e) => {
         if (e.key === "Enter") {
           e.preventDefault();

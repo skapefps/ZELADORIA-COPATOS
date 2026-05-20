@@ -41,11 +41,16 @@ router.get("/statuses", async (req, res) => {
 router.get("/reports", async (req, res) => {
   const reports = await prisma.report.findMany({
     include: {
-      employee: true,
-      category: true,
-      status: true,
-      images: true,
+  employee: true,
+  category: true,
+  status: true,
+  images: true,
+  _count: {
+    select: {
+      messages: true,
     },
+  },
+},
     orderBy: {
       createdAt: "desc",
     },
@@ -104,11 +109,16 @@ router.post("/reports", async (req, res) => {
   : undefined,
     },
     include: {
-      employee: true,
-      category: true,
-      status: true,
-      images: true,
+  employee: true,
+  category: true,
+  status: true,
+  images: true,
+  _count: {
+    select: {
+      messages: true,
     },
+  },
+},
   });
 
   return res.status(201).json(report);
@@ -141,11 +151,16 @@ router.patch("/reports/:id", async (req, res) => {
       address,
     },
     include: {
-      employee: true,
-      category: true,
-      status: true,
-      images: true,
+  employee: true,
+  category: true,
+  status: true,
+  images: true,
+  _count: {
+    select: {
+      messages: true,
     },
+  },
+},
   });
 
   return res.json(report);
@@ -207,6 +222,11 @@ router.post("/reports/:id/images", async (req, res) => {
       category: true,
       status: true,
       images: true,
+      _count: {
+        select: {
+          messages: true,
+        },
+      },
     },
   });
 
@@ -263,6 +283,11 @@ router.get("/employees/:employeeId/reports", async (req, res) => {
       category: true,
       status: true,
       images: true,
+      _count: {
+        select: {
+          messages: true,
+        },
+      },
     },
     orderBy: {
       createdAt: "desc",
@@ -286,11 +311,16 @@ router.patch("/reports/:id/status", async (req, res) => {
       statusId,
     },
     include: {
-      employee: true,
-      category: true,
-      status: true,
-      images: true,
+  employee: true,
+  category: true,
+  status: true,
+  images: true,
+  _count: {
+    select: {
+      messages: true,
     },
+  },
+},
   });
 
   return res.json(report);
