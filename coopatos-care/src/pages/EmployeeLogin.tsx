@@ -10,21 +10,24 @@ const API_URL =
   window.location.hostname === "localhost" ||
   window.location.hostname === "127.0.0.1"
     ? "http://localhost:3333"
-    : import.meta.env.VITE_API_URL;
+    : import.meta.env.VITE_API_URL || "https://zeladoria-coopatos-api.onrender.com";
 const EmployeeLogin = () => {
   const [matricula, setMatricula] = useState("");
   const [error, setError] = useState("");
   const { loginEmployee } = useAuth();
+  const [loading, setLoading] = useState(false);
   const navigate = useNavigate();
 
   const handleSubmit = async (e: React.FormEvent) => {
   e.preventDefault();
+  
 
   if (!matricula.trim() || matricula.trim().length < 3) {
     setError("Insira uma matrícula válida (mín. 3 dígitos)");
     return;
   }
-
+  
+  setLoading(true);
   try {
     const response = await fetch(`${API_URL}/employee-login`, {
       method: "POST",
@@ -49,8 +52,10 @@ const EmployeeLogin = () => {
 
     navigate("/funcionario");
   } catch (error) {
-    setError("Erro ao conectar com o servidor");
-  }
+  setError("Erro ao conectar com o servidor");
+} finally {
+  setLoading(false);
+}
 };
 
   return (
@@ -86,9 +91,13 @@ const EmployeeLogin = () => {
               />
               {error && <p className="text-destructive text-xs mt-1">{error}</p>}
             </div>
-            <Button type="submit" className="w-full bg-secondary hover:bg-secondary/90 text-secondary-foreground font-semibold">
-              Entrar
-            </Button>
+            <Button
+  type="submit"
+  disabled={loading}
+  className="w-full bg-secondary hover:bg-secondary/90 text-secondary-foreground font-semibold"
+>
+  {loading ? "Entrando..." : "Entrar"}
+</Button>
           </form>
 
           <button

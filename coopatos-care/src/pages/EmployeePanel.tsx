@@ -81,11 +81,11 @@ const statusColors: Record<string, string> = {
 
 const EmployeePanel = () => {
   const employee = JSON.parse(localStorage.getItem("employee") || "{}");
-  const API_URL =
+const API_URL =
   window.location.hostname === "localhost" ||
   window.location.hostname === "127.0.0.1"
     ? "http://localhost:3333"
-    : import.meta.env.VITE_API_URL;
+    : import.meta.env.VITE_API_URL || "https://zeladoria-coopatos-api.onrender.com";
   const [selectedFiles, setSelectedFiles] = useState<File[]>([]);
   const [imagePreviews, setImagePreviews] = useState<string[]>([]);
   const [detailImageIndex, setDetailImageIndex] = useState(0);
@@ -102,6 +102,7 @@ const EmployeePanel = () => {
   const fileInputRef = useRef<HTMLInputElement>(null);
 
   const [tab, setTab] = useState<"new" | "history">("new");
+  const [submitting, setSubmitting] = useState(false);
 
   const [categoryId, setCategoryId] = useState("");
   const [categories, setCategories] = useState<Category[]>([]);
@@ -313,7 +314,7 @@ const uploadImageToCloudinary = async (file: File) => {
       });
       return;
     }
-
+  setSubmitting(true);
     try {
       const employee = JSON.parse(localStorage.getItem("employee") || "{}");
 
@@ -382,13 +383,14 @@ const imageUrls = await Promise.all(
 
       setTab("history");
     } catch (error) {
-      console.error(error);
-      toast({
-        title: "Erro ao conectar com o servidor",
-        variant: "destructive",
-      });
-    }
-  };
+  console.error(error);
+  toast({
+    title: "Erro ao conectar com o servidor",
+    variant: "destructive",
+  });
+} finally {
+  setSubmitting(false);
+}};
 
   
 
@@ -656,12 +658,13 @@ const getStatusStyle = (status: string) => {
 
               {/* Submit */}
               <Button
-                type="submit"
-                className="w-full h-14 text-lg font-bold bg-secondary hover:bg-secondary/90 text-secondary-foreground"
-              >
-                <Send className="w-5 h-5 mr-2" />
-                Reportar Problema
-              </Button>
+  type="submit"
+  disabled={submitting}
+  className="w-full h-14 text-lg font-bold bg-secondary hover:bg-secondary/90 text-secondary-foreground"
+>
+  <Send className="w-5 h-5 mr-2" />
+  {submitting ? "Enviando chamado..." : "Reportar Problema"}
+</Button>
             </motion.form>
           ) : (
             <motion.div
@@ -686,7 +689,7 @@ const getStatusStyle = (status: string) => {
                     {report.images?.[0]?.imageUrl && (
   <div className="mb-3 rounded-lg overflow-hidden border border-border">
     <img
-      src={report.images[0].imageUrl}
+  src={report.images[0].imageUrl.replace("/upload/", "/upload/w_500,q_auto,f_auto/")}
       alt="Preview do chamado"
       className="w-full h-32 object-cover"
     />
@@ -752,7 +755,10 @@ const getStatusStyle = (status: string) => {
   <>
     <div className="relative mb-4 rounded-lg overflow-hidden">
       <img
-        src={selectedReport.images[detailImageIndex].imageUrl}
+        src={selectedReport.images[detailImageIndex].imageUrl.replace(
+  "/upload/",
+  "/upload/w_900,q_auto,f_auto/"
+)}
         alt="Imagem do chamado"
         className="w-full h-64 object-cover rounded-lg"
       />
