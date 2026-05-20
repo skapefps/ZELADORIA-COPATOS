@@ -17,6 +17,7 @@ const EmployeeLogin = () => {
   const [matricula, setMatricula] = useState("");
   const [showTimeoutModal, setShowTimeoutModal] = useState(false);
   const [error, setError] = useState("");
+  const [cpf, setCpf] = useState("");
   const [loading, setLoading] = useState(false);
 
   const { loginEmployee } = useAuth();
@@ -34,10 +35,15 @@ const EmployeeLogin = () => {
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
 
-    if (!matricula.trim() || matricula.trim().length < 3) {
-      setError("Insira uma matrícula válida (mín. 3 dígitos)");
-      return;
-    }
+   if (!matricula.trim() || matricula.trim().length < 3) {
+  setError("Insira uma matrícula válida (mín. 3 dígitos)");
+  return;
+}
+
+if (!cpf.trim() || cpf.trim().length < 11) {
+  setError("Insira um CPF válido");
+  return;
+}
 
     setError("");
     setLoading(true);
@@ -49,8 +55,9 @@ const EmployeeLogin = () => {
           "Content-Type": "application/json",
         },
         body: JSON.stringify({
-          registrationNumber: matricula.trim(),
-        }),
+  registrationNumber: matricula.trim(),
+  cpf: cpf.replace(/\D/g, ""),
+}),
       });
 
       const data = await response.json();
@@ -109,6 +116,7 @@ const EmployeeLogin = () => {
           <p className="text-sm text-muted-foreground mb-6">
             Insira sua matrícula para continuar
           </p>
+          
 
           <form onSubmit={handleSubmit} className="space-y-4">
             <div>
@@ -131,6 +139,27 @@ const EmployeeLogin = () => {
                 </p>
               )}
             </div>
+            <Input
+  disabled={loading}
+  type="text"
+  placeholder="Digite seu CPF"
+  value={cpf}
+  onChange={(e) => {
+    const value = e.target.value
+      .replace(/\D/g, "")
+      .slice(0, 11);
+
+    const formatted = value
+      .replace(/(\d{3})(\d)/, "$1.$2")
+      .replace(/(\d{3})(\d)/, "$1.$2")
+      .replace(/(\d{3})(\d{1,2})$/, "$1-$2");
+
+    setCpf(formatted);
+    setError("");
+  }}
+  className="text-center text-lg tracking-widest"
+  inputMode="numeric"
+/>
 
             <Button
   type="submit"

@@ -212,23 +212,30 @@ router.post("/reports/:id/images", async (req, res) => {
 //LOGIN FUNCIONARIO 
 
 router.post("/employee-login", async (req, res) => {
-  const { registrationNumber } = req.body;
+  const { registrationNumber, cpf } = req.body;
 
-  if (!registrationNumber) {
+  if (!registrationNumber || !cpf) {
     return res.status(400).json({
-      error: "Matrícula é obrigatória.",
+      error: "Matrícula e CPF são obrigatórios.",
     });
   }
 
-  const employee = await prisma.employee.findUnique({
+  // Remove pontos, traços e qualquer caractere não numérico
+  const cleanCpf = String(cpf).replace(/\D/g, "");
+
+  const employees = await prisma.employee.findMany({
     where: {
       registrationNumber,
     },
   });
 
+  const employee = employees.find(
+    (emp) => emp.cpf.replace(/\D/g, "") === cleanCpf
+  );
+
   if (!employee) {
     return res.status(404).json({
-      error: "Matrícula não encontrada.",
+      error: "Matrícula ou CPF inválidos.",
     });
   }
 
@@ -237,7 +244,6 @@ router.post("/employee-login", async (req, res) => {
     employee,
   });
 });
-
 
 
  //REPORTS
