@@ -46,7 +46,6 @@ router.get("/reports", async (req, res) => {
   return res.json(reports);
 });
 
-export { router };
 router.post("/reports", async (req, res) => {
   const {
     employeeId,
@@ -55,9 +54,11 @@ router.post("/reports", async (req, res) => {
     referencePoint,
     latitude,
     longitude,
+    imageUrls,
   } = req.body;
 
-  // Buscar o status ABERTO
+  console.log("BODY RECEBIDO:", req.body);
+
   const openStatus = await prisma.reportStatus.findFirst({
     where: {
       name: "ABERTO",
@@ -79,11 +80,97 @@ router.post("/reports", async (req, res) => {
       referencePoint,
       latitude,
       longitude,
+
+      images: imageUrls?.length
+  ? {
+      create: imageUrls.map((url: string) => ({
+        imageUrl: url,
+      })),
+    }
+  : undefined,
     },
     include: {
       employee: true,
       category: true,
       status: true,
+      images: true,
+    },
+  });
+
+  return res.status(201).json(report);
+});
+
+router.patch("/reports/:id", async (req, res) => {
+  const id = Number(req.params.id);
+
+  const {
+    categoryId,
+    description,
+    referencePoint,
+    latitude,
+    longitude,
+  } = req.body;
+
+  const report = await prisma.report.update({
+    where: {
+      id,
+    },
+    data: {
+      categoryId: categoryId ? Number(categoryId) : undefined,
+      description,
+      referencePoint,
+      latitude,
+      longitude,
+    },
+    include: {
+      employee: true,
+      category: true,
+      status: true,
+      images: true,
+    },
+  });
+
+  return res.json(report);
+});
+
+router.delete("/report-images/:id", async (req, res) => {
+  const id = Number(req.params.id);
+
+  await prisma.reportImage.delete({
+    where: { id },
+  });
+
+  return res.json({
+    message: "Imagem removida com sucesso.",
+  });
+});
+
+// ADICIONAR IMAGENS EDITAR
+
+router.post("/reports/:id/images", async (req, res) => {
+  const reportId = Number(req.params.id);
+  const { imageUrls } = req.body;
+
+  if (!imageUrls || imageUrls.length === 0) {
+    return res.status(400).json({
+      error: "Nenhuma imagem enviada.",
+    });
+  }
+
+  await prisma.reportImage.createMany({
+    data: imageUrls.map((url: string) => ({
+      reportId,
+      imageUrl: url,
+    })),
+  });
+
+  const report = await prisma.report.findUnique({
+    where: { id: reportId },
+    include: {
+      employee: true,
+      category: true,
+      status: true,
+      images: true,
     },
   });
 
@@ -164,3 +251,4 @@ router.patch("/reports/:id/status", async (req, res) => {
 
   return res.json(report);
 });
+export { router };

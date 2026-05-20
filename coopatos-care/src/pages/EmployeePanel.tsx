@@ -43,24 +43,32 @@ type Report = {
   id: number;
   description?: string | null;
   referencePoint?: string | null;
+  latitude?: number | null;
+  longitude?: number | null;
   createdAt: string;
+
   category: {
     id: number;
     name: string;
   };
+
   status: {
     id: number;
     name: string;
     color?: string | null;
   };
+
+  images?: {
+    id: number;
+    imageUrl: string;
+  }[];
 };
 
 const categoryIcons: Record<string, React.ReactNode> = {
   "Hídrico": <Droplets className="w-4 h-4 text-blue-500" />,
   "Elétrico": <Zap className="w-4 h-4 text-yellow-500" />,
   "Erosão": <Mountain className="w-4 h-4 text-amber-600" />,
-  "Segurança": <Shield className="w-4 h-4 text-red-500" />,
-  "Vegetação": <TreePine className="w-4 h-4 text-green-500" />,
+  "Segurança": <Shield className="w-4 h-4 text-red-500" />, "Vegetação": <TreePine className="w-4 h-4 text-green-500" />,
   "Outros": <HelpCircle className="w-4 h-4 text-gray-500" />,
 };
 
@@ -72,7 +80,18 @@ const statusColors: Record<string, string> = {
 };
 
 const EmployeePanel = () => {
+  const employee = JSON.parse(localStorage.getItem("employee") || "{}");
+  const [selectedFiles, setSelectedFiles] = useState<File[]>([]);
+  const [imagePreviews, setImagePreviews] = useState<string[]>([]);
+  const [detailImageIndex, setDetailImageIndex] = useState(0);
+  const [currentImageIndex, setCurrentImageIndex] = useState(0);
   const { matricula, logout } = useAuth();
+  const [selectedReport, setSelectedReport] = useState<Report | null>(null);
+  const [isEditing, setIsEditing] = useState(false);
+  const [editCategoryId, setEditCategoryId] = useState("");
+  const [editDescription, setEditDescription] = useState("");
+  const [editReferencePoint, setEditReferencePoint] = useState("");
+  const employeeName = employee.name || "";
   const navigate = useNavigate();
   const { toast } = useToast();
   const fileInputRef = useRef<HTMLInputElement>(null);
@@ -85,7 +104,6 @@ const EmployeePanel = () => {
   const [description, setDescription] = useState("");
   const [referencePoint, setReferencePoint] = useState("");
 
-  const [imagePreview, setImagePreview] = useState<string | null>(null);
 
   const [gettingLocation, setGettingLocation] = useState(false);
   const [coords, setCoords] = useState<{ lat: number; lng: number } | null>(null);
@@ -129,14 +147,29 @@ const EmployeePanel = () => {
   // Image Upload
   // =========================
   const handleImageChange = (e: React.ChangeEvent<HTMLInputElement>) => {
-    const file = e.target.files?.[0];
+  const files = Array.from(e.target.files || []);
 
-    if (file) {
-      const reader = new FileReader();
-      reader.onloadend = () => setImagePreview(reader.result as string);
-      reader.readAsDataURL(file);
-    }
-  };
+  if (files.length === 0) return;
+
+  setSelectedFiles(files);
+  setCurrentImageIndex(0);
+
+  const previews: string[] = [];
+
+  files.forEach((file) => {
+    const reader = new FileReader();
+
+    reader.onloadend = () => {
+      previews.push(reader.result as string);
+
+      if (previews.length === files.length) {
+        setImagePreviews(previews);
+      }
+    };
+
+    reader.readAsDataURL(file);
+  });
+};
 
   // =========================
   // GPS
@@ -225,13 +258,41 @@ const EmployeePanel = () => {
   );
 };
 
+const uploadImageToCloudinary = async (file: File) => {
+  const formData = new FormData();
+
+  formData.append("file", file);
+  formData.append(
+    "upload_preset",
+    import.meta.env.VITE_CLOUDINARY_UPLOAD_PRESET
+  );
+
+  const response = await fetch(
+    `https://api.cloudinary.com/v1_1/${import.meta.env.VITE_CLOUDINARY_CLOUD_NAME}/image/upload`,
+    {
+      method: "POST",
+      body: formData,
+    }
+  );
+
+  const data = await response.json();
+
+  console.log("Cloudinary response:", data);
+
+  if (!response.ok || !data.secure_url) {
+    throw new Error(data.error?.message || "Erro ao enviar imagem para o Cloudinary");
+  }
+
+  return data.secure_url;
+};
+
   // =========================
   // Submit report
   // =========================
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
 
-    if (!imagePreview) {
+    if (selectedFiles.length === 0)  {
       toast({
         title: "Foto obrigatória",
         description: "Tire ou envie uma foto do problema.",
@@ -264,20 +325,28 @@ const EmployeePanel = () => {
         lat: null,
         lng: null,
 };
+let imageUrl = null;
+
+console.log("URL da imagem enviada:", imageUrl);
+
+const imageUrls = await Promise.all(
+  selectedFiles.map((file) => uploadImageToCloudinary(file))
+);
 
       const response = await fetch("http://localhost:3333/reports", {
-        method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-        },
-        body: JSON.stringify({
-          employeeId: employee.id,
-          categoryId: Number(categoryId),
-          description,
-          referencePoint,
-          latitude: loc.lat,
-          longitude: loc.lng,
-}),
+  method: "POST",
+  headers: {
+    "Content-Type": "application/json",
+  },
+  body: JSON.stringify({
+    employeeId: employee.id,
+    categoryId: Number(categoryId),
+    description,
+    referencePoint,
+    latitude: loc.lat,
+    longitude: loc.lng,
+    imageUrls,
+  }),
       });
 
       const data = await response.json();
@@ -301,7 +370,9 @@ const EmployeePanel = () => {
       setCategoryId("");
       setDescription("");
       setReferencePoint("");
-      setImagePreview(null);
+      setImagePreviews([]);
+      setSelectedFiles([]);
+      setCurrentImageIndex(0);
       setCoords(null);
 
       setTab("history");
@@ -314,6 +385,8 @@ const EmployeePanel = () => {
     }
   };
 
+  
+
   // =========================
   // Logout
   // =========================
@@ -322,6 +395,65 @@ const EmployeePanel = () => {
     logout();
     navigate("/");
   };
+  const openReportDetails = (report: Report) => {
+  setSelectedReport(report);
+  setDetailImageIndex(0);
+  setIsEditing(false);
+  setEditCategoryId(String(report.category.id));
+  setEditDescription(report.description || "");
+  setEditReferencePoint(report.referencePoint || "");
+};
+
+const handleUpdateReport = async () => {
+  if (!selectedReport) return;
+
+  try {
+    const response = await fetch(`http://localhost:3333/reports/${selectedReport.id}`, {
+      method: "PATCH",
+      headers: {
+        "Content-Type": "application/json",
+      },
+      body: JSON.stringify({
+        categoryId: Number(editCategoryId),
+        description: editDescription,
+        referencePoint: editReferencePoint,
+      }),
+    });
+
+    const data = await response.json();
+
+    if (!response.ok) {
+      toast({
+        title: "Erro ao atualizar chamado",
+        description: data.error || "Erro desconhecido",
+        variant: "destructive",
+      });
+      return;
+    }
+
+    setMyReports((prev) =>
+      prev.map((report) => (report.id === data.id ? data : report))
+    );
+
+    setSelectedReport(data);
+    setIsEditing(false);
+
+    toast({
+      title: "Chamado atualizado com sucesso!",
+    });
+  } catch (error) {
+    console.error(error);
+    toast({
+      title: "Erro ao conectar com o servidor",
+      variant: "destructive",
+    });
+  }
+  
+};
+
+const getStatusStyle = (status: string) => {
+  return statusColors[status] || "bg-gray-100 text-gray-700 border-gray-200";
+};
 
   return (
     <div className="min-h-screen bg-background flex flex-col max-w-lg mx-auto">
@@ -338,8 +470,12 @@ const EmployeePanel = () => {
               Zeladoria Coopatos
             </h1>
             <p className="text-primary-foreground/60 text-xs">
-              Matrícula: {matricula}
+                  {employeeName}
             </p>
+
+            <p className="text-primary-foreground/50 text-[11px]">
+                Matrícula: {matricula}
+          </p>
           </div>
         </div>
 
@@ -391,34 +527,77 @@ const EmployeePanel = () => {
               {/* Image Upload */}
               <div>
                 <input
-                  ref={fileInputRef}
-                  type="file"
-                  accept="image/*"
-                  className="hidden"
-                  onChange={handleImageChange}
-                />
+  ref={fileInputRef}
+  type="file"
+  accept="image/*"
+  multiple
+  className="hidden"
+  onChange={handleImageChange}
+/>
 
-                {imagePreview ? (
-                  <div className="relative rounded-lg overflow-hidden">
-                    <img
-                      src={imagePreview}
-                      alt="Preview"
-                      className="w-full h-48 object-cover"
-                    />
-                  </div>
-                ) : (
-                  <button
-                    type="button"
-                    onClick={() => fileInputRef.current?.click()}
-                    className="w-full h-48 border-2 border-dashed border-border rounded-lg flex flex-col items-center justify-center gap-2 text-muted-foreground hover:border-secondary hover:text-secondary transition-colors bg-muted/30"
-                  >
-                    <Camera className="w-10 h-10" />
-                    <span className="text-sm font-medium">
-                      Tirar Foto / Enviar Imagem
-                    </span>
-                    <span className="text-xs">Obrigatório</span>
-                  </button>
-                )}
+                {imagePreviews.length > 0 ? (
+  <div className="relative rounded-lg overflow-hidden">
+    <img
+      src={imagePreviews[currentImageIndex]}
+      alt="Preview"
+      className="w-full h-48 object-cover"
+    />
+
+    {imagePreviews.length > 1 && (
+      <>
+        <button
+          type="button"
+          onClick={() =>
+            setCurrentImageIndex((prev) =>
+              prev === 0 ? imagePreviews.length - 1 : prev - 1
+            )
+          }
+          className="absolute left-2 top-1/2 -translate-y-1/2 bg-black/60 text-white rounded-full w-8 h-8 flex items-center justify-center"
+        >
+          ‹
+        </button>
+
+        <button
+          type="button"
+          onClick={() =>
+            setCurrentImageIndex((prev) =>
+              prev === imagePreviews.length - 1 ? 0 : prev + 1
+            )
+          }
+          className="absolute right-2 top-1/2 -translate-y-1/2 bg-black/60 text-white rounded-full w-8 h-8 flex items-center justify-center"
+        >
+          ›
+        </button>
+
+        <div className="absolute bottom-2 left-1/2 -translate-x-1/2 bg-black/60 text-white text-xs px-2 py-1 rounded-full">
+          {currentImageIndex + 1} / {imagePreviews.length}
+        </div>
+      </>
+    )}
+
+    <button
+      type="button"
+      onClick={() => {
+        setImagePreviews([]);
+        setSelectedFiles([]);
+        setCurrentImageIndex(0);
+      }}
+      className="absolute top-2 right-2 bg-black/60 text-white rounded-full w-7 h-7 flex items-center justify-center text-xs"
+    >
+      ✕
+    </button>
+  </div>
+) : (
+  <button
+    type="button"
+    onClick={() => fileInputRef.current?.click()}
+    className="w-full h-48 border-2 border-dashed border-border rounded-lg flex flex-col items-center justify-center gap-2 text-muted-foreground hover:border-secondary hover:text-secondary transition-colors bg-muted/30"
+  >
+    <Camera className="w-10 h-10" />
+    <span className="text-sm font-medium">Tirar Foto / Enviar Imagens</span>
+    <span className="text-xs">Obrigatório</span>
+  </button>
+)}
               </div>
 
               {/* Categories */}
@@ -497,7 +676,17 @@ const EmployeePanel = () => {
                   <div
                     key={report.id}
                     className="bg-card rounded-lg p-4 border border-border"
+                    
                   >
+                    {report.images?.[0]?.imageUrl && (
+  <div className="mb-3 rounded-lg overflow-hidden border border-border">
+    <img
+      src={report.images[0].imageUrl}
+      alt="Preview do chamado"
+      className="w-full h-32 object-cover"
+    />
+  </div>
+)}
                     <div className="flex items-start justify-between mb-2">
                       <div>
                         <span className="text-xs text-muted-foreground">
@@ -525,17 +714,308 @@ const EmployeePanel = () => {
                     )}
 
                     <p className="text-xs text-muted-foreground">
-                      {new Date(report.createdAt).toLocaleDateString("pt-BR")}
-                      {report.referencePoint
-                        ? ` • ${report.referencePoint}`
-                        : ""}
+                     {new Date(report.createdAt).toLocaleDateString("pt-BR")}
+                     {report.referencePoint ? ` • ${report.referencePoint}` : ""}
                     </p>
+
+<Button
+  variant="outline"
+  size="sm"
+  className="mt-3 w-full"
+  onClick={() => openReportDetails(report)}
+>
+  Ver detalhes
+</Button>
                   </div>
                 ))
               )}
             </motion.div>
           )}
         </AnimatePresence>
+
+        {selectedReport && (
+  <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4">
+    <div className="bg-card rounded-2xl p-5 w-full max-w-lg max-h-[90vh] overflow-y-auto shadow-2xl border border-border">
+     <div className="mb-5">
+  <p className="text-xs text-muted-foreground">Detalhes do chamado</p>
+  <h2 className="text-xl font-bold text-foreground">
+    Chamado #{selectedReport.id}
+  </h2>
+</div>
+
+      {selectedReport.images && selectedReport.images.length > 0 && (
+  <>
+    <div className="relative mb-4 rounded-lg overflow-hidden">
+      <img
+        src={selectedReport.images[detailImageIndex].imageUrl}
+        alt="Imagem do chamado"
+        className="w-full h-64 object-cover rounded-lg"
+      />
+
+      {selectedReport.images.length > 1 && (
+        <>
+          <button
+            type="button"
+            onClick={() =>
+              setDetailImageIndex((prev) =>
+                prev === 0
+                  ? selectedReport.images!.length - 1
+                  : prev - 1
+              )
+            }
+            className="absolute left-2 top-1/2 -translate-y-1/2 bg-black/60 text-white rounded-full w-8 h-8 flex items-center justify-center"
+          >
+            ‹
+          </button>
+
+          <button
+            type="button"
+            onClick={() =>
+              setDetailImageIndex((prev) =>
+                prev === selectedReport.images!.length - 1
+                  ? 0
+                  : prev + 1
+              )
+            }
+            className="absolute right-2 top-1/2 -translate-y-1/2 bg-black/60 text-white rounded-full w-8 h-8 flex items-center justify-center"
+          >
+            ›
+          </button>
+
+          <div className="absolute bottom-2 left-1/2 -translate-x-1/2 bg-black/60 text-white text-xs px-2 py-1 rounded-full">
+            {detailImageIndex + 1} / {selectedReport.images.length}
+          </div>
+        </>
+      )}
+    </div>
+
+    {isEditing && selectedReport.images?.[detailImageIndex] && (
+      <Button
+        variant="destructive"
+        size="sm"
+        className="mb-4 w-full"
+        onClick={async () => {
+          const imageId =
+            selectedReport.images![detailImageIndex].id;
+
+          await fetch(
+            `http://localhost:3333/report-images/${imageId}`,
+            {
+              method: "DELETE",
+            }
+          );
+
+          const updatedImages =
+            selectedReport.images!.filter(
+              (img) => img.id !== imageId
+            );
+
+          const updatedReport = {
+            ...selectedReport,
+            images: updatedImages,
+          };
+
+          setSelectedReport(updatedReport);
+          setMyReports((prev) =>
+            prev.map((report) =>
+              report.id === selectedReport.id
+                ? updatedReport
+                : report
+            )
+          );
+
+          setDetailImageIndex(0);
+        }}
+      >
+        Remover imagem atual
+      </Button>
+    )}
+  </>
+)}
+      <div className="mb-4">
+        <label className="text-xs font-medium uppercase tracking-wide text-muted-foreground">
+  Categoria
+</label>
+
+        {isEditing ? (
+          <Select
+            value={editCategoryId}
+            onValueChange={setEditCategoryId}
+          >
+            <SelectTrigger>
+              <SelectValue />
+            </SelectTrigger>
+            <SelectContent>
+              {categories.map((category) => (
+                <SelectItem
+                  key={category.id}
+                  value={String(category.id)}
+                >
+                  {category.name}
+                </SelectItem>
+              ))}
+            </SelectContent>
+          </Select>
+        ) : (
+          <p>{selectedReport.category.name}</p>
+        )}
+      </div>
+
+      <div className="mb-4">
+        <label className="text-sm font-medium">Descrição</label>
+
+        {isEditing ? (
+          <Textarea
+            value={editDescription}
+            onChange={(e) =>
+              setEditDescription(e.target.value)
+            }
+          />
+        ) : (
+          <p>{selectedReport.description || "Sem descrição"}</p>
+        )}
+      </div>
+
+      <div className="mb-4">
+        <label className="text-sm font-medium">
+          Ponto de referência
+        </label>
+
+        {isEditing ? (
+          <Input
+            value={editReferencePoint}
+            onChange={(e) =>
+              setEditReferencePoint(e.target.value)
+            }
+          />
+        ) : (
+          <p>
+            {selectedReport.referencePoint || "Não informado"}
+          </p>
+        )}
+      </div>
+
+      <div className="mb-4">
+  <label className="text-xs font-medium uppercase tracking-wide text-muted-foreground">
+    Situação
+  </label>
+
+  <div className="mt-1">
+    <span
+      className={`inline-flex items-center rounded-full border px-3 py-1 text-xs font-semibold ${getStatusStyle(
+        selectedReport.status.name
+      )}`}
+    >
+      {selectedReport.status.name}
+    </span>
+  </div>
+</div>
+
+{isEditing && (
+  <div className="mb-4">
+    <Input
+      type="file"
+      accept="image/*"
+      multiple
+      className="hidden"
+      id="edit-images-input"
+      onChange={async (e) => {
+        const files = Array.from(e.target.files || []);
+
+        if (files.length === 0 || !selectedReport) return;
+
+        try {
+          const imageUrls = await Promise.all(
+            files.map((file) => uploadImageToCloudinary(file))
+          );
+
+          const response = await fetch(
+            `http://localhost:3333/reports/${selectedReport.id}/images`,
+            {
+              method: "POST",
+              headers: {
+                "Content-Type": "application/json",
+              },
+              body: JSON.stringify({ imageUrls }),
+            }
+          );
+
+          const updatedReport = await response.json();
+
+          setSelectedReport(updatedReport);
+
+          setMyReports((prev) =>
+            prev.map((report) =>
+              report.id === updatedReport.id
+                ? updatedReport
+                : report
+            )
+          );
+
+          setDetailImageIndex(
+            updatedReport.images.length - imageUrls.length
+          );
+
+          toast({
+            title: "Imagens adicionadas com sucesso!",
+          });
+        } catch (error) {
+          console.error(error);
+
+          toast({
+            title: "Erro ao adicionar imagens",
+            variant: "destructive",
+          });
+        }
+      }}
+    />
+
+    <label
+      htmlFor="edit-images-input"
+      className="w-full inline-flex items-center justify-center rounded-md bg-green-600 hover:bg-green-700 text-white px-4 py-2 text-sm font-medium cursor-pointer transition-colors"
+    >
+      + Adicionar novas fotos
+    </label>
+  </div>
+)}
+
+<div className="flex gap-2 mt-6">
+  {isEditing ? (
+    <>
+      <Button className="flex-1" onClick={handleUpdateReport}>
+        Salvar
+      </Button>
+
+      <Button
+        variant="outline"
+        className="flex-1"
+        onClick={() => setIsEditing(false)}
+      >
+        Cancelar
+      </Button>
+    </>
+  ) : (
+    <>
+      <Button
+        className="flex-1"
+        onClick={() => setIsEditing(true)}
+      >
+        Editar
+      </Button>
+
+      <Button
+        variant="outline"
+        className="flex-1"
+        onClick={() => setSelectedReport(null)}
+      >
+        Fechar
+      </Button>
+    </>
+  )}
+</div>
+    </div>
+  </div>
+)}
       </div>
     </div>
   );
