@@ -147,7 +147,7 @@ const API_URL =
     }
 
     loadData();
-  }, [toast]);
+  }, [toast,API_URL]);
 
   // =========================
   // Image Upload
