@@ -17,6 +17,7 @@ model Employee {
   department         String?
 
   reports            Report[]
+  messages           ReportMessage[]
   user               User?
 
   createdAt          DateTime @default(now())
@@ -77,13 +78,12 @@ model Report {
   categoryId       Int
   statusId         Int
 
+  title            String?
   description      String?
-
   referencePoint   String?
 
   latitude         Float?
   longitude        Float?
-
   address          String?
 
   employee         Employee     @relation(fields: [employeeId], references: [id])
@@ -91,6 +91,7 @@ model Report {
   status           ReportStatus @relation(fields: [statusId], references: [id])
 
   images           ReportImage[]
+  messages         ReportMessage[]
 
   createdAt        DateTime @default(now())
   updatedAt        DateTime @updatedAt
@@ -116,6 +117,24 @@ model ReportImage {
 
   @@index([reportId])
   @@index([publicId])
+}
+
+model ReportMessage {
+  id         Int      @id @default(autoincrement())
+
+  reportId   Int
+  senderId   Int?
+  senderName String
+  senderRole String
+  message    String
+
+  report     Report    @relation(fields: [reportId], references: [id])
+  sender     Employee? @relation(fields: [senderId], references: [id])
+
+  createdAt  DateTime @default(now())
+
+  @@index([reportId])
+  @@index([senderId])
 }
 
 enum UserRole {

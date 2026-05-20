@@ -45,6 +45,7 @@ type Category = {
 type Report = {
   id: number;
   description?: string | null;
+  title?: string | null;
   referencePoint?: string | null;
   latitude?: number | null;
   longitude?: number | null;
@@ -68,6 +69,16 @@ type Report = {
   publicId?: string | null;
   resourceType?: string | null;
 }[];
+};
+
+type ReportMessage = {
+  id: number;
+  reportId: number;
+  senderId?: number | null;
+  senderName: string;
+  senderRole: string;
+  message: string;
+  createdAt: string;
 };
 
 const categoryIcons: Record<string, React.ReactNode> = {
@@ -108,6 +119,11 @@ const API_URL =
   const [editDescription, setEditDescription] = useState("");
   const [editReferencePoint, setEditReferencePoint] = useState("");
   const employeeName = employee.name || "";
+
+  const [messages, setMessages] = useState<ReportMessage[]>([]);
+  const [newMessage, setNewMessage] = useState("");
+  const [loadingMessages, setLoadingMessages] = useState(false);
+  const [sendingMessage, setSendingMessage] = useState(false);
   const navigate = useNavigate();
   const { toast } = useToast();
   const [expandedMedia, setExpandedMedia] = useState<{
@@ -117,7 +133,7 @@ const API_URL =
 } | null>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
 
-  const [tab, setTab] = useState<"new" | "history">("new");
+  const [tab, setTab] = useState<"new" | "history" | "reports">("new");
   const [submitting, setSubmitting] = useState(false);
   const [savingEdit, setSavingEdit] = useState(false);
 
@@ -125,6 +141,8 @@ const API_URL =
   const [categories, setCategories] = useState<Category[]>([]);
 
   const [description, setDescription] = useState("");
+  const [title, setTitle] = useState("");
+  const [editTitle, setEditTitle] = useState("");
   const [referencePoint, setReferencePoint] = useState("");
 
 
@@ -132,6 +150,7 @@ const API_URL =
   const [coords, setCoords] = useState<{ lat: number; lng: number } | null>(null);
 
   const [myReports, setMyReports] = useState<Report[]>([]);
+  const [allReports, setAllReports] = useState<Report[]>([]);
   const [searchTerm, setSearchTerm] = useState("");
   const [statusFilter, setStatusFilter] = useState("all");
   const [categoryFilter, setCategoryFilter] = useState("all");
@@ -180,6 +199,9 @@ const API_URL =
           );
           const reportsData = await reportsResponse.json();
           setMyReports(reportsData);
+          const allReportsResponse = await fetch(`${API_URL}/reports`);
+          const allReportsData = await allReportsResponse.json();
+          setAllReports(allReportsData);
         }
       } catch (error) {
         console.error(error);
@@ -212,6 +234,73 @@ const API_URL =
 
   return matchesSearch && matchesStatus && matchesCategory;
 });
+
+const loadMessages = async (reportId: number) => {
+  setLoadingMessages(true);
+
+  try {
+    const response = await fetch(`${API_URL}/reports/${reportId}/messages`);
+    const data = await response.json();
+
+    setMessages(data);
+  } catch (error) {
+    console.error(error);
+    toast({
+      title: "Erro ao carregar mensagens",
+      variant: "destructive",
+    });
+  } finally {
+    setLoadingMessages(false);
+  }
+};
+
+const sendMessage = async () => {
+  if (!selectedReport || !newMessage.trim()) return;
+
+  setSendingMessage(true);
+
+  try {
+    const employee = JSON.parse(localStorage.getItem("employee") || "{}");
+
+    const response = await fetch(
+      `${API_URL}/reports/${selectedReport.id}/messages`,
+      {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify({
+          senderId: employee.id,
+          senderName: employee.name,
+          senderRole: "EMPLOYEE",
+          message: newMessage.trim(),
+        }),
+      }
+    );
+
+    const data = await response.json();
+
+    if (!response.ok) {
+      toast({
+        title: "Erro ao enviar mensagem",
+        description: data.error || "Erro desconhecido",
+        variant: "destructive",
+      });
+      return;
+    }
+
+    setMessages((prev) => [...prev, data]);
+    setNewMessage("");
+  } catch (error) {
+    console.error(error);
+    toast({
+      title: "Erro ao conectar com o servidor",
+      variant: "destructive",
+    });
+  } finally {
+    setSendingMessage(false);
+  }
+};
 
   // =========================
   // Image Upload
@@ -410,6 +499,14 @@ const uploadImageToCloudinary = async (file: File) => {
       return;
     }
 
+    if (!title.trim()) {
+  toast({
+    title: "Nome do chamado obrigatório",
+    variant: "destructive",
+  });
+  return;
+}
+
     if (!categoryId) {
       toast({
         title: "Categoria obrigatória",
@@ -466,6 +563,7 @@ const mediaItems = await Promise.all(
   body: JSON.stringify({
   employeeId: employee.id,
   categoryId: Number(categoryId),
+  title,
   description,
   referencePoint,
   latitude: loc.lat,
@@ -494,6 +592,7 @@ const mediaItems = await Promise.all(
 
       // Reset form
       setCategoryId("");
+      setTitle("");
       setDescription("");
       setReferencePoint("");
       setAddress("");
@@ -640,6 +739,7 @@ const geocodeAddress = async (typedAddress: string) => {
   navigate("/");
 };
   const openReportDetails = (report: Report) => {
+  setEditTitle(report.title || "");
   setSelectedReport(report);
   setEditAddress(report.address || "");
   setEditCoords(
@@ -652,10 +752,12 @@ const geocodeAddress = async (typedAddress: string) => {
   setEditCategoryId(String(report.category.id));
   setEditDescription(report.description || "");
   setEditReferencePoint(report.referencePoint || "");
+  loadMessages(report.id);
 };
 
 const handleUpdateReport = async () => {
   if (!selectedReport) return;
+  
 
   setSavingEdit(true);
 
@@ -684,6 +786,7 @@ const handleUpdateReport = async () => {
       body: JSON.stringify({
         categoryId: Number(editCategoryId),
         description: editDescription,
+        title: editTitle,
         referencePoint: editReferencePoint,
         latitude: finalEditCoords?.lat ?? selectedReport.latitude,
         longitude: finalEditCoords?.lng ?? selectedReport.longitude,
@@ -790,6 +893,20 @@ const getStatusStyle = (status: string) => {
         >
           <List className="w-4 h-4" /> Meus Reportes ({myReports.length})
         </button>
+        <button
+  onClick={() => {
+    setTab("reports");
+    window.scrollTo(0, 0);
+  }}
+  className={`flex-1 py-3 text-sm font-medium flex items-center justify-center gap-2 ${
+    tab === "reports"
+      ? "text-secondary border-b-2 border-secondary"
+      : "text-muted-foreground"
+  }`}
+>
+  <List className="w-4 h-4" />
+  Reportes ({allReports.length})
+</button>
       </div>
 
       {/* Content */}
@@ -957,6 +1074,12 @@ const getStatusStyle = (status: string) => {
   />
 )}
 
+<Input
+  placeholder="Nome do chamado *"
+  value={title}
+  onChange={(e) => setTitle(e.target.value)}
+/>
+
               {/* Description */}
               <Textarea
                 placeholder="Descrição breve (opcional)"
@@ -982,136 +1105,232 @@ const getStatusStyle = (status: string) => {
   )}
 </Button>
             </motion.form>
-          ) : (
+                   ) : tab === "history" ? (
             <motion.div
-  key="history"
-  initial={{ opacity: 0 }}
-  animate={{ opacity: 1 }}
-  exit={{ opacity: 0 }}
-  transition={{ duration: 0.15 }}
+              key="history"
+              initial={{ opacity: 0 }}
+              animate={{ opacity: 1 }}
+              exit={{ opacity: 0 }}
+              transition={{ duration: 0.15 }}
               className="space-y-3 lg:grid lg:grid-cols-3 lg:gap-4 lg:space-y-0"
             >
               <div className="lg:col-span-3 space-y-3 mb-2">
-  <Input
-    placeholder="Buscar por número, descrição, endereço..."
-    value={searchTerm}
-    onChange={(e) => setSearchTerm(e.target.value)}
-  />
+                <Input
+                  placeholder="Buscar por número, descrição, endereço..."
+                  value={searchTerm}
+                  onChange={(e) => setSearchTerm(e.target.value)}
+                />
 
-  <div className="grid grid-cols-2 gap-2">
-    <Select value={statusFilter} onValueChange={setStatusFilter}>
-      <SelectTrigger>
-        <SelectValue placeholder="Situação" />
-      </SelectTrigger>
-      <SelectContent>
-        <SelectItem value="all">Todas situações</SelectItem>
-        <SelectItem value="ABERTO">Aberto</SelectItem>
-        <SelectItem value="EM_ANALISE">Em análise</SelectItem>
-        <SelectItem value="EM_ANDAMENTO">Em andamento</SelectItem>
-        <SelectItem value="FINALIZADO">Finalizado</SelectItem>
-      </SelectContent>
-    </Select>
+                <div className="grid grid-cols-2 gap-2">
+                  <Select value={statusFilter} onValueChange={setStatusFilter}>
+                    <SelectTrigger>
+                      <SelectValue placeholder="Situação" />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="all">Todas situações</SelectItem>
+                      <SelectItem value="ABERTO">Aberto</SelectItem>
+                      <SelectItem value="EM_ANALISE">Em análise</SelectItem>
+                      <SelectItem value="EM_ANDAMENTO">Em andamento</SelectItem>
+                      <SelectItem value="FINALIZADO">Finalizado</SelectItem>
+                    </SelectContent>
+                  </Select>
 
-    <Select value={categoryFilter} onValueChange={setCategoryFilter}>
-      <SelectTrigger>
-        <SelectValue placeholder="Categoria" />
-      </SelectTrigger>
-      <SelectContent>
-        <SelectItem value="all">Todas categorias</SelectItem>
-        {categories.map((category) => (
-  <SelectItem key={category.id} value={String(category.id)}>
-    <span className="flex items-center gap-2">
-      {categoryIcons[category.name] || categoryIcons["Outros"]}
-      {category.name}
-    </span>
-  </SelectItem>
-))}
-      </SelectContent>
-    </Select>
-  </div>
-</div>
+                  <Select value={categoryFilter} onValueChange={setCategoryFilter}>
+                    <SelectTrigger>
+                      <SelectValue placeholder="Categoria" />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="all">Todas categorias</SelectItem>
+                      {categories.map((category) => (
+                        <SelectItem key={category.id} value={String(category.id)}>
+                          <span className="flex items-center gap-2">
+                            {categoryIcons[category.name] || categoryIcons["Outros"]}
+                            {category.name}
+                          </span>
+                        </SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                </div>
+              </div>
+
               {filteredReports.length === 0 ? (
-                <div className="text-center py-12 text-muted-foreground">
+                <div className="lg:col-span-3 text-center py-12 text-muted-foreground">
                   <AlertTriangle className="w-12 h-12 mx-auto mb-3 opacity-40" />
                   <p>
-  {myReports.length === 0
-    ? "Nenhum reporte ainda"
-    : "Nenhum chamado encontrado com esses filtros"}
-</p>
+                    {myReports.length === 0
+                      ? "Nenhum reporte ainda"
+                      : "Nenhum chamado encontrado com esses filtros"}
+                  </p>
                 </div>
               ) : (
                 filteredReports.map((report) => (
                   <div
                     key={report.id}
                     className="bg-card rounded-lg p-4 border border-border"
-                    
                   >
                     <div className="mb-3 h-32 rounded-lg overflow-hidden border border-border bg-muted/30 flex items-center justify-center">
-  {report.images?.[0]?.imageUrl ? (
-    report.images[0].resourceType === "video" ? (
-      <video
-        src={report.images[0].imageUrl}
-        controls
-        preload="metadata"
-        className="w-full h-32 object-cover bg-black"
-      />
-    ) : (
-      <img
-        src={report.images[0].imageUrl.replace(
-          "/upload/",
-          "/upload/w_500,q_auto,f_auto/"
-        )}
-        alt="Preview do chamado"
-        loading="lazy"
-        decoding="async"
-        className="w-full h-32 object-cover"
-      />
-    )
-  ) : (
-    <span className="text-xs text-muted-foreground">
-      Sem mídia
-    </span>
-  )}
-</div>
+                      {report.images?.[0]?.imageUrl ? (
+                        report.images[0].resourceType === "video" ? (
+                          <video
+                            src={report.images[0].imageUrl}
+                            controls
+                            preload="metadata"
+                            className="w-full h-32 object-cover bg-black"
+                          />
+                        ) : (
+                          <img
+                            src={report.images[0].imageUrl.replace(
+                              "/upload/",
+                              "/upload/w_500,q_auto,f_auto/"
+                            )}
+                            alt="Preview do chamado"
+                            loading="lazy"
+                            decoding="async"
+                            className="w-full h-32 object-cover"
+                          />
+                        )
+                      ) : (
+                        <span className="text-xs text-muted-foreground">
+                          Sem mídia
+                        </span>
+                      )}
+                    </div>
 
-<div className="flex items-start justify-between gap-3 mb-3">
-  <div className="min-w-0 space-y-1.5">
-    <span className="text-xs text-muted-foreground">
-      #{report.id}
-    </span>
+                    <div className="flex items-start justify-between gap-3 mb-3">
+                      <div className="min-w-0 space-y-1.5">
+                        <span className="text-xs text-muted-foreground">
+                          #{report.id}
+                        </span>
 
-    <h3 className="font-semibold text-sm uppercase line-clamp-2">
-      {report.description || "Sem descrição"}
-    </h3>
+                        <h3 className="font-semibold text-sm uppercase line-clamp-2">
+                          {report.title || "Sem nome"}
+                        </h3>
 
-    <div className="flex items-center gap-1.5 text-xs text-muted-foreground">
-      {categoryIcons[report.category.name] || categoryIcons["Outros"]}
-      <span>{report.category.name}</span>
-    </div>
+                        <div className="flex items-center gap-1.5 text-xs text-muted-foreground">
+                          {categoryIcons[report.category.name] || categoryIcons["Outros"]}
+                          <span>{report.category.name}</span>
+                        </div>
 
-    <p className="text-xs text-muted-foreground">
-      {new Date(report.createdAt).toLocaleDateString("pt-BR")}
-      {report.referencePoint ? ` • ${report.referencePoint}` : ""}
-    </p>
-  </div>
+                        <p className="text-xs text-muted-foreground">
+                          {new Date(report.createdAt).toLocaleDateString("pt-BR")}
+                          {report.referencePoint ? ` • ${report.referencePoint}` : ""}
+                        </p>
+                      </div>
 
-  <span
-    className={`shrink-0 text-xs px-2 py-1 rounded-full border ${
-      statusColors[report.status.name] || "bg-gray-100 text-gray-700"
-    }`}
-  >
-    {report.status.name}
-  </span>
-</div>
+                      <span
+                        className={`shrink-0 text-xs px-2 py-1 rounded-full border ${
+                          statusColors[report.status.name] || "bg-gray-100 text-gray-700"
+                        }`}
+                      >
+                        {report.status.name}
+                      </span>
+                    </div>
 
-<Button
-  variant="outline"
-  size="sm"
-  className="mt-3 w-full"
-  onClick={() => openReportDetails(report)}
->
-  Ver detalhes
-</Button>
+                    <Button
+                      variant="outline"
+                      size="sm"
+                      className="mt-3 w-full"
+                      onClick={() => openReportDetails(report)}
+                    >
+                      Ver detalhes
+                    </Button>
+                  </div>
+                ))
+              )}
+            </motion.div>
+          ) : (
+            <motion.div
+              key="reports"
+              initial={{ opacity: 0 }}
+              animate={{ opacity: 1 }}
+              exit={{ opacity: 0 }}
+              transition={{ duration: 0.15 }}
+              className="space-y-3 lg:grid lg:grid-cols-3 lg:gap-4 lg:space-y-0"
+            >
+              {allReports.length === 0 ? (
+                <div className="lg:col-span-3 text-center py-12 text-muted-foreground">
+                  <AlertTriangle className="w-12 h-12 mx-auto mb-3 opacity-40" />
+                  <p>Nenhum chamado encontrado</p>
+                </div>
+              ) : (
+                allReports.map((report) => (
+                  <div
+                    key={report.id}
+                    className="bg-card rounded-lg p-4 border border-border"
+                  >
+                    <div className="mb-3 h-32 rounded-lg overflow-hidden border border-border bg-muted/30 flex items-center justify-center">
+                      {report.images?.[0]?.imageUrl ? (
+                        report.images[0].resourceType === "video" ? (
+                          <video
+                            src={report.images[0].imageUrl}
+                            controls
+                            preload="metadata"
+                            className="w-full h-32 object-cover bg-black"
+                          />
+                        ) : (
+                          <img
+                            src={report.images[0].imageUrl.replace(
+                              "/upload/",
+                              "/upload/w_500,q_auto,f_auto/"
+                            )}
+                            alt="Preview do chamado"
+                            loading="lazy"
+                            decoding="async"
+                            className="w-full h-32 object-cover"
+                          />
+                        )
+                      ) : (
+                        <span className="text-xs text-muted-foreground">
+                          Sem mídia
+                        </span>
+                      )}
+                    </div>
+
+                    <div className="flex items-start justify-between gap-3 mb-3">
+                      <div className="min-w-0 space-y-1.5">
+                        <span className="text-xs text-muted-foreground">
+                          #{report.id}
+                        </span>
+
+                        <h3 className="font-semibold text-sm uppercase line-clamp-2">
+  {report.title || "Sem nome"}
+</h3>
+
+{report.description && (
+  <p className="text-xs text-muted-foreground line-clamp-2">
+    {report.description}
+  </p>
+)}
+
+                        <div className="flex items-center gap-1.5 text-xs text-muted-foreground">
+                          {categoryIcons[report.category.name] || categoryIcons["Outros"]}
+                          <span>{report.category.name}</span>
+                        </div>
+
+                        <p className="text-xs text-muted-foreground">
+                          {new Date(report.createdAt).toLocaleDateString("pt-BR")}
+                          {report.referencePoint ? ` • ${report.referencePoint}` : ""}
+                        </p>
+                      </div>
+
+                      <span
+                        className={`shrink-0 text-xs px-2 py-1 rounded-full border ${
+                          statusColors[report.status.name] || "bg-gray-100 text-gray-700"
+                        }`}
+                      >
+                        {report.status.name}
+                      </span>
+                    </div>
+
+                    <Button
+                      variant="outline"
+                      size="sm"
+                      className="mt-3 w-full"
+                      onClick={() => openReportDetails(report)}
+                    >
+                      Ver detalhes
+                    </Button>
                   </div>
                 ))
               )}
@@ -1294,6 +1513,18 @@ const getStatusStyle = (status: string) => {
         )}
       </div>
 
+<div className="mb-4">
+  <label className="text-sm font-medium">Nome do chamado</label>
+
+  {isEditing ? (
+    <Input
+      value={editTitle}
+      onChange={(e) => setEditTitle(e.target.value)}
+    />
+  ) : (
+    <p>{selectedReport.title || "Sem nome"}</p>
+  )}
+</div>
       <div className="mb-4">
         <label className="text-sm font-medium">Descrição</label>
 
@@ -1454,6 +1685,76 @@ const getStatusStyle = (status: string) => {
 
   </div>
 )}
+
+<div className="mt-6 border-t border-border pt-4">
+  <h3 className="text-sm font-semibold mb-3">Atualizações</h3>
+
+  <div className="space-y-3 max-h-56 overflow-y-auto rounded-lg bg-muted/20 p-3">
+    {loadingMessages ? (
+      <div className="flex items-center justify-center py-6 text-sm text-muted-foreground">
+        <span className="w-4 h-4 mr-2 border-2 border-muted-foreground/30 border-t-muted-foreground rounded-full animate-spin" />
+        Carregando mensagens...
+      </div>
+    ) : messages.length === 0 ? (
+      <p className="text-sm text-muted-foreground text-center py-4">
+        Nenhuma atualização ainda.
+      </p>
+    ) : (
+      messages.map((msg) => {
+        const isMine = msg.senderId === employee.id;
+
+        return (
+          <div
+            key={msg.id}
+            className={`flex ${isMine ? "justify-end" : "justify-start"}`}
+          >
+            <div
+              className={`max-w-[85%] rounded-2xl px-3 py-2 text-sm ${
+                isMine
+                  ? "bg-secondary text-secondary-foreground"
+                  : "bg-background border border-border"
+              }`}
+            >
+              <div className="mb-1 text-[11px] opacity-70">
+                {msg.senderName} •{" "}
+                {new Date(msg.createdAt).toLocaleString("pt-BR")}
+              </div>
+
+              <p className="whitespace-pre-wrap">{msg.message}</p>
+            </div>
+          </div>
+        );
+      })
+    )}
+  </div>
+
+  <div className="mt-3 flex gap-2">
+    <Input
+      value={newMessage}
+      onChange={(e) => setNewMessage(e.target.value)}
+      placeholder="Escreva uma atualização..."
+      onKeyDown={(e) => {
+        if (e.key === "Enter") {
+          e.preventDefault();
+          sendMessage();
+        }
+      }}
+    />
+
+    <Button
+      type="button"
+      onClick={sendMessage}
+      disabled={sendingMessage || !newMessage.trim()}
+      className="shrink-0"
+    >
+      {sendingMessage ? (
+        <span className="w-4 h-4 border-2 border-white/30 border-t-white rounded-full animate-spin" />
+      ) : (
+        "Enviar"
+      )}
+    </Button>
+  </div>
+</div>
 
 <div className="flex gap-2 mt-6">
   {isEditing ? (

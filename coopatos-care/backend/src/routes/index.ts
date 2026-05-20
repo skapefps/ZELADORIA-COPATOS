@@ -58,6 +58,7 @@ router.post("/reports", async (req, res) => {
   const {
   employeeId,
   categoryId,
+  title,
   description,
   referencePoint,
   latitude,
@@ -84,6 +85,7 @@ router.post("/reports", async (req, res) => {
     data: {
       employeeId,
       categoryId,
+      title,
       statusId: openStatus.id,
       description,
       referencePoint,
@@ -117,6 +119,7 @@ router.patch("/reports/:id", async (req, res) => {
 
   const {
     categoryId,
+    title,
     description,
     referencePoint,
     latitude,
@@ -130,6 +133,7 @@ router.patch("/reports/:id", async (req, res) => {
     },
     data: {
       categoryId: categoryId ? Number(categoryId) : undefined,
+      title,
       description,
       referencePoint,
       latitude,
@@ -291,4 +295,46 @@ router.patch("/reports/:id/status", async (req, res) => {
 
   return res.json(report);
 });
+
+// aba do lado de reporte sobre os chamados
+
+router.get("/reports/:id/messages", async (req, res) => {
+  const reportId = Number(req.params.id);
+
+  const messages = await prisma.reportMessage.findMany({
+    where: {
+      reportId,
+    },
+    orderBy: {
+      createdAt: "asc",
+    },
+  });
+
+  return res.json(messages);
+});
+
+router.post("/reports/:id/messages", async (req, res) => {
+  const reportId = Number(req.params.id);
+  const { senderId, senderName, senderRole, message } = req.body;
+
+  if (!message || !message.trim()) {
+    return res.status(400).json({
+      error: "Mensagem é obrigatória.",
+    });
+  }
+
+  const newMessage = await prisma.reportMessage.create({
+    data: {
+      reportId,
+      senderId: senderId ? Number(senderId) : undefined,
+      senderName,
+      senderRole,
+      message,
+    },
+  });
+
+  return res.status(201).json(newMessage);
+});
+
+
 export { router };
