@@ -17,6 +17,7 @@ import {
   Shield,
   TreePine,
   HelpCircle,
+  X,
   Trash2,
 } from "lucide-react";
 
@@ -112,6 +113,7 @@ const API_URL =
   const [expandedMedia, setExpandedMedia] = useState<{
   url: string;
   type?: string | null;
+  index: number;
 } | null>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
 
@@ -130,10 +132,21 @@ const API_URL =
   const [coords, setCoords] = useState<{ lat: number; lng: number } | null>(null);
 
   const [myReports, setMyReports] = useState<Report[]>([]);
+  const [searchTerm, setSearchTerm] = useState("");
+  const [statusFilter, setStatusFilter] = useState("all");
+  const [categoryFilter, setCategoryFilter] = useState("all");
 
   // =========================
   // Load categories and reports
   // =========================
+
+  useEffect(() => {
+  window.scrollTo({
+    top: 0,
+    behavior: "instant",
+  });
+}, []);
+
   useEffect(() => {
   const employee = JSON.parse(
     localStorage.getItem("employee") || "{}"
@@ -180,9 +193,59 @@ const API_URL =
     loadData();
   }, [toast,API_URL]);
 
+  const filteredReports = myReports.filter((report) => {
+  const search = searchTerm.toLowerCase();
+
+  const matchesSearch =
+    String(report.id).includes(search) ||
+    report.description?.toLowerCase().includes(search) ||
+    report.referencePoint?.toLowerCase().includes(search) ||
+    report.address?.toLowerCase().includes(search) ||
+    report.category.name.toLowerCase().includes(search) ||
+    report.status.name.toLowerCase().includes(search);
+
+  const matchesStatus =
+    statusFilter === "all" || report.status.name === statusFilter;
+
+  const matchesCategory =
+    categoryFilter === "all" || String(report.category.id) === categoryFilter;
+
+  return matchesSearch && matchesStatus && matchesCategory;
+});
+
   // =========================
   // Image Upload
   // =========================
+
+  const downloadMedia = async (url: string) => {
+  try {
+    const response = await fetch(url);
+    const blob = await response.blob();
+
+    const blobUrl = window.URL.createObjectURL(blob);
+
+    const fileExtension = url.includes(".mp4")
+      ? "mp4"
+      : url.includes(".mov")
+      ? "mov"
+      : "jpg";
+
+    const link = document.createElement("a");
+    link.href = blobUrl;
+    link.download = `chamado-midia.${fileExtension}`;
+    document.body.appendChild(link);
+    link.click();
+
+    link.remove();
+    window.URL.revokeObjectURL(blobUrl);
+  } catch (error) {
+    console.error(error);
+    toast({
+      title: "Erro ao baixar mídia",
+      variant: "destructive",
+    });
+  }
+};
   const handleImageChange = (e: React.ChangeEvent<HTMLInputElement>) => {
   const files = Array.from(e.target.files || []);
 
@@ -701,7 +764,10 @@ const getStatusStyle = (status: string) => {
       {/* Tabs */}
       <div className="flex border-b border-border bg-card">
         <button
-          onClick={() => setTab("new")}
+          onClick={() => {
+  setTab("new");
+  window.scrollTo(0, 0);
+}}
           className={`flex-1 py-3 text-sm font-medium flex items-center justify-center gap-2 ${
             tab === "new"
               ? "text-secondary border-b-2 border-secondary"
@@ -712,7 +778,10 @@ const getStatusStyle = (status: string) => {
         </button>
 
         <button
-          onClick={() => setTab("history")}
+          onClick={() => {
+  setTab("history");
+  window.scrollTo(0, 0);
+}}
           className={`flex-1 py-3 text-sm font-medium flex items-center justify-center gap-2 ${
             tab === "history"
               ? "text-secondary border-b-2 border-secondary"
@@ -849,15 +918,30 @@ const getStatusStyle = (status: string) => {
               {/* GPS */}
               <div className="flex gap-2">
                 <Button
-                  type="button"
-                  variant="outline"
-                  className="flex-shrink-0"
-                  onClick={getLocation}
-                  disabled={gettingLocation}
-                >
-                  <MapPin className="w-4 h-4 mr-1" />
-                  {coords ? "✓ GPS" : gettingLocation ? "..." : "GPS"}
-                </Button>
+  type="button"
+  variant="outline"
+  size="icon"
+  onClick={getLocation}
+  disabled={gettingLocation}
+  title={
+    gettingLocation
+      ? "Obtendo localização..."
+      : coords
+      ? "Localização capturada"
+      : "Capturar localização"
+  }
+  className={`shrink-0 transition-colors ${
+    coords
+      ? "border-green-500 text-green-600 hover:bg-green-50"
+      : "border-red-300 text-red-500 hover:bg-red-50"
+  }`}
+>
+  {gettingLocation ? (
+    <span className="w-4 h-4 border-2 border-current/30 border-t-current rounded-full animate-spin" />
+  ) : (
+    <MapPin className="w-4 h-4" />
+  )}
+</Button>
 
                 <Input
                   placeholder="Ponto de referência (ex: Galpão B)"
@@ -907,13 +991,56 @@ const getStatusStyle = (status: string) => {
   transition={{ duration: 0.15 }}
               className="space-y-3 lg:grid lg:grid-cols-3 lg:gap-4 lg:space-y-0"
             >
-              {myReports.length === 0 ? (
+              <div className="lg:col-span-3 space-y-3 mb-2">
+  <Input
+    placeholder="Buscar por número, descrição, endereço..."
+    value={searchTerm}
+    onChange={(e) => setSearchTerm(e.target.value)}
+  />
+
+  <div className="grid grid-cols-2 gap-2">
+    <Select value={statusFilter} onValueChange={setStatusFilter}>
+      <SelectTrigger>
+        <SelectValue placeholder="Situação" />
+      </SelectTrigger>
+      <SelectContent>
+        <SelectItem value="all">Todas situações</SelectItem>
+        <SelectItem value="ABERTO">Aberto</SelectItem>
+        <SelectItem value="EM_ANALISE">Em análise</SelectItem>
+        <SelectItem value="EM_ANDAMENTO">Em andamento</SelectItem>
+        <SelectItem value="FINALIZADO">Finalizado</SelectItem>
+      </SelectContent>
+    </Select>
+
+    <Select value={categoryFilter} onValueChange={setCategoryFilter}>
+      <SelectTrigger>
+        <SelectValue placeholder="Categoria" />
+      </SelectTrigger>
+      <SelectContent>
+        <SelectItem value="all">Todas categorias</SelectItem>
+        {categories.map((category) => (
+  <SelectItem key={category.id} value={String(category.id)}>
+    <span className="flex items-center gap-2">
+      {categoryIcons[category.name] || categoryIcons["Outros"]}
+      {category.name}
+    </span>
+  </SelectItem>
+))}
+      </SelectContent>
+    </Select>
+  </div>
+</div>
+              {filteredReports.length === 0 ? (
                 <div className="text-center py-12 text-muted-foreground">
                   <AlertTriangle className="w-12 h-12 mx-auto mb-3 opacity-40" />
-                  <p>Nenhum reporte ainda</p>
+                  <p>
+  {myReports.length === 0
+    ? "Nenhum reporte ainda"
+    : "Nenhum chamado encontrado com esses filtros"}
+</p>
                 </div>
               ) : (
-                myReports.map((report) => (
+                filteredReports.map((report) => (
                   <div
                     key={report.id}
                     className="bg-card rounded-lg p-4 border border-border"
@@ -946,36 +1073,36 @@ const getStatusStyle = (status: string) => {
     </span>
   )}
 </div>
-                    <div className="flex items-start justify-between mb-2">
-                      <div>
-                        <span className="text-xs text-muted-foreground">
-                          #{report.id}
-                        </span>
-                        <h3 className="font-semibold text-sm">
-                          {report.category.name}
-                        </h3>
-                      </div>
 
-                      <span
-                        className={`text-xs px-2 py-1 rounded-full border ${
-                          statusColors[report.status.name] ||
-                          "bg-gray-100 text-gray-700"
-                        }`}
-                      >
-                        {report.status.name}
-                      </span>
-                    </div>
+<div className="flex items-start justify-between gap-3 mb-3">
+  <div className="min-w-0 space-y-1.5">
+    <span className="text-xs text-muted-foreground">
+      #{report.id}
+    </span>
 
-                    {report.description && (
-                      <p className="text-xs text-muted-foreground mb-2">
-                        {report.description}
-                      </p>
-                    )}
+    <h3 className="font-semibold text-sm uppercase line-clamp-2">
+      {report.description || "Sem descrição"}
+    </h3>
 
-                    <p className="text-xs text-muted-foreground">
-                     {new Date(report.createdAt).toLocaleDateString("pt-BR")}
-                     {report.referencePoint ? ` • ${report.referencePoint}` : ""}
-                    </p>
+    <div className="flex items-center gap-1.5 text-xs text-muted-foreground">
+      {categoryIcons[report.category.name] || categoryIcons["Outros"]}
+      <span>{report.category.name}</span>
+    </div>
+
+    <p className="text-xs text-muted-foreground">
+      {new Date(report.createdAt).toLocaleDateString("pt-BR")}
+      {report.referencePoint ? ` • ${report.referencePoint}` : ""}
+    </p>
+  </div>
+
+  <span
+    className={`shrink-0 text-xs px-2 py-1 rounded-full border ${
+      statusColors[report.status.name] || "bg-gray-100 text-gray-700"
+    }`}
+  >
+    {report.status.name}
+  </span>
+</div>
 
 <Button
   variant="outline"
@@ -994,7 +1121,14 @@ const getStatusStyle = (status: string) => {
 
         {selectedReport && (
   <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4">
-    <div className="bg-card rounded-2xl p-5 w-full max-w-lg lg:max-w-3xl max-h-[90vh] overflow-y-auto shadow-2xl border border-border">
+    <div className="relative bg-card rounded-2xl p-5 w-full max-w-lg lg:max-w-3xl max-h-[90vh] overflow-y-auto shadow-2xl border border-border">
+      <button
+  type="button"
+  onClick={() => setSelectedReport(null)}
+  className="sticky top-0 ml-auto z-20 flex h-8 w-8 items-center justify-center rounded-full bg-red-50 text-red-600 hover:bg-red-100 transition-colors"
+>
+  <X className="w-4 h-4" />
+</button>
      <div className="mb-5">
   <p className="text-xs text-muted-foreground">Detalhes do chamado</p>
   <h2 className="text-xl font-bold text-foreground">
@@ -1028,9 +1162,10 @@ const getStatusStyle = (status: string) => {
   type="button"
   onClick={() =>
   setExpandedMedia({
-    url: selectedReport.images![detailImageIndex].imageUrl,
-    type: selectedReport.images![detailImageIndex].resourceType,
-  })
+  url: selectedReport.images![detailImageIndex].imageUrl,
+  type: selectedReport.images![detailImageIndex].resourceType,
+  index: detailImageIndex,
+})
 }
   className="absolute top-2 right-2 bg-black/60 hover:bg-black/80 text-white rounded-full w-9 h-9 flex items-center justify-center transition-colors"
 >
@@ -1145,13 +1280,13 @@ const getStatusStyle = (status: string) => {
             </SelectTrigger>
             <SelectContent>
               {categories.map((category) => (
-                <SelectItem
-                  key={category.id}
-                  value={String(category.id)}
-                >
-                  {category.name}
-                </SelectItem>
-              ))}
+  <SelectItem key={category.id} value={String(category.id)}>
+    <span className="flex items-center gap-2">
+      {categoryIcons[category.name] || categoryIcons["Outros"]}
+      {category.name}
+    </span>
+  </SelectItem>
+))}
             </SelectContent>
           </Select>
         ) : (
@@ -1192,16 +1327,39 @@ const getStatusStyle = (status: string) => {
 
   {isEditing ? (
     <div className="space-y-2">
-      <Button
-        type="button"
-        variant="outline"
-        onClick={getEditLocation}
-        disabled={gettingLocation}
-        className="w-full"
-      >
-        <MapPin className="w-4 h-4 mr-1" />
-        {gettingLocation ? "Buscando localização..." : "Atualizar GPS"}
-      </Button>
+      <div className="flex items-center gap-2">
+  <Button
+    type="button"
+    variant="outline"
+    size="icon"
+    onClick={getEditLocation}
+    disabled={gettingLocation}
+    title={
+      gettingLocation
+        ? "Obtendo localização..."
+        : editCoords
+        ? "Localização atualizada"
+        : "Atualizar localização"
+    }
+    className={`shrink-0 transition-colors ${
+      editCoords
+        ? "border-green-500 text-green-600 hover:bg-green-50"
+        : "border-red-300 text-red-500 hover:bg-red-50"
+    }`}
+  >
+    {gettingLocation ? (
+      <span className="w-4 h-4 border-2 border-current/30 border-t-current rounded-full animate-spin" />
+    ) : (
+      <MapPin className="w-4 h-4" />
+    )}
+  </Button>
+
+  <span className="text-sm text-muted-foreground">
+    {editCoords
+      ? "Localização capturada"
+      : "Atualizar localização"}
+  </span>
+</div>
 
       <Input
         value={editAddress}
@@ -1329,13 +1487,6 @@ const getStatusStyle = (status: string) => {
         Editar
       </Button>
 
-      <Button
-        variant="outline"
-        className="flex-1 bg-red-600 hover:bg-red-500 text-white"
-        onClick={() => setSelectedReport(null)}
-      >
-        Fechar
-      </Button>
     </>
   )}
 </div>
@@ -1380,7 +1531,7 @@ const getStatusStyle = (status: string) => {
   </div>
 )}
 
-{expandedMedia && (
+{expandedMedia && selectedReport?.images && (
   <div
     className="fixed inset-0 z-[9999] bg-black/90 flex items-center justify-center p-4"
     onClick={() => setExpandedMedia(null)}
@@ -1397,12 +1548,71 @@ const getStatusStyle = (status: string) => {
       <img
         src={expandedMedia.url}
         alt="Mídia ampliada"
-        loading="lazy"
-        decoding="async"
         className="max-w-full max-h-full object-contain rounded-lg"
         onClick={(e) => e.stopPropagation()}
       />
     )}
+
+    {selectedReport.images.length > 1 && (
+      <>
+        <button
+          type="button"
+          onClick={(e) => {
+            e.stopPropagation();
+
+            const newIndex =
+              expandedMedia.index === 0
+                ? selectedReport.images!.length - 1
+                : expandedMedia.index - 1;
+
+            const media = selectedReport.images![newIndex];
+
+            setExpandedMedia({
+              url: media.imageUrl,
+              type: media.resourceType,
+              index: newIndex,
+            });
+          }}
+          className="absolute left-4 top-1/2 -translate-y-1/2 bg-black/60 hover:bg-black/80 text-white rounded-full w-10 h-10 flex items-center justify-center text-2xl"
+        >
+          ‹
+        </button>
+
+        <button
+          type="button"
+          onClick={(e) => {
+            e.stopPropagation();
+
+            const newIndex =
+              expandedMedia.index === selectedReport.images!.length - 1
+                ? 0
+                : expandedMedia.index + 1;
+
+            const media = selectedReport.images![newIndex];
+
+            setExpandedMedia({
+              url: media.imageUrl,
+              type: media.resourceType,
+              index: newIndex,
+            });
+          }}
+          className="absolute right-4 top-1/2 -translate-y-1/2 bg-black/60 hover:bg-black/80 text-white rounded-full w-10 h-10 flex items-center justify-center text-2xl"
+        >
+          ›
+        </button>
+      </>
+    )}
+
+    <button
+  type="button"
+  onClick={(e) => {
+    e.stopPropagation();
+    downloadMedia(expandedMedia.url);
+  }}
+  className="absolute top-4 right-16 bg-black/60 hover:bg-black/80 text-white rounded-full px-4 h-10 flex items-center justify-center text-sm"
+>
+  Baixar
+</button>
 
     <button
       type="button"
