@@ -84,6 +84,8 @@ model Report {
   latitude         Float?
   longitude        Float?
 
+  address          String?
+
   employee         Employee     @relation(fields: [employeeId], references: [id])
   category         Category     @relation(fields: [categoryId], references: [id])
   status           ReportStatus @relation(fields: [statusId], references: [id])

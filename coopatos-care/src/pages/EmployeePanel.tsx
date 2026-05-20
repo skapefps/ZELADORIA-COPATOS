@@ -46,6 +46,7 @@ type Report = {
   referencePoint?: string | null;
   latitude?: number | null;
   longitude?: number | null;
+  address?: string | null;
   createdAt: string;
 
   category: {
@@ -88,6 +89,9 @@ const API_URL =
     ? "http://localhost:3333"
     : import.meta.env.VITE_API_URL || "https://zeladoria-coopatos-api.onrender.com";
   const [selectedFiles, setSelectedFiles] = useState<File[]>([]);
+  const [address, setAddress] = useState("");
+  const [editAddress, setEditAddress] = useState("");
+  const [editCoords, setEditCoords] = useState<{ lat: number; lng: number } | null>(null);
   const [imagePreviews, setImagePreviews] = useState<string[]>([]);
   const [detailImageIndex, setDetailImageIndex] = useState(0);
   const [currentImageIndex, setCurrentImageIndex] = useState(0);
@@ -185,6 +189,8 @@ const API_URL =
   const getLocation = () => {
   setGettingLocation(true);
 
+
+
   if (!navigator.geolocation) {
     setGettingLocation(false);
     toast({
@@ -227,6 +233,7 @@ const API_URL =
         const addressText = [road, suburb, city, state]
           .filter(Boolean)
           .join(", ");
+          setAddress(addressText);
 
         toast({
           title: "Localização capturada!",
@@ -328,10 +335,25 @@ const uploadImageToCloudinary = async (file: File) => {
         });
         return;
       }
+let finalCoords = coords;
+let finalAddress = address;
 
-      const loc = coords || {
-        lat: null,
-        lng: null,
+if (address && !coords) {
+  const result = await geocodeAddress(address);
+
+  if (result) {
+    finalCoords = {
+      lat: result.lat,
+      lng: result.lng,
+    };
+
+    finalAddress = result.displayName;
+  }
+}
+
+      const loc = finalCoords || {
+  lat: null,
+  lng: null,
 };
 let imageUrl = null;
 
@@ -347,14 +369,15 @@ const imageUrls = await Promise.all(
     "Content-Type": "application/json",
   },
   body: JSON.stringify({
-    employeeId: employee.id,
-    categoryId: Number(categoryId),
-    description,
-    referencePoint,
-    latitude: loc.lat,
-    longitude: loc.lng,
-    imageUrls,
-  }),
+  employeeId: employee.id,
+  categoryId: Number(categoryId),
+  description,
+  referencePoint,
+  latitude: loc.lat,
+  longitude: loc.lng,
+  address: finalAddress,
+  imageUrls,
+}),
       });
 
       const data = await response.json();
@@ -378,6 +401,7 @@ const imageUrls = await Promise.all(
       setCategoryId("");
       setDescription("");
       setReferencePoint("");
+      setAddress("");
       setImagePreviews([]);
       setSelectedFiles([]);
       setCurrentImageIndex(0);
@@ -394,6 +418,115 @@ const imageUrls = await Promise.all(
   setSubmitting(false);
 }};
 
+const getEditLocation = () => {
+  setGettingLocation(true);
+
+  if (!navigator.geolocation) {
+    setGettingLocation(false);
+    toast({
+      title: "GPS não suportado",
+      description: "Seu navegador não suporta geolocalização.",
+      variant: "destructive",
+    });
+    return;
+  }
+
+  navigator.geolocation.getCurrentPosition(
+    async (pos) => {
+      const latitude = pos.coords.latitude;
+      const longitude = pos.coords.longitude;
+
+      setEditCoords({
+        lat: latitude,
+        lng: longitude,
+      });
+
+      try {
+        const response = await fetch(
+          `https://nominatim.openstreetmap.org/reverse?format=json&lat=${latitude}&lon=${longitude}`
+        );
+
+        const data = await response.json();
+
+        const road = data.address?.road || "Rua não identificada";
+        const suburb =
+          data.address?.suburb ||
+          data.address?.neighbourhood ||
+          "";
+        const city =
+          data.address?.city ||
+          data.address?.town ||
+          data.address?.village ||
+          "";
+        const state = data.address?.state || "";
+
+        const addressText = [road, suburb, city, state]
+          .filter(Boolean)
+          .join(", ");
+
+        setEditAddress(addressText);
+
+        toast({
+          title: "Localização atualizada!",
+          description:
+            `${addressText}\n` +
+            `Lat: ${latitude.toFixed(6)} | ` +
+            `Lng: ${longitude.toFixed(6)}`,
+        });
+      } catch {
+        toast({
+          title: "Localização atualizada!",
+          description:
+            `Lat: ${latitude.toFixed(6)} | ` +
+            `Lng: ${longitude.toFixed(6)}`,
+        });
+      }
+
+      setGettingLocation(false);
+    },
+    () => {
+      setGettingLocation(false);
+
+      toast({
+        title: "Não foi possível obter localização",
+        description: "Permita o acesso à localização no navegador.",
+        variant: "destructive",
+      });
+    },
+    {
+      enableHighAccuracy: false,
+      timeout: 30000,
+      maximumAge: 60000,
+    }
+  );
+};
+
+const geocodeAddress = async (typedAddress: string) => {
+  if (!typedAddress.trim()) return null;
+
+  const response = await fetch(
+    `https://nominatim.openstreetmap.org/search?format=json&q=${encodeURIComponent(
+      typedAddress
+    )}&limit=1`
+  );
+
+  const data = await response.json();
+
+  if (!data || data.length === 0) {
+    toast({
+      title: "Endereço não encontrado",
+      description: "Tente informar rua, número, bairro e cidade.",
+      variant: "destructive",
+    });
+    return null;
+  }
+
+  return {
+    lat: Number(data[0].lat),
+    lng: Number(data[0].lon),
+    displayName: data[0].display_name,
+  };
+};
   
 
   // =========================
@@ -406,6 +539,12 @@ const imageUrls = await Promise.all(
   };
   const openReportDetails = (report: Report) => {
   setSelectedReport(report);
+  setEditAddress(report.address || "");
+  setEditCoords(
+  report.latitude && report.longitude
+    ? { lat: report.latitude, lng: report.longitude }
+    : null
+);
   setDetailImageIndex(0);
   setIsEditing(false);
   setEditCategoryId(String(report.category.id));
@@ -417,6 +556,22 @@ const handleUpdateReport = async () => {
   if (!selectedReport) return;
 
   try {
+    let finalEditCoords = editCoords;
+    let finalEditAddress = editAddress;
+
+    if (editAddress) {
+      const result = await geocodeAddress(editAddress);
+
+      if (result) {
+        finalEditCoords = {
+          lat: result.lat,
+          lng: result.lng,
+        };
+
+        finalEditAddress = result.displayName;
+      }
+    }
+
     const response = await fetch(`${API_URL}/reports/${selectedReport.id}`, {
       method: "PATCH",
       headers: {
@@ -426,6 +581,9 @@ const handleUpdateReport = async () => {
         categoryId: Number(editCategoryId),
         description: editDescription,
         referencePoint: editReferencePoint,
+        latitude: finalEditCoords?.lat ?? selectedReport.latitude,
+        longitude: finalEditCoords?.lng ?? selectedReport.longitude,
+        address: finalEditAddress,
       }),
     });
 
@@ -457,7 +615,6 @@ const handleUpdateReport = async () => {
       variant: "destructive",
     });
   }
-  
 };
 
 const getStatusStyle = (status: string) => {
@@ -490,11 +647,12 @@ const getStatusStyle = (status: string) => {
         </div>
 
         <button
-          onClick={handleLogout}
-          className="text-primary-foreground/70 hover:text-primary-foreground"
-        >
-          <LogOut className="w-5 h-5" />
-        </button>
+  onClick={handleLogout}
+  className="text-red-400 hover:text-red-500 transition-colors"
+  title="Sair"
+>
+  <LogOut className="w-5 h-5" />
+</button>
       </header>
 
       {/* Tabs */}
@@ -650,6 +808,13 @@ const getStatusStyle = (status: string) => {
                   onChange={(e) => setReferencePoint(e.target.value)}
                 />
               </div>
+              {address && (
+  <Input
+    placeholder="Endereço"
+    value={address}
+    onChange={(e) => setAddress(e.target.value)}
+  />
+)}
 
               {/* Description */}
               <Textarea
@@ -855,6 +1020,12 @@ const getStatusStyle = (status: string) => {
         Remover imagem atual
       </Button>
     )}
+     <label
+      htmlFor="edit-images-input"
+      className="w-full inline-flex items-center justify-center rounded-md bg-green-600 hover:bg-green-700 text-white px-4 py-2 text-sm font-medium cursor-pointer transition-colors"
+    >
+      + Adicionar novas fotos
+    </label>
   </>
 )}
       <div className="mb-4">
@@ -902,25 +1073,53 @@ const getStatusStyle = (status: string) => {
       </div>
 
       <div className="mb-4">
-        <label className="text-sm font-medium">
-          Ponto de referência
-        </label>
+  <label className="text-sm font-medium">Ponto de referência</label>
 
-        {isEditing ? (
-          <Input
-            value={editReferencePoint}
-            onChange={(e) =>
-              setEditReferencePoint(e.target.value)
-            }
-          />
-        ) : (
-          <p>
-            {selectedReport.referencePoint || "Não informado"}
-          </p>
-        )}
-      </div>
+  {isEditing ? (
+    <Input
+      value={editReferencePoint}
+      onChange={(e) => setEditReferencePoint(e.target.value)}
+    />
+  ) : (
+    <p>{selectedReport.referencePoint || "Não informado"}</p>
+  )}
+</div>
 
-      <div className="mb-4">
+<div className="mb-4">
+  <label className="text-sm font-medium">Endereço</label>
+
+  {isEditing ? (
+    <div className="space-y-2">
+      <Button
+        type="button"
+        variant="outline"
+        onClick={getEditLocation}
+        disabled={gettingLocation}
+        className="w-full"
+      >
+        <MapPin className="w-4 h-4 mr-1" />
+        {gettingLocation ? "Buscando localização..." : "Atualizar GPS"}
+      </Button>
+
+      <Input
+        value={editAddress}
+        onChange={(e) => setEditAddress(e.target.value)}
+        placeholder="Endereço do chamado"
+      />
+
+      {editCoords && (
+        <p className="text-xs text-muted-foreground">
+          Lat: {editCoords.lat.toFixed(6)} | Lng:{" "}
+          {editCoords.lng.toFixed(6)}
+        </p>
+      )}
+    </div>
+  ) : (
+    <p>{selectedReport.address || "Não informado"}</p>
+  )}
+</div>
+
+<div className="mb-4">
   <label className="text-xs font-medium uppercase tracking-wide text-muted-foreground">
     Situação
   </label>
@@ -971,9 +1170,7 @@ const getStatusStyle = (status: string) => {
 
           setMyReports((prev) =>
             prev.map((report) =>
-              report.id === updatedReport.id
-                ? updatedReport
-                : report
+              report.id === updatedReport.id ? updatedReport : report
             )
           );
 
@@ -994,13 +1191,6 @@ const getStatusStyle = (status: string) => {
         }
       }}
     />
-
-    <label
-      htmlFor="edit-images-input"
-      className="w-full inline-flex items-center justify-center rounded-md bg-green-600 hover:bg-green-700 text-white px-4 py-2 text-sm font-medium cursor-pointer transition-colors"
-    >
-      + Adicionar novas fotos
-    </label>
   </div>
 )}
 
@@ -1021,10 +1211,7 @@ const getStatusStyle = (status: string) => {
     </>
   ) : (
     <>
-      <Button
-        className="flex-1"
-        onClick={() => setIsEditing(true)}
-      >
+      <Button className="flex-1" onClick={() => setIsEditing(true)}>
         Editar
       </Button>
 
@@ -1040,7 +1227,9 @@ const getStatusStyle = (status: string) => {
 </div>
     </div>
   </div>
-)}{expandedImage && (
+)}
+
+{expandedImage && (
   <div
     className="fixed inset-0 z-[9999] bg-black/90 flex items-center justify-center p-4"
     onClick={() => setExpandedImage(null)}

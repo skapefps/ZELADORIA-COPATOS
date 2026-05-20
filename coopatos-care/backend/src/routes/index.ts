@@ -3,6 +3,7 @@ import { prisma } from "../prisma/client.js";
 
 const router = Router();
 
+
 router.get("/", (req, res) => {
   return res.json({
     message: "API funcionando",
@@ -54,6 +55,7 @@ router.post("/reports", async (req, res) => {
     referencePoint,
     latitude,
     longitude,
+    address,
     imageUrls,
   } = req.body;
 
@@ -78,6 +80,7 @@ router.post("/reports", async (req, res) => {
       statusId: openStatus.id,
       description,
       referencePoint,
+      address,
       latitude,
       longitude,
 
@@ -109,6 +112,7 @@ router.patch("/reports/:id", async (req, res) => {
     referencePoint,
     latitude,
     longitude,
+    address,
   } = req.body;
 
   const report = await prisma.report.update({
@@ -121,6 +125,7 @@ router.patch("/reports/:id", async (req, res) => {
       referencePoint,
       latitude,
       longitude,
+      address,
     },
     include: {
       employee: true,
@@ -205,6 +210,8 @@ router.post("/employee-login", async (req, res) => {
     employee,
   });
 });
+
+
 
  //REPORTS
 
