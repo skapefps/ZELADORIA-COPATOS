@@ -45,6 +45,11 @@ router.get("/reports", async (req, res) => {
   category: true,
   status: true,
   images: true,
+  participants: {
+    include: {
+      employee: true,
+    },
+  },
   _count: {
     select: {
       messages: true,
@@ -58,6 +63,73 @@ router.get("/reports", async (req, res) => {
 
   return res.json(reports);
 });
+
+router.get("/employees/:employeeId/participating-reports", async (req, res) => {
+  const employeeId = Number(req.params.employeeId);
+
+  const reports = await prisma.report.findMany({
+    where: {
+      participants: {
+        some: {
+          employeeId,
+        },
+      },
+    },
+    include: {
+  employee: true,
+  category: true,
+  status: true,
+  images: true,
+  participants: {
+    include: {
+      employee: true,
+    },
+  },
+  _count: {
+    select: {
+      messages: true,
+    },
+  },
+},
+    orderBy: {
+      createdAt: "desc",
+    },
+  });
+
+  return res.json(reports);
+});
+
+router.post("/reports/:id/participants", async (req, res) => {
+  const reportId = Number(req.params.id);
+  const { employeeId } = req.body;
+
+  if (!employeeId) {
+    return res.status(400).json({
+      error: "Funcionário é obrigatório.",
+    });
+  }
+
+  const participant = await prisma.reportParticipant.upsert({
+    where: {
+      reportId_employeeId: {
+        reportId,
+        employeeId: Number(employeeId),
+      },
+    },
+    update: {},
+    create: {
+      reportId,
+      employeeId: Number(employeeId),
+      role: "PARTICIPANT",
+    },
+    include: {
+      employee: true,
+    },
+  });
+
+  return res.status(201).json(participant);
+});
+
 
 router.post("/reports", async (req, res) => {
   const {
@@ -87,32 +159,44 @@ router.post("/reports", async (req, res) => {
   }
 
   const report = await prisma.report.create({
-    data: {
-      employeeId,
-      categoryId,
-      title,
-      statusId: openStatus.id,
-      description,
-      referencePoint,
-      address,
-      latitude,
-      longitude,
+  data: {
+    employeeId,
+    categoryId,
+    title,
+    statusId: openStatus.id,
+    description,
+    referencePoint,
+    address,
+    latitude,
+    longitude,
 
-      images: mediaItems?.length
-  ? {
-      create: mediaItems.map((item: any) => ({
-        imageUrl: item.imageUrl,
-        publicId: item.publicId,
-        resourceType: item.resourceType || "image",
-      })),
-    }
-  : undefined,
+    participants: {
+      create: {
+        employeeId,
+        role: "OWNER",
+      },
     },
+
+    images: mediaItems?.length
+      ? {
+          create: mediaItems.map((item: any) => ({
+            imageUrl: item.imageUrl,
+            publicId: item.publicId,
+            resourceType: item.resourceType || "image",
+          })),
+        }
+      : undefined,
+  },
     include: {
   employee: true,
   category: true,
   status: true,
   images: true,
+  participants: {
+    include: {
+      employee: true,
+    },
+  },
   _count: {
     select: {
       messages: true,
@@ -280,15 +364,21 @@ router.get("/employees/:employeeId/reports", async (req, res) => {
       employeeId,
     },
     include: {
-      category: true,
-      status: true,
-      images: true,
-      _count: {
-        select: {
-          messages: true,
-        },
-      },
+  employee: true,
+  category: true,
+  status: true,
+  images: true,
+  participants: {
+    include: {
+      employee: true,
     },
+  },
+  _count: {
+    select: {
+      messages: true,
+    },
+  },
+},
     orderBy: {
       createdAt: "desc",
     },

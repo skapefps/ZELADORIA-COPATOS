@@ -50,6 +50,7 @@ type Report = {
   latitude?: number | null;
   _count?: {
   messages: number;
+  
 };
   longitude?: number | null;
   address?: string | null;
@@ -72,7 +73,22 @@ type Report = {
   publicId?: string | null;
   resourceType?: string | null;
 }[];
+employee: {
+  id: number;
+  name: string;
 };
+
+participants?: {
+  id: number;
+  role: string;
+  employee: {
+    id: number;
+    name: string;
+    department?: string | null;
+  };
+}[];
+};
+
 
 type ReportMessage = {
   id: number;
@@ -202,9 +218,15 @@ const API_URL =
           );
           const reportsData = await reportsResponse.json();
           setMyReports(reportsData);
-          const allReportsResponse = await fetch(`${API_URL}/reports`);
-          const allReportsData = await allReportsResponse.json();
-          setAllReports(allReportsData);
+          const participatingResponse = await fetch(
+  `${API_URL}/employees/${employee.id}/participating-reports`
+);
+
+const participatingData = await participatingResponse.json();
+
+setAllReports(participatingData);
+
+
         }
       } catch (error) {
         console.error(error);
@@ -613,6 +635,7 @@ const mediaItems = await Promise.all(
       }
 
       setMyReports((prev) => [data, ...prev]);
+      setAllReports((prev) => [data, ...prev]);
 
       toast({
         title: "Chamado enviado com sucesso!",
@@ -836,6 +859,10 @@ const handleUpdateReport = async () => {
     setMyReports((prev) =>
       prev.map((report) => (report.id === data.id ? data : report))
     );
+
+    setAllReports((prev) =>
+  prev.map((report) => (report.id === data.id ? data : report))
+);
 
     setSelectedReport(data);
     setIsEditing(false);
@@ -1235,10 +1262,16 @@ const getStatusStyle = (status: string) => {
                           {report.title || "Sem nome"}
                         </h3>
 
-                        <div className="flex items-center gap-1.5 text-xs text-muted-foreground">
-                          {categoryIcons[report.category.name] || categoryIcons["Outros"]}
-                          <span>{report.category.name}</span>
-                        </div>
+                         <div className="flex items-center gap-1.5 text-xs text-muted-foreground">
+  {categoryIcons[report.category.name] || categoryIcons["Outros"]}
+  <span>{report.category.name}</span>
+</div>
+
+{report.employee?.name && (
+  <p className="text-xs text-muted-foreground">
+    Aberto por {report.employee.name}
+  </p>
+)}
 
                         <p className="text-xs text-muted-foreground">
   {new Date(report.createdAt).toLocaleDateString("pt-BR")}
@@ -1342,6 +1375,12 @@ const getStatusStyle = (status: string) => {
                           {categoryIcons[report.category.name] || categoryIcons["Outros"]}
                           <span>{report.category.name}</span>
                         </div>
+
+                        {report.employee?.name && (
+  <p className="text-xs text-muted-foreground">
+    Aberto por {report.employee.name}
+  </p>
+)}
 
                         <p className="text-xs text-muted-foreground">
   {new Date(report.createdAt).toLocaleDateString("pt-BR")}
@@ -1503,6 +1542,13 @@ const getStatusStyle = (status: string) => {
                 : report
             )
           );
+          setAllReports((prev) =>
+  prev.map((report) =>
+    report.id === selectedReport.id
+      ? updatedReport
+      : report
+  )
+);
 
           setDetailImageIndex(0);
         }}
@@ -1706,6 +1752,12 @@ const getStatusStyle = (status: string) => {
               report.id === updatedReport.id ? updatedReport : report
             )
           );
+
+          setAllReports((prev) =>
+  prev.map((report) =>
+    report.id === updatedReport.id ? updatedReport : report
+  )
+);
 
           setDetailImageIndex(
             updatedReport.images.length - mediaItems.length
@@ -1977,5 +2029,7 @@ const getStatusStyle = (status: string) => {
     </div>
   );
 };
+
+
 
 export default EmployeePanel;

@@ -18,6 +18,8 @@ model Employee {
 
   reports            Report[]
   messages           ReportMessage[]
+  participations     ReportParticipant[]
+
   user               User?
 
   createdAt          DateTime @default(now())
@@ -92,6 +94,7 @@ model Report {
 
   images           ReportImage[]
   messages         ReportMessage[]
+  participants     ReportParticipant[]
 
   createdAt        DateTime @default(now())
   updatedAt        DateTime @updatedAt
@@ -135,6 +138,23 @@ model ReportMessage {
 
   @@index([reportId])
   @@index([senderId])
+}
+
+model ReportParticipant {
+  id         Int      @id @default(autoincrement())
+
+  reportId   Int
+  employeeId Int
+  role       String   @default("PARTICIPANT")
+
+  report     Report   @relation(fields: [reportId], references: [id])
+  employee   Employee @relation(fields: [employeeId], references: [id])
+
+  createdAt  DateTime @default(now())
+
+  @@unique([reportId, employeeId])
+  @@index([reportId])
+  @@index([employeeId])
 }
 
 enum UserRole {
