@@ -13,6 +13,7 @@
     "test": "vitest run",
     "test:watch": "vitest"
   },
+  
   "dependencies": {
     "@hookform/resolvers": "^3.10.0",
     "@prisma/adapter-pg": "^7.8.0",
@@ -82,6 +83,7 @@
     "@tailwindcss/typography": "^0.5.16",
     "@testing-library/jest-dom": "^6.6.0",
     "@testing-library/react": "^16.0.0",
+    "prisma": "^7.8.0",
     "@types/bcrypt": "^6.0.0",
     "@types/cors": "^2.8.19",
     "@types/express": "^5.0.6",
