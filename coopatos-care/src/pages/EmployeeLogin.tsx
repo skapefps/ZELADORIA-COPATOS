@@ -6,6 +6,11 @@ import { Droplets, Shield } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 
+const API_URL =
+  window.location.hostname === "localhost" ||
+  window.location.hostname === "127.0.0.1"
+    ? "http://localhost:3333"
+    : import.meta.env.VITE_API_URL;
 const EmployeeLogin = () => {
   const [matricula, setMatricula] = useState("");
   const [error, setError] = useState("");
@@ -21,7 +26,7 @@ const EmployeeLogin = () => {
   }
 
   try {
-    const response = await fetch("http://192.168.100.2:3333/employee-login", {
+    const response = await fetch(`${API_URL}/employee-login`, {
       method: "POST",
       headers: {
         "Content-Type": "application/json",

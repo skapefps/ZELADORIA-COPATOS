@@ -81,6 +81,11 @@ const statusColors: Record<string, string> = {
 
 const EmployeePanel = () => {
   const employee = JSON.parse(localStorage.getItem("employee") || "{}");
+  const API_URL =
+  window.location.hostname === "localhost" ||
+  window.location.hostname === "127.0.0.1"
+    ? "http://localhost:3333"
+    : import.meta.env.VITE_API_URL;
   const [selectedFiles, setSelectedFiles] = useState<File[]>([]);
   const [imagePreviews, setImagePreviews] = useState<string[]>([]);
   const [detailImageIndex, setDetailImageIndex] = useState(0);
@@ -119,14 +124,14 @@ const EmployeePanel = () => {
         const employee = JSON.parse(localStorage.getItem("employee") || "{}");
 
         // Load categories
-        const categoriesResponse = await fetch("http://192.168.100.2:3333/categories");
+        const categoriesResponse = await fetch(`${API_URL}/categories`);
         const categoriesData = await categoriesResponse.json();
         setCategories(categoriesData);
 
         // Load employee reports
         if (employee.id) {
           const reportsResponse = await fetch(
-            `http://192.168.100.2:3333/employees/${employee.id}/reports`
+            `${API_URL}/employees/${employee.id}/reports`
           );
           const reportsData = await reportsResponse.json();
           setMyReports(reportsData);
@@ -333,7 +338,7 @@ const imageUrls = await Promise.all(
   selectedFiles.map((file) => uploadImageToCloudinary(file))
 );
 
-      const response = await fetch("http://192.168.100.2:3333/reports", {
+      const response = await fetch(`${API_URL}/reports`, {
   method: "POST",
   headers: {
     "Content-Type": "application/json",
@@ -408,7 +413,7 @@ const handleUpdateReport = async () => {
   if (!selectedReport) return;
 
   try {
-    const response = await fetch(`http://192.168.100.2:3333/reports/${selectedReport.id}`, {
+    const response = await fetch(`${API_URL}/reports/${selectedReport.id}`, {
       method: "PATCH",
       headers: {
         "Content-Type": "application/json",
@@ -799,7 +804,7 @@ const getStatusStyle = (status: string) => {
             selectedReport.images![detailImageIndex].id;
 
           await fetch(
-            `http://192.168.100.2:3333/report-images/${imageId}`,
+            `${API_URL}/report-images/${imageId}`,
             {
               method: "DELETE",
             }
@@ -930,7 +935,7 @@ const getStatusStyle = (status: string) => {
           );
 
           const response = await fetch(
-            `http://192.168.100.2:3333/reports/${selectedReport.id}/images`,
+            `${API_URL}/reports/${selectedReport.id}/images`,
             {
               method: "POST",
               headers: {
