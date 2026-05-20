@@ -94,6 +94,8 @@ const API_URL =
   const [editCoords, setEditCoords] = useState<{ lat: number; lng: number } | null>(null);
   const [imagePreviews, setImagePreviews] = useState<string[]>([]);
   const [detailImageIndex, setDetailImageIndex] = useState(0);
+  const [geocoding, setGeocoding] = useState(false);
+  const [showLogoutConfirm, setShowLogoutConfirm] = useState(false);
   const [currentImageIndex, setCurrentImageIndex] = useState(0);
   const { matricula, logout } = useAuth();
   const [selectedReport, setSelectedReport] = useState<Report | null>(null);
@@ -109,6 +111,7 @@ const API_URL =
 
   const [tab, setTab] = useState<"new" | "history">("new");
   const [submitting, setSubmitting] = useState(false);
+  const [savingEdit, setSavingEdit] = useState(false);
 
   const [categoryId, setCategoryId] = useState("");
   const [categories, setCategories] = useState<Category[]>([]);
@@ -126,6 +129,22 @@ const API_URL =
   // Load categories and reports
   // =========================
   useEffect(() => {
+  const employee = JSON.parse(
+    localStorage.getItem("employee") || "{}"
+  );
+
+  const welcomeShown = sessionStorage.getItem("welcomeShown");
+
+  if (employee.name && !welcomeShown) {
+    toast({
+  title: `✓ Bem-vindo, ${employee.name}!`,
+  description: "Login realizado com sucesso.",
+  className:
+    "bg-secondary text-secondary-foreground border-secondary",
+});
+
+    sessionStorage.setItem("welcomeShown", "true");
+  }
     async function loadData() {
       try {
         const employee = JSON.parse(localStorage.getItem("employee") || "{}");
@@ -338,7 +357,7 @@ const uploadImageToCloudinary = async (file: File) => {
 let finalCoords = coords;
 let finalAddress = address;
 
-if (address && !coords) {
+if (address) {
   const result = await geocodeAddress(address);
 
   if (result) {
@@ -348,6 +367,7 @@ if (address && !coords) {
     };
 
     finalAddress = result.displayName;
+    setAddress(result.displayName);
   }
 }
 
@@ -504,28 +524,34 @@ const getEditLocation = () => {
 const geocodeAddress = async (typedAddress: string) => {
   if (!typedAddress.trim()) return null;
 
-  const response = await fetch(
-    `https://nominatim.openstreetmap.org/search?format=json&q=${encodeURIComponent(
-      typedAddress
-    )}&limit=1`
-  );
+  setGeocoding(true);
 
-  const data = await response.json();
+  try {
+    const response = await fetch(
+      `https://nominatim.openstreetmap.org/search?format=json&q=${encodeURIComponent(
+        typedAddress
+      )}&limit=1`
+    );
 
-  if (!data || data.length === 0) {
-    toast({
-      title: "Endereço não encontrado",
-      description: "Tente informar rua, número, bairro e cidade.",
-      variant: "destructive",
-    });
-    return null;
+    const data = await response.json();
+
+    if (!data || data.length === 0) {
+      toast({
+        title: "Endereço não encontrado",
+        description: "Tente informar rua, número, bairro e cidade.",
+        variant: "destructive",
+      });
+      return null;
+    }
+
+    return {
+      lat: Number(data[0].lat),
+      lng: Number(data[0].lon),
+      displayName: data[0].display_name,
+    };
+  } finally {
+    setGeocoding(false);
   }
-
-  return {
-    lat: Number(data[0].lat),
-    lng: Number(data[0].lon),
-    displayName: data[0].display_name,
-  };
 };
   
 
@@ -533,10 +559,11 @@ const geocodeAddress = async (typedAddress: string) => {
   // Logout
   // =========================
   const handleLogout = () => {
-    localStorage.removeItem("employee");
-    logout();
-    navigate("/");
-  };
+  sessionStorage.removeItem("welcomeShown");
+  localStorage.removeItem("employee");
+  logout();
+  navigate("/");
+};
   const openReportDetails = (report: Report) => {
   setSelectedReport(report);
   setEditAddress(report.address || "");
@@ -554,6 +581,8 @@ const geocodeAddress = async (typedAddress: string) => {
 
 const handleUpdateReport = async () => {
   if (!selectedReport) return;
+
+  setSavingEdit(true);
 
   try {
     let finalEditCoords = editCoords;
@@ -614,6 +643,8 @@ const handleUpdateReport = async () => {
       title: "Erro ao conectar com o servidor",
       variant: "destructive",
     });
+  } finally {
+    setSavingEdit(false);
   }
 };
 
@@ -647,7 +678,7 @@ const getStatusStyle = (status: string) => {
         </div>
 
         <button
-  onClick={handleLogout}
+  onClick={() => setShowLogoutConfirm(true)}
   className="text-red-400 hover:text-red-500 transition-colors"
   title="Sair"
 >
@@ -684,14 +715,17 @@ const getStatusStyle = (status: string) => {
       <div className="flex-1 p-4 lg:py-8">
         <AnimatePresence mode="wait">
           {tab === "new" ? (
-            <motion.form
-              key="form"
-              initial={{ opacity: 0, x: -20 }}
-              animate={{ opacity: 1, x: 0 }}
-              exit={{ opacity: 0, x: 20 }}
-              onSubmit={handleSubmit}
-              className="space-y-4 lg:max-w-2xl lg:mx-auto"
-            >
+           <motion.form
+  key="form"
+  initial={{ opacity: 0 }}
+  animate={{ opacity: 1 }}
+  exit={{ opacity: 0 }}
+  transition={{
+    duration: 0.15,
+    ease: "easeOut",
+  }}
+  onSubmit={handleSubmit}
+  className="space-y-4 lg:max-w-2xl lg:mx-auto">
               {/* Image Upload */}
               <div>
                 <input
@@ -706,10 +740,12 @@ const getStatusStyle = (status: string) => {
                 {imagePreviews.length > 0 ? (
   <div className="relative rounded-lg overflow-hidden">
     <img
-      src={imagePreviews[currentImageIndex]}
-      alt="Preview"
-      className="w-full h-48 object-cover"
-    />
+  src={imagePreviews[currentImageIndex]}
+  alt="Preview"
+  loading="lazy"
+  decoding="async"
+  className="w-full h-48 object-cover"
+/>
 
     {imagePreviews.length > 1 && (
       <>
@@ -827,19 +863,27 @@ const getStatusStyle = (status: string) => {
               {/* Submit */}
               <Button
   type="submit"
-  disabled={submitting}
+  disabled={submitting || geocoding}
   className="w-full h-14 text-lg font-bold bg-secondary hover:bg-secondary/90 text-secondary-foreground"
 >
   <Send className="w-5 h-5 mr-2" />
-  {submitting ? "Enviando chamado..." : "Reportar Problema"}
+  {submitting || geocoding ? (
+    <span className="flex items-center gap-2">
+      <span className="w-4 h-4 border-2 border-white/30 border-t-white rounded-full animate-spin" />
+      {geocoding ? "Buscando endereço..." : "Enviando chamado..."}
+    </span>
+  ) : (
+    "Reportar Problema"
+  )}
 </Button>
             </motion.form>
           ) : (
             <motion.div
-              key="history"
-              initial={{ opacity: 0, x: 20 }}
-              animate={{ opacity: 1, x: 0 }}
-              exit={{ opacity: 0, x: -20 }}
+  key="history"
+  initial={{ opacity: 0 }}
+  animate={{ opacity: 1 }}
+  exit={{ opacity: 0 }}
+  transition={{ duration: 0.15 }}
               className="space-y-3 lg:grid lg:grid-cols-3 lg:gap-4 lg:space-y-0"
             >
               {myReports.length === 0 ? (
@@ -857,10 +901,15 @@ const getStatusStyle = (status: string) => {
                     {report.images?.[0]?.imageUrl && (
   <div className="mb-3 rounded-lg overflow-hidden border border-border">
     <img
-  src={report.images[0].imageUrl.replace("/upload/", "/upload/w_500,q_auto,f_auto/")}
-      alt="Preview do chamado"
-      className="w-full h-32 object-cover"
-    />
+  src={report.images[0].imageUrl.replace(
+    "/upload/",
+    "/upload/w_500,q_auto,f_auto/"
+  )}
+  alt="Preview do chamado"
+  loading="lazy"
+  decoding="async"
+  className="w-full h-32 object-cover"
+/>
   </div>
 )}
                     <div className="flex items-start justify-between mb-2">
@@ -923,14 +972,15 @@ const getStatusStyle = (status: string) => {
   <>
     <div className="relative mb-4 rounded-lg overflow-hidden">
       <img
-        src={selectedReport.images[detailImageIndex].imageUrl.replace(
-  "/upload/",
-  "/upload/w_900,q_auto,f_auto/"
-)}
-
-        alt="Imagem do chamado"
-        className="w-full h-64 lg:h-96 object-cover rounded-lg"
-      />
+  src={selectedReport.images[detailImageIndex].imageUrl.replace(
+    "/upload/",
+    "/upload/w_900,q_auto,f_auto/"
+  )}
+  alt="Imagem do chamado"
+  loading="lazy"
+  decoding="async"
+  className="w-full h-64 lg:h-96 object-cover rounded-lg"
+/>
 <button
   type="button"
   onClick={() =>
@@ -1197,13 +1247,24 @@ const getStatusStyle = (status: string) => {
 <div className="flex gap-2 mt-6">
   {isEditing ? (
     <>
-      <Button className="flex-1" onClick={handleUpdateReport}>
-        Salvar
-      </Button>
+     <Button
+  className="flex-1 bg-green-600 hover:bg-green-700 text-white"
+  onClick={handleUpdateReport}
+  disabled={savingEdit || geocoding}
+>
+  {savingEdit || geocoding ? (
+    <span className="flex items-center gap-2">
+      <span className="w-4 h-4 border-2 border-white/30 border-t-white rounded-full animate-spin" />
+      {geocoding ? "Buscando endereço..." : "Salvando..."}
+    </span>
+  ) : (
+    "Salvar"
+  )}
+</Button>
 
       <Button
         variant="outline"
-        className="flex-1"
+        className="flex-1 bg-red-600 hover:bg-red-500 text-white"
         onClick={() => setIsEditing(false)}
       >
         Cancelar
@@ -1217,7 +1278,7 @@ const getStatusStyle = (status: string) => {
 
       <Button
         variant="outline"
-        className="flex-1"
+        className="flex-1 bg-red-600 hover:bg-red-500 text-white"
         onClick={() => setSelectedReport(null)}
       >
         Fechar
@@ -1229,16 +1290,55 @@ const getStatusStyle = (status: string) => {
   </div>
 )}
 
+{showLogoutConfirm && (
+  <div className="fixed inset-0 z-[9998] bg-black/50 flex items-center justify-center p-4">
+    <div className="bg-card rounded-2xl p-6 w-full max-w-sm shadow-2xl border border-border">
+      <div className="text-center">
+        <div className="mx-auto mb-4 flex h-12 w-12 items-center justify-center rounded-full bg-red-100">
+          <LogOut className="w-6 h-6 text-red-600" />
+        </div>
+
+        <h3 className="text-lg font-semibold mb-2">
+          Confirmar saída
+        </h3>
+
+        <p className="text-sm text-muted-foreground mb-6">
+          Tem certeza que deseja sair do sistema?
+        </p>
+      </div>
+
+      <div className="flex gap-2">
+        <Button
+          variant="outline"
+          className="flex-1"
+          onClick={() => setShowLogoutConfirm(false)}
+        >
+          Cancelar
+        </Button>
+
+        <Button
+          className="flex-1 bg-red-600 hover:bg-red-700 text-white"
+          onClick={handleLogout}
+        >
+          Sair
+        </Button>
+      </div>
+    </div>
+  </div>
+)}
+
 {expandedImage && (
   <div
     className="fixed inset-0 z-[9999] bg-black/90 flex items-center justify-center p-4"
     onClick={() => setExpandedImage(null)}
   >
     <img
-      src={expandedImage}
-      alt="Imagem ampliada"
-      className="max-w-full max-h-full object-contain rounded-lg"
-    />
+  src={expandedImage}
+  alt="Imagem ampliada"
+  loading="lazy"
+  decoding="async"
+  className="max-w-full max-h-full object-contain rounded-lg"
+/>
 
     <button
       type="button"

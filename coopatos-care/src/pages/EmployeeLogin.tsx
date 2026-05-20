@@ -1,4 +1,4 @@
-import React, { useState } from "react";
+import React, { useEffect, useState } from "react";
 import { useAuth } from "@/contexts/AuthContext";
 import { useNavigate } from "react-router-dom";
 import { motion } from "framer-motion";
@@ -15,11 +15,21 @@ const API_URL =
 
 const EmployeeLogin = () => {
   const [matricula, setMatricula] = useState("");
+  const [showTimeoutModal, setShowTimeoutModal] = useState(false);
   const [error, setError] = useState("");
   const [loading, setLoading] = useState(false);
 
   const { loginEmployee } = useAuth();
   const navigate = useNavigate();
+
+  useEffect(() => {
+  const sessionExpired = sessionStorage.getItem("sessionExpired");
+
+  if (sessionExpired === "true") {
+    setShowTimeoutModal(true);
+    sessionStorage.removeItem("sessionExpired");
+  }
+}, []);
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -123,12 +133,19 @@ const EmployeeLogin = () => {
             </div>
 
             <Button
-              type="submit"
-              disabled={loading}
-              className="w-full bg-secondary hover:bg-secondary/90 text-secondary-foreground font-semibold"
-            >
-              {loading ? "Entrando..." : "Entrar"}
-            </Button>
+  type="submit"
+  disabled={loading}
+  className="w-full bg-secondary hover:bg-secondary/90 text-secondary-foreground font-semibold"
+>
+  {loading ? (
+    <span className="flex items-center justify-center gap-2">
+      <span className="w-4 h-4 border-2 border-white/30 border-t-white rounded-full animate-spin" />
+      Entrando...
+    </span>
+  ) : (
+    "Entrar"
+  )}
+</Button>
           </form>
 
           {/* Acesso administrativo */}
@@ -142,6 +159,33 @@ const EmployeeLogin = () => {
           </button>
         </div>
       </motion.div>
+      {showTimeoutModal && (
+        <div className="fixed inset-0 z-[9998] bg-black/50 flex items-center justify-center p-4">
+          <div className="bg-card rounded-2xl p-6 w-full max-w-sm shadow-2xl border border-border">
+            <div className="text-center">
+              <div className="mx-auto mb-4 flex h-12 w-12 items-center justify-center rounded-full bg-yellow-100">
+                <Shield className="w-6 h-6 text-yellow-600" />
+              </div>
+
+              <h3 className="text-lg font-semibold mb-2">
+                Sessão expirada
+              </h3>
+
+              <p className="text-sm text-muted-foreground mb-6">
+                Você foi desconectado por inatividade. Faça login novamente para continuar.
+              </p>
+            </div>
+
+            <Button
+              className="w-full bg-secondary hover:bg-secondary/90 text-secondary-foreground font-semibold"
+              onClick={() => setShowTimeoutModal(false)}
+            >
+              OK
+            </Button>
+          </div>
+        </div>
+      )}
+
     </div>
   );
 };
