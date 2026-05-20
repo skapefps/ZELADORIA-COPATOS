@@ -119,14 +119,14 @@ const EmployeePanel = () => {
         const employee = JSON.parse(localStorage.getItem("employee") || "{}");
 
         // Load categories
-        const categoriesResponse = await fetch("http://localhost:3333/categories");
+        const categoriesResponse = await fetch("http://192.168.100.2:3333/categories");
         const categoriesData = await categoriesResponse.json();
         setCategories(categoriesData);
 
         // Load employee reports
         if (employee.id) {
           const reportsResponse = await fetch(
-            `http://localhost:3333/employees/${employee.id}/reports`
+            `http://192.168.100.2:3333/employees/${employee.id}/reports`
           );
           const reportsData = await reportsResponse.json();
           setMyReports(reportsData);
@@ -333,7 +333,7 @@ const imageUrls = await Promise.all(
   selectedFiles.map((file) => uploadImageToCloudinary(file))
 );
 
-      const response = await fetch("http://localhost:3333/reports", {
+      const response = await fetch("http://192.168.100.2:3333/reports", {
   method: "POST",
   headers: {
     "Content-Type": "application/json",
@@ -408,7 +408,7 @@ const handleUpdateReport = async () => {
   if (!selectedReport) return;
 
   try {
-    const response = await fetch(`http://localhost:3333/reports/${selectedReport.id}`, {
+    const response = await fetch(`http://192.168.100.2:3333/reports/${selectedReport.id}`, {
       method: "PATCH",
       headers: {
         "Content-Type": "application/json",
@@ -799,7 +799,7 @@ const getStatusStyle = (status: string) => {
             selectedReport.images![detailImageIndex].id;
 
           await fetch(
-            `http://localhost:3333/report-images/${imageId}`,
+            `http://192.168.100.2:3333/report-images/${imageId}`,
             {
               method: "DELETE",
             }
@@ -930,7 +930,7 @@ const getStatusStyle = (status: string) => {
           );
 
           const response = await fetch(
-            `http://localhost:3333/reports/${selectedReport.id}/images`,
+            `http://192.168.100.2:3333/reports/${selectedReport.id}/images`,
             {
               method: "POST",
               headers: {

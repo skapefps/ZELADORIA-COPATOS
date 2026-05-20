@@ -21,7 +21,7 @@ const EmployeeLogin = () => {
   }
 
   try {
-    const response = await fetch("http://localhost:3333/employee-login", {
+    const response = await fetch("http://192.168.100.2:3333/employee-login", {
       method: "POST",
       headers: {
         "Content-Type": "application/json",
