@@ -2510,7 +2510,7 @@ const getStatusStyle = (status: string) => {
         <AnimatePresence>
   {selectedReport && (
     <motion.div
-      className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4"
+      className="fixed inset-0 bg-black/50 flex items-center justify-center z-[2000] p-4"
       initial={{ opacity: 0 }}
       animate={{ opacity: 1 }}
       exit={{ opacity: 0 }}
@@ -2520,7 +2520,7 @@ const getStatusStyle = (status: string) => {
         animate={{ opacity: 1, scale: 1, y: 0 }}
         exit={{ opacity: 0, scale: 0.75, y: 40 }}
         transition={{ duration: 0.18, ease: "easeInOut" }}
-        className="relative bg-card rounded-2xl p-5 w-full max-w-lg lg:max-w-3xl max-h-[90vh] overflow-y-auto shadow-2xl border border-border"
+        className="relative z-[2001] bg-card rounded-2xl p-5 w-full max-w-lg lg:max-w-3xl max-h-[90vh] overflow-y-auto shadow-2xl border border-border"
       >
       <button
   type="button"
