@@ -14,6 +14,7 @@ model Employee {
   email              String?
   cpf                String   @unique
   phone              String?
+  messageReads ReportMessageRead[]
   department         String?
 
   reports            Report[]
@@ -92,6 +93,8 @@ model Report {
   category         Category     @relation(fields: [categoryId], references: [id])
   status           ReportStatus @relation(fields: [statusId], references: [id])
 
+  messageReads     ReportMessageRead[]
+
   images           ReportImage[]
   messages         ReportMessage[]
   participants     ReportParticipant[]
@@ -129,15 +132,58 @@ model ReportMessage {
   senderId   Int?
   senderName String
   senderRole String
+  media      ReportMessageMedia[]
   message    String
 
   report     Report    @relation(fields: [reportId], references: [id])
   sender     Employee? @relation(fields: [senderId], references: [id])
 
+  replyToMessageId Int?
+
+  replyToMessage ReportMessage? @relation("MessageReplies", fields: [replyToMessageId], references: [id])
+  replies        ReportMessage[] @relation("MessageReplies")
+  mediaUrl     String?
+  publicId     String?
+  resourceType String? @default("image")
+
   createdAt  DateTime @default(now())
 
   @@index([reportId])
   @@index([senderId])
+}
+
+model ReportMessageMedia {
+  id           Int      @id @default(autoincrement())
+
+  messageId    Int
+  mediaUrl     String
+  publicId     String?
+  resourceType String?  @default("image")
+
+  message      ReportMessage @relation(fields: [messageId], references: [id])
+
+  createdAt    DateTime @default(now())
+
+  @@index([messageId])
+  @@index([publicId])
+}
+
+model ReportMessageRead {
+  id              Int      @id @default(autoincrement())
+
+  reportId        Int
+  employeeId      Int
+  lastReadMessageId Int?
+
+  report          Report   @relation(fields: [reportId], references: [id])
+  employee        Employee @relation(fields: [employeeId], references: [id])
+
+  updatedAt       DateTime @updatedAt
+  createdAt       DateTime @default(now())
+
+  @@unique([reportId, employeeId])
+  @@index([reportId])
+  @@index([employeeId])
 }
 
 model ReportParticipant {

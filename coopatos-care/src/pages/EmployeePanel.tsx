@@ -1,5 +1,6 @@
 import React, { useEffect, useRef, useState } from "react";
 import { useNavigate } from "react-router-dom";
+import EmojiPicker, { Theme } from "emoji-picker-react";
 import { useAuth } from "@/contexts/AuthContext";
 import { motion, AnimatePresence } from "framer-motion";
 import {
@@ -17,6 +18,14 @@ import {
   Shield,
   TreePine,
   HelpCircle,
+  ChevronDown,
+  Reply,
+  Smile,
+  MessageCircle,
+  Check,
+  CheckCheck,
+  Search,
+  Pencil,
   X,
   Trash2,
 } from "lucide-react";
@@ -36,6 +45,10 @@ import { useToast } from "@/hooks/use-toast";
 // =========================
 // Types
 // =========================
+
+
+const MAX_FILE_SIZE = 100 * 1024 * 1024;
+
 type Category = {
   id: number;
   name: string;
@@ -93,11 +106,38 @@ participants?: {
 type ReportMessage = {
   id: number;
   reportId: number;
+  readByEmployeeIds?: number[];
   senderId?: number | null;
   senderName: string;
   senderRole: string;
   message: string;
   createdAt: string;
+
+  sender?: {
+    id: number;
+    name: string;
+    department?: string | null;
+  } | null;
+
+  replyToMessage?: {
+    id: number;
+    senderName: string;
+    message: string;
+  } | null;
+
+  media?: {
+    id: number;
+    mediaUrl: string;
+    publicId?: string | null;
+    resourceType?: string | null;
+  }[];
+};
+
+type EmployeeOption = {
+  id: number;
+  name: string;
+  registrationNumber: string;
+  department?: string | null;
 };
 
 const categoryIcons: Record<string, React.ReactNode> = {
@@ -115,6 +155,43 @@ const statusColors: Record<string, string> = {
   FINALIZADO: "bg-green-100 text-green-700 border-green-200",
 };
 
+const departmentColors: Record<string, string> = {
+  Financeiro:
+    "bg-emerald-100 text-emerald-800 border-emerald-200",
+
+  Zeladoria:
+    "bg-blue-100 text-blue-800 border-blue-200",
+
+  Segurança:
+    "bg-red-100 text-red-800 border-red-200",
+
+  Elétrica:
+    "bg-amber-100 text-amber-800 border-amber-200",
+
+  Limpeza:
+    "bg-cyan-100 text-cyan-800 border-cyan-200",
+
+  Administrativo:
+    "bg-violet-100 text-violet-800 border-violet-200",
+
+  RH:
+    "bg-pink-100 text-pink-800 border-pink-200",
+
+  Manutenção:
+    "bg-orange-100 text-orange-800 border-orange-200",
+};
+
+const getDepartmentStyle = (department?: string | null) => {
+  if (!department) {
+    return "bg-gray-100 text-gray-700 border-gray-200";
+  }
+
+  return (
+    departmentColors[department] ||
+    "bg-gray-100 text-gray-700 border-gray-200"
+  );
+};
+
 const EmployeePanel = () => {
   const employee = JSON.parse(localStorage.getItem("employee") || "{}");
 const API_URL =
@@ -123,25 +200,48 @@ const API_URL =
     ? "http://localhost:3333"
     : import.meta.env.VITE_API_URL || "https://zeladoria-coopatos-api.onrender.com";
   const [selectedFiles, setSelectedFiles] = useState<File[]>([]);
+  const [readMessagesByReport, setReadMessagesByReport] = useState<Record<number, number>>({});
+  const [unreadCounts, setUnreadCounts] = useState<Record<number, number>>({});
   const [address, setAddress] = useState("");
   const [editAddress, setEditAddress] = useState("");
   const [editCoords, setEditCoords] = useState<{ lat: number; lng: number } | null>(null);
   const [imagePreviews, setImagePreviews] = useState<string[]>([]);
+  const [messageMenuId, setMessageMenuId] = useState<number | null>(null);
+  const [editingMessageId, setEditingMessageId] = useState<number | null>(null);
+  const [showEmojiPicker, setShowEmojiPicker] = useState(false);
+  const [editingMessageText, setEditingMessageText] = useState("");
+  const [replyingTo, setReplyingTo] = useState<ReportMessage | null>(null);
   const [detailImageIndex, setDetailImageIndex] = useState(0);
   const [geocoding, setGeocoding] = useState(false);
   const [showLogoutConfirm, setShowLogoutConfirm] = useState(false);
+
+  const [showParticipantModal, setShowParticipantModal] = useState(false);
+  const [employees, setEmployees] = useState<EmployeeOption[]>([]);
+  const [employeeSearch, setEmployeeSearch] = useState("");
+  const [addingParticipant, setAddingParticipant] = useState(false);
   const [currentImageIndex, setCurrentImageIndex] = useState(0);
+  const chatFileInputRef = useRef<HTMLInputElement>(null);
+  const emojiPickerRef = useRef<HTMLDivElement | null>(null);
+  const messageRefs = useRef<Record<number, HTMLDivElement | null>>({});
+  const messageMenuRef = useRef<HTMLDivElement | null>(null);
+  const messagesEndRef = useRef<HTMLDivElement>(null);
+  const [chatFiles, setChatFiles] = useState<File[]>([]);
   const { matricula, logout } = useAuth();
   const [selectedReport, setSelectedReport] = useState<Report | null>(null);
   const [isEditing, setIsEditing] = useState(false);
   const [editCategoryId, setEditCategoryId] = useState("");
+  const [showMessagesModal, setShowMessagesModal] = useState(false);
   const [editDescription, setEditDescription] = useState("");
+  const [showMessageSearch, setShowMessageSearch] = useState(false);
+  const [messageSearchTerm, setMessageSearchTerm] = useState("");
+  const [currentSearchIndex, setCurrentSearchIndex] = useState(0);
   const [editReferencePoint, setEditReferencePoint] = useState("");
   const employeeName = employee.name || "";
 
   const [messages, setMessages] = useState<ReportMessage[]>([]);
   const [newMessage, setNewMessage] = useState("");
   const [loadingMessages, setLoadingMessages] = useState(false);
+  const [typingUsers, setTypingUsers] = useState<{ employeeId: number; employeeName: string }[]>([]);
   const [sendingMessage, setSendingMessage] = useState(false);
   const navigate = useNavigate();
   const { toast } = useToast();
@@ -218,13 +318,24 @@ const API_URL =
           );
           const reportsData = await reportsResponse.json();
           setMyReports(reportsData);
+          reportsData.forEach((report: Report) => {
+  loadUnreadCount(report.id);
+});
           const participatingResponse = await fetch(
   `${API_URL}/employees/${employee.id}/participating-reports`
 );
 
+
+
+
+
 const participatingData = await participatingResponse.json();
 
+
 setAllReports(participatingData);
+participatingData.forEach((report: Report) => {
+  loadUnreadCount(report.id);
+});
 
 
         }
@@ -241,6 +352,7 @@ setAllReports(participatingData);
   }, [toast,API_URL]);
 
   const filteredReports = myReports.filter((report) => {
+
   const search = searchTerm.toLowerCase();
 
   const matchesSearch =
@@ -260,6 +372,198 @@ setAllReports(participatingData);
   return matchesSearch && matchesStatus && matchesCategory;
 });
 
+const scrollToMessage = (messageId: number) => {
+  const element = messageRefs.current[messageId];
+
+  if (!element) return;
+
+  element.scrollIntoView({
+    behavior: "smooth",
+    block: "center",
+  });
+
+  element.classList.add("ring-2", "ring-secondary", "ring-offset-2");
+
+  setTimeout(() => {
+    element.classList.remove(
+      "ring-2",
+      "ring-secondary",
+      "ring-offset-2"
+    );
+  }, 1800);
+};
+
+const unreadMessagesCount = selectedReport
+  ? Math.max(
+      (selectedReport._count?.messages || 0) -
+        (readMessagesByReport[selectedReport.id] || 0),
+      0
+    )
+  : 0;
+
+const filteredAllReports = allReports.filter((report) => {
+    
+  const search = searchTerm.toLowerCase();
+
+  const matchesSearch =
+    String(report.id).includes(search) ||
+    report.title?.toLowerCase().includes(search) ||
+    report.description?.toLowerCase().includes(search) ||
+    report.referencePoint?.toLowerCase().includes(search) ||
+    report.address?.toLowerCase().includes(search) ||
+    report.employee?.name?.toLowerCase().includes(search) ||
+    report.category.name.toLowerCase().includes(search) ||
+    report.status.name.toLowerCase().includes(search);
+
+  const matchesStatus =
+    statusFilter === "all" || report.status.name === statusFilter;
+
+  const matchesCategory =
+    categoryFilter === "all" || String(report.category.id) === categoryFilter;
+
+  return matchesSearch && matchesStatus && matchesCategory;
+});
+
+const messageSearchResults = messages.filter((msg) =>
+  msg.message.toLowerCase().includes(messageSearchTerm.toLowerCase())
+);
+
+const goToSearchResult = (index: number) => {
+  const result = messageSearchResults[index];
+
+  if (!result) return;
+
+  setCurrentSearchIndex(index);
+  scrollToMessage(result.id);
+};
+
+const scrollMessagesToBottom = () => {
+  requestAnimationFrame(() => {
+    setTimeout(() => {
+      messagesEndRef.current?.scrollIntoView({
+        behavior: "smooth",
+        block: "end",
+      });
+    }, 300);
+  });
+};
+
+const loadUnreadCount = async (reportId: number) => {
+  const employee = JSON.parse(localStorage.getItem("employee") || "{}");
+
+  if (!employee.id) return;
+
+  try {
+    const response = await fetch(
+      `${API_URL}/reports/${reportId}/unread-count/${employee.id}`
+    );
+
+    const data = await response.json();
+
+    setUnreadCounts((prev) => ({
+      ...prev,
+      [reportId]: data.unreadCount || 0,
+    }));
+    loadMessages(reportId);
+  } catch (error) {
+    console.error(error);
+  }
+};
+
+useEffect(() => {
+  const handleClickOutside = (event: MouseEvent | TouchEvent) => {
+    if (
+      messageMenuRef.current &&
+      !messageMenuRef.current.contains(event.target as Node)
+    ) {
+      setMessageMenuId(null);
+    }
+  };
+
+  document.addEventListener("mousedown", handleClickOutside);
+  document.addEventListener("touchstart", handleClickOutside);
+
+  return () => {
+    document.removeEventListener("mousedown", handleClickOutside);
+    document.removeEventListener("touchstart", handleClickOutside);
+  };
+}, []);
+
+const markMessagesAsRead = async (reportId: number) => {
+  const employee = JSON.parse(localStorage.getItem("employee") || "{}");
+
+  if (!employee.id) return;
+
+  try {
+    await fetch(`${API_URL}/reports/${reportId}/mark-read`, {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+      },
+      body: JSON.stringify({
+        employeeId: employee.id,
+      }),
+    });
+
+    setUnreadCounts((prev) => ({
+      ...prev,
+      [reportId]: 0,
+    }));
+  } catch (error) {
+    console.error(error);
+  }
+};
+const sendTypingSignal = async () => {
+  if (!selectedReport) return;
+
+  const employee = JSON.parse(localStorage.getItem("employee") || "{}");
+
+  if (!employee.id || !employee.name) return;
+
+  try {
+    await fetch(`${API_URL}/reports/${selectedReport.id}/typing`, {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+      },
+      body: JSON.stringify({
+        employeeId: employee.id,
+        employeeName: employee.name,
+      }),
+    });
+  } catch (error) {
+    console.error(error);
+  }
+};
+
+const loadTypingUsers = async () => {
+  if (!selectedReport) return;
+
+  const employee = JSON.parse(localStorage.getItem("employee") || "{}");
+
+  try {
+    const response = await fetch(
+      `${API_URL}/reports/${selectedReport.id}/typing?employeeId=${employee.id}`
+    );
+
+    const data = await response.json();
+
+    setTypingUsers(data.typingUsers || []);
+  } catch (error) {
+    console.error(error);
+  }
+};
+
+useEffect(() => {
+  if (!showMessagesModal || !selectedReport) return;
+
+  const interval = setInterval(() => {
+    loadTypingUsers();
+  }, 1500);
+
+  return () => clearInterval(interval);
+}, [showMessagesModal, selectedReport?.id]);
+
 const loadMessages = async (reportId: number) => {
   setLoadingMessages(true);
 
@@ -268,6 +572,8 @@ const loadMessages = async (reportId: number) => {
     const data = await response.json();
 
     setMessages(data);
+   if (showMessagesModal) {
+}
   } catch (error) {
     console.error(error);
     toast({
@@ -279,13 +585,245 @@ const loadMessages = async (reportId: number) => {
   }
 };
 
+const loadEmployees = async () => {
+  try {
+    const response = await fetch(`${API_URL}/employees`);
+    const data = await response.json();
+
+    setEmployees(data);
+  } catch (error) {
+    console.error(error);
+    toast({
+      title: "Erro ao carregar funcionários",
+      variant: "destructive",
+    });
+  }
+};
+
+const openParticipantModal = () => {
+  setEmployeeSearch("");
+  setShowParticipantModal(true);
+
+  if (employees.length === 0) {
+    loadEmployees();
+  }
+};
+
+const deleteMessage = async (messageId: number) => {
+  if (!selectedReport) return;
+
+  const employee = JSON.parse(localStorage.getItem("employee") || "{}");
+
+  try {
+    const response = await fetch(
+      `${API_URL}/reports/${selectedReport.id}/messages/${messageId}`,
+      {
+        method: "DELETE",
+        headers: {
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify({
+          senderId: employee.id,
+        }),
+      }
+    );
+
+    const data = await response.json();
+
+    if (!response.ok) {
+      toast({
+        title: "Erro ao apagar mensagem",
+        description: data.error || "Erro desconhecido",
+        variant: "destructive",
+      });
+      return;
+    }
+
+    setMessages((prev) => prev.filter((msg) => msg.id !== messageId));
+
+    setMyReports((prev) =>
+      prev.map((report) =>
+        report.id === selectedReport.id
+          ? {
+              ...report,
+              _count: {
+                messages: Math.max((report._count?.messages || 1) - 1, 0),
+              },
+            }
+          : report
+      )
+    );
+
+    setAllReports((prev) =>
+      prev.map((report) =>
+        report.id === selectedReport.id
+          ? {
+              ...report,
+              _count: {
+                messages: Math.max((report._count?.messages || 1) - 1, 0),
+              },
+            }
+          : report
+      )
+    );
+
+    toast({
+      title: "Mensagem apagada.",
+    });
+  } catch (error) {
+    console.error(error);
+    toast({
+      title: "Erro ao conectar com o servidor",
+      variant: "destructive",
+    });
+  }
+};
+
+const updateMessage = async () => {
+  if (!selectedReport || !editingMessageId || !editingMessageText.trim()) {
+    return;
+  }
+
+  const employee = JSON.parse(localStorage.getItem("employee") || "{}");
+
+  try {
+    const response = await fetch(
+      `${API_URL}/reports/${selectedReport.id}/messages/${editingMessageId}`,
+      {
+        method: "PATCH",
+        headers: {
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify({
+          senderId: employee.id,
+          message: editingMessageText.trim(),
+        }),
+      }
+    );
+
+    const data = await response.json();
+
+    if (!response.ok) {
+      toast({
+        title: "Erro ao editar mensagem",
+        description: data.error || "Erro desconhecido",
+        variant: "destructive",
+      });
+      return;
+    }
+
+    setMessages((prev) =>
+      prev.map((msg) => (msg.id === data.id ? data : msg))
+    );
+
+    setEditingMessageId(null);
+    setEditingMessageText("");
+    setMessageMenuId(null);
+
+    toast({
+      title: "Mensagem editada.",
+    });
+  } catch (error) {
+    console.error(error);
+    toast({
+      title: "Erro ao conectar com o servidor",
+      variant: "destructive",
+    });
+  }
+};
+
+const addParticipant = async (employeeId: number) => {
+  if (!selectedReport) return;
+
+  setAddingParticipant(true);
+
+  try {
+    const response = await fetch(
+      `${API_URL}/reports/${selectedReport.id}/participants`,
+      {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify({ employeeId }),
+      }
+    );
+
+    const data = await response.json();
+
+    if (!response.ok) {
+      toast({
+        title: "Erro ao adicionar participante",
+        description: data.error || "Erro desconhecido",
+        variant: "destructive",
+      });
+      return;
+    }
+
+    const updatedReport = {
+      ...selectedReport,
+      participants: [
+        ...(selectedReport.participants || []),
+        data,
+      ],
+    };
+
+    setSelectedReport(updatedReport);
+
+    setMyReports((prev) =>
+      prev.map((report) =>
+        report.id === updatedReport.id ? updatedReport : report
+      )
+    );
+
+    setAllReports((prev) =>
+      prev.map((report) =>
+        report.id === updatedReport.id ? updatedReport : report
+      )
+    );
+
+    toast({
+      title: "Participante adicionado!",
+    });
+
+    setShowParticipantModal(false);
+  } catch (error) {
+    console.error(error);
+    toast({
+      title: "Erro ao conectar com o servidor",
+      variant: "destructive",
+    });
+  } finally {
+    setAddingParticipant(false);
+  }
+};
+
+const filteredEmployees = employees.filter((emp) => {
+  const search = employeeSearch.toLowerCase();
+
+  const alreadyParticipant = selectedReport?.participants?.some(
+    (participant) => participant.employee.id === emp.id
+  );
+
+  return (
+    !alreadyParticipant &&
+    (emp.name.toLowerCase().includes(search) ||
+      emp.registrationNumber.includes(search) ||
+      emp.department?.toLowerCase().includes(search))
+  );
+});
+
 const sendMessage = async () => {
-  if (!selectedReport || !newMessage.trim()) return;
+  if (!selectedReport || (!newMessage.trim() && chatFiles.length === 0)) return;
 
   setSendingMessage(true);
 
   try {
     const employee = JSON.parse(localStorage.getItem("employee") || "{}");
+
+const mediaItems = chatFiles.length
+  ? await Promise.all(chatFiles.map((file) => uploadImageToCloudinary(file)))
+  : [];
 
     const response = await fetch(
       `${API_URL}/reports/${selectedReport.id}/messages`,
@@ -295,11 +833,13 @@ const sendMessage = async () => {
           "Content-Type": "application/json",
         },
         body: JSON.stringify({
-          senderId: employee.id,
-          senderName: employee.name,
-          senderRole: "EMPLOYEE",
-          message: newMessage.trim(),
-        }),
+  senderId: employee.id,
+  mediaItems,
+  senderName: employee.name,
+  senderRole: "EMPLOYEE",
+  message: newMessage.trim(),
+  replyToMessageId: replyingTo?.id || null,
+}),
       }
     );
 
@@ -315,6 +855,7 @@ const sendMessage = async () => {
     }
 
     setMessages((prev) => [...prev, data]);
+    scrollMessagesToBottom();
     setMyReports((prev) =>
   prev.map((report) =>
     report.id === data.reportId
@@ -340,7 +881,14 @@ setAllReports((prev) =>
       : report
   )
 );
+    setReplyingTo(null);
     setNewMessage("");
+    setChatFiles([]);
+
+if (chatFileInputRef.current) {
+  chatFileInputRef.current.value = "";
+}
+    markMessagesAsRead(selectedReport.id);
   } catch (error) {
     console.error(error);
     toast({
@@ -387,6 +935,20 @@ setAllReports((prev) =>
 };
   const handleImageChange = (e: React.ChangeEvent<HTMLInputElement>) => {
   const files = Array.from(e.target.files || []);
+  
+
+  const oversizedFile = files.find((file) => file.size > MAX_FILE_SIZE);
+
+if (oversizedFile) {
+  toast({
+    title: "Arquivo muito grande",
+    description: "Cada arquivo deve ter no máximo 100 MB.",
+    variant: "destructive",
+  });
+
+  e.target.value = "";
+  return;
+}
 
   if (files.length === 0) return;
 
@@ -409,6 +971,28 @@ setAllReports((prev) =>
     reader.readAsDataURL(file);
   });
 };
+
+useEffect(() => {
+  if (!showMessagesModal || !selectedReport) return;
+
+  const interval = setInterval(() => {
+    loadMessages(selectedReport.id);
+    markMessagesAsRead(selectedReport.id);
+  }, 3000);
+
+  return () => clearInterval(interval);
+}, [showMessagesModal, selectedReport?.id]);
+
+useEffect(() => {
+  if (!showMessagesModal || !selectedReport) return;
+
+  const interval = setInterval(async () => {
+    await loadMessages(selectedReport.id);
+    await markMessagesAsRead(selectedReport.id);
+  }, 3000);
+
+  return () => clearInterval(interval);
+}, [showMessagesModal, selectedReport?.id]);
 
   // =========================
   // GPS
@@ -746,6 +1330,34 @@ const getEditLocation = () => {
   );
 };
 
+const jumpMessagesToBottom = () => {
+  setTimeout(() => {
+    messagesEndRef.current?.scrollIntoView({
+      behavior: "auto",
+      block: "end",
+    });
+  }, 0);
+};
+
+useEffect(() => {
+  const handleClickOutsideEmoji = (event: MouseEvent | TouchEvent) => {
+    if (
+      emojiPickerRef.current &&
+      !emojiPickerRef.current.contains(event.target as Node)
+    ) {
+      setShowEmojiPicker(false);
+    }
+  };
+
+  document.addEventListener("mousedown", handleClickOutsideEmoji);
+  document.addEventListener("touchstart", handleClickOutsideEmoji);
+
+  return () => {
+    document.removeEventListener("mousedown", handleClickOutsideEmoji);
+    document.removeEventListener("touchstart", handleClickOutsideEmoji);
+  };
+}, []);
+
 const geocodeAddress = async (typedAddress: string) => {
   if (!typedAddress.trim()) return null;
 
@@ -790,6 +1402,9 @@ const geocodeAddress = async (typedAddress: string) => {
   navigate("/");
 };
   const openReportDetails = (report: Report) => {
+  setShowMessageSearch(false);
+  setMessageSearchTerm("");
+  setCurrentSearchIndex(0);
   setEditTitle(report.title || "");
   setSelectedReport(report);
   setEditAddress(report.address || "");
@@ -881,6 +1496,225 @@ const handleUpdateReport = async () => {
   }
 };
 
+const getMessageReadStatus = (msg: ReportMessage) => {
+  const otherParticipants =
+    selectedReport?.participants
+      ?.map((participant) => participant.employee.id)
+      .filter((id) => id !== msg.senderId) || [];
+
+  if (otherParticipants.length === 0) {
+    return "sent";
+  }
+
+  const readBy = msg.readByEmployeeIds || [];
+
+  const allRead = otherParticipants.every((id) =>
+    readBy.includes(id)
+  );
+
+  return allRead ? "read" : "delivered";
+};
+
+const renderMessages = () => {
+  return messages.map((msg) => {
+    const isMine = msg.senderId === employee.id;
+
+    return (
+      <div
+  key={msg.id}
+  ref={(el) => {
+    messageRefs.current[msg.id] = el;
+  }}
+        className={`relative flex ${isMine ? "justify-end" : "justify-start"}`}
+        onContextMenu={(e) => {
+          e.preventDefault();
+          setMessageMenuId(msg.id);
+        }}
+        onTouchStart={() => {
+          const timer = setTimeout(() => {
+            setMessageMenuId(msg.id);
+          }, 500);
+
+          const clearTimer = () => clearTimeout(timer);
+
+          window.addEventListener("touchend", clearTimer, { once: true });
+          window.addEventListener("touchmove", clearTimer, { once: true });
+        }}
+      >
+        <div
+          className="relative max-w-[85%] rounded-2xl px-3 py-2 text-sm shadow-sm bg-white text-gray-900 border border-gray-200"
+        >
+          <button
+  type="button"
+  onClick={() =>
+    setMessageMenuId(messageMenuId === msg.id ? null : msg.id)
+  }
+  className="hidden md:flex absolute top-1 right-1 z-20 h-8 w-8 items-center justify-center rounded-full bg-white/90 text-gray-700 shadow-sm hover:bg-gray-100 hover:text-gray-900"
+>
+  <ChevronDown className="w-4 h-4 pointer-events-none" />
+</button>
+
+          <div className="mb-1 pr-6 flex flex-wrap items-center gap-1.5 text-[11px] opacity-80">
+            <span className="font-semibold">{msg.senderName}</span>
+
+            {msg.sender?.department && (
+              <span
+                className={`inline-flex items-center rounded-full border px-2.5 py-1 text-[11px] font-medium shadow-sm ${getDepartmentStyle(
+                  msg.sender.department
+                )}`}
+              >
+                {msg.sender.department}
+              </span>
+            )}
+
+            <span>
+              • {new Date(msg.createdAt).toLocaleString("pt-BR")}
+            </span>
+
+            {isMine && (
+  <span className="ml-1 inline-flex items-center">
+    {getMessageReadStatus(msg) === "sent" ? (
+      <Check className="w-3.5 h-3.5 text-gray-400" />
+    ) : getMessageReadStatus(msg) === "delivered" ? (
+      <CheckCheck className="w-3.5 h-3.5 text-gray-400" />
+    ) : (
+      <CheckCheck className="w-3.5 h-3.5 text-blue-500" />
+    )}
+  </span>
+)}
+          </div>
+
+          {msg.replyToMessage && (
+  <button
+    type="button"
+    onClick={() => scrollToMessage(msg.replyToMessage!.id)}
+    className="mb-2 block w-full rounded-lg border-l-4 border-green-500 bg-gray-50 px-3 py-2 text-left text-xs text-gray-800 transition hover:bg-gray-100"
+  >
+              <p className="font-semibold text-green-700">
+                {msg.replyToMessage.senderName}
+              </p>
+
+              <p className="line-clamp-2 opacity-80">
+                {msg.replyToMessage.message}
+              </p>
+            </button>
+          )}
+
+          {msg.media && msg.media.length > 0 && (
+  <div className="mb-2 grid gap-2">
+    {msg.media.map((item) => (
+      <div
+        key={item.id}
+        className="overflow-hidden rounded-xl border border-gray-200"
+      >
+        {item.resourceType === "video" ? (
+          <video
+  src={item.mediaUrl}
+  controls
+  className="max-h-64 w-full object-cover bg-black"
+  onLoadedMetadata={scrollMessagesToBottom}
+/>
+        ) : (
+          <img
+  src={item.mediaUrl.replace(
+    "/upload/",
+    "/upload/w_600,q_auto,f_auto/"
+  )}
+  alt="Mídia da mensagem"
+  className="max-h-64 w-full object-cover"
+  onLoad={scrollMessagesToBottom}
+/>
+        )}
+      </div>
+    ))}
+  </div>
+)}
+
+          {editingMessageId === msg.id ? (
+            <div className="space-y-2">
+              <Input
+                value={editingMessageText}
+                onChange={(e) => setEditingMessageText(e.target.value)}
+                autoFocus
+              />
+
+              <div className="flex justify-end gap-2">
+                <Button
+                  type="button"
+                  size="sm"
+                  variant="outline"
+                  onClick={() => {
+                    setEditingMessageId(null);
+                    setEditingMessageText("");
+                  }}
+                >
+                  Cancelar
+                </Button>
+
+                <Button type="button" size="sm" onClick={updateMessage}>
+                  Salvar
+                </Button>
+              </div>
+            </div>
+          ) : (
+            <p className="whitespace-pre-wrap pr-4">{msg.message}</p>
+          )}
+
+          {messageMenuId === msg.id && (
+            <div
+  ref={messageMenuRef}
+  className={`absolute z-40 top-8 ${
+                isMine ? "right-2" : "left-2"
+              } w-44 rounded-xl border border-border bg-card text-foreground shadow-xl overflow-hidden`}
+            >
+              <button
+                type="button"
+                onClick={() => {
+                  setReplyingTo(msg);
+                  setMessageMenuId(null);
+                }}
+                className="w-full flex items-center gap-2 px-3 py-2 text-sm hover:bg-muted"
+              >
+                <Reply className="w-4 h-4" />
+                Responder
+              </button>
+
+              {isMine && (
+                <>
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setEditingMessageId(msg.id);
+                      setEditingMessageText(msg.message);
+                      setMessageMenuId(null);
+                    }}
+                    className="w-full flex items-center gap-2 px-3 py-2 text-sm hover:bg-muted"
+                  >
+                    <Pencil className="w-4 h-4" />
+                    Editar
+                  </button>
+
+                  <button
+                    type="button"
+                    onClick={() => {
+                      deleteMessage(msg.id);
+                      setMessageMenuId(null);
+                    }}
+                    className="w-full flex items-center gap-2 px-3 py-2 text-sm text-red-600 hover:bg-red-50"
+                  >
+                    <Trash2 className="w-4 h-4" />
+                    Apagar
+                  </button>
+                </>
+              )}
+            </div>
+          )}
+        </div>
+      </div>
+    );
+  });
+};
+
 const getStatusStyle = (status: string) => {
   return statusColors[status] || "bg-gray-100 text-gray-700 border-gray-200";
 };
@@ -922,45 +1756,63 @@ const getStatusStyle = (status: string) => {
       {/* Tabs */}
       <div className="flex border-b border-border bg-card">
         <button
-          onClick={() => {
-  setTab("new");
-  window.scrollTo(0, 0);
-}}
-          className={`flex-1 py-3 text-sm font-medium flex items-center justify-center gap-2 ${
-            tab === "new"
-              ? "text-secondary border-b-2 border-secondary"
-              : "text-muted-foreground"
-          }`}
-        >
-          <Plus className="w-4 h-4" /> Novo Chamado
-        </button>
+  onClick={() => {
+    setTab("new");
+    window.scrollTo(0, 0);
+  }}
+  className={`relative flex-1 py-3 text-sm font-medium flex items-center justify-center gap-2 ${
+    tab === "new" ? "text-secondary" : "text-muted-foreground"
+  }`}
+>
+  <Plus className="w-4 h-4" /> Novo Chamado
+
+  {tab === "new" && (
+    <motion.span
+      layoutId="activeTab"
+      className="absolute bottom-0 left-0 right-0 h-0.5 bg-secondary"
+      transition={{ type: "spring", stiffness: 450, damping: 35 }}
+    />
+  )}
+</button>
 
         <button
-          onClick={() => {
-  setTab("history");
-  window.scrollTo(0, 0);
-}}
-          className={`flex-1 py-3 text-sm font-medium flex items-center justify-center gap-2 ${
-            tab === "history"
-              ? "text-secondary border-b-2 border-secondary"
-              : "text-muted-foreground"
-          }`}
-        >
-          <List className="w-4 h-4" /> Meus Reportes ({myReports.length})
-        </button>
+  onClick={() => {
+    setTab("history");
+    window.scrollTo(0, 0);
+  }}
+  className={`relative flex-1 py-3 text-sm font-medium flex items-center justify-center gap-2 ${
+    tab === "history" ? "text-secondary" : "text-muted-foreground"
+  }`}
+>
+  <List className="w-4 h-4" /> Meus Reportes ({myReports.length})
+
+  {tab === "history" && (
+    <motion.span
+      layoutId="activeTab"
+      className="absolute bottom-0 left-0 right-0 h-0.5 bg-secondary"
+      transition={{ type: "spring", stiffness: 450, damping: 35 }}
+    />
+  )}
+</button>
         <button
   onClick={() => {
     setTab("reports");
     window.scrollTo(0, 0);
   }}
-  className={`flex-1 py-3 text-sm font-medium flex items-center justify-center gap-2 ${
-    tab === "reports"
-      ? "text-secondary border-b-2 border-secondary"
-      : "text-muted-foreground"
+  className={`relative flex-1 py-3 text-sm font-medium flex items-center justify-center gap-2 ${
+    tab === "reports" ? "text-secondary" : "text-muted-foreground"
   }`}
 >
   <List className="w-4 h-4" />
   Reportes ({allReports.length})
+
+  {tab === "reports" && (
+    <motion.span
+      layoutId="activeTab"
+      className="absolute bottom-0 left-0 right-0 h-0.5 bg-secondary"
+      transition={{ type: "spring", stiffness: 450, damping: 35 }}
+    />
+  )}
 </button>
       </div>
 
@@ -1060,7 +1912,7 @@ const getStatusStyle = (status: string) => {
     className="w-full h-48 border-2 border-dashed border-border rounded-lg flex flex-col items-center justify-center gap-2 text-muted-foreground hover:border-secondary hover:text-secondary transition-colors bg-muted/30"
   >
     <Camera className="w-10 h-10" />
-    <span className="text-sm font-medium">Tirar Foto / Enviar Imagens</span>
+    <span className="text-sm font-medium">Enviar Foto / Vídeo</span>
     <span className="text-xs">Obrigatório</span>
   </button>
 )}
@@ -1316,13 +2168,56 @@ const getStatusStyle = (status: string) => {
               transition={{ duration: 0.15 }}
               className="space-y-3 lg:grid lg:grid-cols-3 lg:gap-4 lg:space-y-0"
             >
-              {allReports.length === 0 ? (
+              <div className="lg:col-span-3 space-y-3 mb-2">
+  <Input
+    placeholder="Buscar por número, nome, descrição, autor..."
+    value={searchTerm}
+    onChange={(e) => setSearchTerm(e.target.value)}
+  />
+
+  <div className="grid grid-cols-2 gap-2">
+    <Select value={statusFilter} onValueChange={setStatusFilter}>
+      <SelectTrigger>
+        <SelectValue placeholder="Situação" />
+      </SelectTrigger>
+      <SelectContent>
+        <SelectItem value="all">Todas situações</SelectItem>
+        <SelectItem value="ABERTO">Aberto</SelectItem>
+        <SelectItem value="EM_ANALISE">Em análise</SelectItem>
+        <SelectItem value="EM_ANDAMENTO">Em andamento</SelectItem>
+        <SelectItem value="FINALIZADO">Finalizado</SelectItem>
+      </SelectContent>
+    </Select>
+
+    <Select value={categoryFilter} onValueChange={setCategoryFilter}>
+      <SelectTrigger>
+        <SelectValue placeholder="Categoria" />
+      </SelectTrigger>
+      <SelectContent>
+        <SelectItem value="all">Todas categorias</SelectItem>
+        {categories.map((category) => (
+          <SelectItem key={category.id} value={String(category.id)}>
+            <span className="flex items-center gap-2">
+              {categoryIcons[category.name] || categoryIcons["Outros"]}
+              {category.name}
+            </span>
+          </SelectItem>
+        ))}
+      </SelectContent>
+    </Select>
+  </div>
+</div>
+              {filteredAllReports.length === 0 ? (
                 <div className="lg:col-span-3 text-center py-12 text-muted-foreground">
                   <AlertTriangle className="w-12 h-12 mx-auto mb-3 opacity-40" />
-                  <p>Nenhum chamado encontrado</p>
+                  <p>
+  {allReports.length === 0
+    ? "Nenhum chamado compartilhado com você"
+    : "Nenhum chamado encontrado com esses filtros"}
+</p>
                 </div>
               ) : (
-                allReports.map((report) => (
+               filteredAllReports.map((report) => (
                   <div
                     key={report.id}
                     className="bg-card rounded-lg p-4 border border-border"
@@ -1419,9 +2314,21 @@ const getStatusStyle = (status: string) => {
           )}
         </AnimatePresence>
 
-        {selectedReport && (
-  <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4">
-    <div className="relative bg-card rounded-2xl p-5 w-full max-w-lg lg:max-w-3xl max-h-[90vh] overflow-y-auto shadow-2xl border border-border">
+        <AnimatePresence>
+  {selectedReport && (
+    <motion.div
+      className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4"
+      initial={{ opacity: 0 }}
+      animate={{ opacity: 1 }}
+      exit={{ opacity: 0 }}
+    >
+      <motion.div
+        initial={{ opacity: 0, scale: 0.92, y: 20 }}
+        animate={{ opacity: 1, scale: 1, y: 0 }}
+        exit={{ opacity: 0, scale: 0.75, y: 40 }}
+        transition={{ duration: 0.18, ease: "easeInOut" }}
+        className="relative bg-card rounded-2xl p-5 w-full max-w-lg lg:max-w-3xl max-h-[90vh] overflow-y-auto shadow-2xl border border-border"
+      >
       <button
   type="button"
   onClick={() => setSelectedReport(null)}
@@ -1724,6 +2631,18 @@ const getStatusStyle = (status: string) => {
       id="edit-images-input"
       onChange={async (e) => {
         const files = Array.from(e.target.files || []);
+        const oversizedFile = files.find((file) => file.size > MAX_FILE_SIZE);
+
+if (oversizedFile) {
+  toast({
+    title: "Arquivo muito grande",
+    description: "Cada arquivo deve ter no máximo 100 MB.",
+    variant: "destructive",
+  });
+
+  e.target.value = "";
+  return;
+}
 
         if (files.length === 0 || !selectedReport) return;
 
@@ -1781,79 +2700,75 @@ const getStatusStyle = (status: string) => {
 )}
 
 <div className="mt-6 border-t border-border pt-4">
-  <h3 className="text-sm font-semibold mb-3">Mensagens</h3>
-
-  <div className="space-y-3 max-h-56 overflow-y-auto rounded-lg bg-muted/20 p-3">
-    {loadingMessages ? (
-      <div className="flex items-center justify-center py-6 text-sm text-muted-foreground">
-        <span className="w-4 h-4 mr-2 border-2 border-muted-foreground/30 border-t-muted-foreground rounded-full animate-spin" />
-        Carregando mensagens...
-      </div>
-    ) : messages.length === 0 ? (
-      <p className="text-sm text-muted-foreground text-center py-4">
-        Nenhuma mensagem ainda.
-      </p>
-    ) : (
-      messages.map((msg) => {
-        const isMine = msg.senderId === employee.id;
-
-        return (
-          <div
-            key={msg.id}
-            className={`flex ${isMine ? "justify-end" : "justify-start"}`}
-          >
-            <div
-              className={`max-w-[85%] rounded-2xl px-3 py-2 text-sm ${
-                isMine
-                  ? "bg-secondary text-secondary-foreground"
-                  : "bg-background border border-border"
-              }`}
-            >
-              <div className="mb-1 text-[11px] opacity-70">
-                {msg.senderName} •{" "}
-                {new Date(msg.createdAt).toLocaleString("pt-BR")}
-              </div>
-              
-
-              <p className="whitespace-pre-wrap">{msg.message}</p>
-            </div>
-          </div>
-          
-        );
-        
-      })
-      
-    )}
-    
-  </div>
-  
-
-  <div className="mt-3 flex gap-2">
-    <Input
-      value={newMessage}
-      onChange={(e) => setNewMessage(e.target.value)}
-      placeholder="Escreva uma mensagem."
-      onKeyDown={(e) => {
-        if (e.key === "Enter") {
-          e.preventDefault();
-          sendMessage();
-        }
-      }}
-    />
+  <div className="flex items-center justify-between mb-3">
+    <h3 className="text-sm font-semibold">Participantes</h3>
 
     <Button
       type="button"
-      onClick={sendMessage}
-      disabled={sendingMessage || !newMessage.trim()}
-      className="shrink-0"
+      variant="outline"
+      size="sm"
+      onClick={openParticipantModal}
+      className="h-8 gap-1"
     >
-      {sendingMessage ? (
-        <span className="w-4 h-4 border-2 border-white/30 border-t-white rounded-full animate-spin" />
-      ) : (
-        "Enviar"
-      )}
+      <Plus className="w-3.5 h-3.5" />
+      Adicionar
     </Button>
   </div>
+
+  <div className="flex flex-wrap gap-2">
+    {selectedReport.participants?.length ? (
+      selectedReport.participants.map((participant) => (
+        <span
+          key={participant.id}
+          className="inline-flex items-center rounded-full border border-border bg-muted/40 px-3 py-1 text-xs text-muted-foreground"
+        >
+          {participant.employee.name}
+          {participant.role === "OWNER" ? " • Criador" : ""}
+        </span>
+      ))
+    ) : (
+      <p className="text-xs text-muted-foreground">
+        Nenhum participante listado.
+      </p>
+    )}
+  </div>
+</div>
+
+<div className="mt-6 border-t border-border pt-4">
+  <button
+    type="button"
+    onClick={async () => {
+  setShowMessagesModal(true);
+
+  await loadMessages(selectedReport!.id);
+
+  markMessagesAsRead(selectedReport!.id);
+
+  setTimeout(() => {
+    jumpMessagesToBottom();
+  }, 0);
+}}
+    className="relative flex w-full items-center gap-3 rounded-2xl border border-secondary/30 bg-secondary/10 p-4 text-left transition hover:bg-secondary/15"
+  >
+    <div className="flex h-12 w-12 items-center justify-center rounded-xl bg-secondary text-secondary-foreground shadow-sm">
+      <MessageCircle className="w-6 h-6" />
+    </div>
+
+    <div className="min-w-0">
+      <p className="text-sm font-semibold text-foreground">
+        Conversas
+      </p>
+      <p className="text-xs text-muted-foreground">
+        Acompanhe mensagens e respostas do chamado
+      </p>
+    </div>
+
+    {selectedReport && unreadCounts[selectedReport.id] > 0 && (
+      <span className="absolute -right-2 -top-2 flex h-6 min-w-[24px] items-center justify-center rounded-full bg-red-600 px-2 text-xs font-bold text-white">
+       {unreadCounts[selectedReport.id]}
+      </span>
+    )}
+  </button>
 </div>
 
 <div className="flex gap-2 mt-6">
@@ -1891,9 +2806,338 @@ const getStatusStyle = (status: string) => {
     </>
   )}
 </div>
+          </motion.div>
+    </motion.div>
+  )}
+</AnimatePresence>
+
+{showParticipantModal && (
+  <div className="fixed inset-0 z-[9998] bg-black/50 flex items-center justify-center p-4">
+    <div className="bg-card rounded-2xl p-5 w-full max-w-md shadow-2xl border border-border">
+      <div className="flex items-center justify-between mb-4">
+        <div>
+          <h3 className="text-lg font-semibold">
+            Adicionar participante
+          </h3>
+          <p className="text-sm text-muted-foreground">
+            Pesquise por nome, matrícula ou departamento.
+          </p>
+        </div>
+
+        <button
+          type="button"
+          onClick={() => setShowParticipantModal(false)}
+          className="flex h-8 w-8 items-center justify-center rounded-full bg-red-50 text-red-600 hover:bg-red-100 transition-colors"
+        >
+          <X className="w-4 h-4" />
+        </button>
+      </div>
+
+      <Input
+        value={employeeSearch}
+        onChange={(e) => setEmployeeSearch(e.target.value)}
+        placeholder="Buscar funcionário..."
+        className="mb-3"
+      />
+
+      <div className="max-h-72 overflow-y-auto space-y-2">
+        {filteredEmployees.length === 0 ? (
+          <p className="text-sm text-muted-foreground text-center py-6">
+            Nenhum funcionário encontrado.
+          </p>
+        ) : (
+          filteredEmployees.map((emp) => (
+            <button
+              key={emp.id}
+              type="button"
+              disabled={addingParticipant}
+              onClick={() => addParticipant(emp.id)}
+              className="w-full rounded-lg border border-border p-3 text-left hover:bg-muted/50 transition-colors disabled:opacity-60"
+            >
+              <p className="text-sm font-medium">{emp.name}</p>
+              <p className="text-xs text-muted-foreground">
+                Matrícula: {emp.registrationNumber}
+                {emp.department ? ` • ${emp.department}` : ""}
+              </p>
+            </button>
+          ))
+        )}
+      </div>
     </div>
   </div>
 )}
+
+<AnimatePresence>
+  {showMessagesModal && selectedReport && (
+    <motion.div
+      className="fixed inset-0 z-[9999] bg-black/60 flex items-center justify-center p-4"
+      initial={{ opacity: 0 }}
+      animate={{ opacity: 1 }}
+      exit={{ opacity: 0 }}
+    >
+      <motion.div
+        initial={{ opacity: 0, scale: 0.92, y: 20 }}
+        animate={{ opacity: 1, scale: 1, y: 0 }}
+        exit={{ opacity: 0, scale: 0.75, y: 40 }}
+        transition={{ duration: 0.18, ease: "easeInOut" }}
+        className="bg-card rounded-3xl shadow-2xl border border-border w-full max-w-3xl h-[85vh] flex flex-col overflow-hidden"
+      >
+      {/* Header */}
+   {/* Header */}
+<div className="border-b border-border px-5 py-4 sm:px-6">
+  <div className="flex items-start justify-between gap-4">
+    <div className="min-w-0 pl-1 sm:pl-2">
+      <h2 className="text-xl sm:text-2xl font-bold text-foreground leading-tight">
+        Conversas do chamado #{selectedReport.id}
+      </h2>
+
+      <p className="mt-1 text-sm text-muted-foreground line-clamp-2">
+        {selectedReport.title || selectedReport.description}
+      </p>
+    </div>
+
+    <div className="flex shrink-0 items-center gap-2">
+      <button
+        type="button"
+        onClick={() => setShowMessageSearch((prev) => !prev)}
+        className={`flex h-10 w-10 sm:h-11 sm:w-11 items-center justify-center rounded-full border transition-all ${
+          showMessageSearch
+            ? "bg-secondary text-white border-secondary shadow-md"
+            : "bg-muted text-muted-foreground border-border hover:bg-muted/80"
+        }`}
+      >
+        <Search
+          className={`h-5 w-5 transition-transform duration-300 ${
+            showMessageSearch ? "rotate-90 scale-110" : ""
+          }`}
+        />
+      </button>
+
+      <button
+        type="button"
+        onClick={() => setShowMessagesModal(false)}
+        className="flex h-10 w-10 sm:h-11 sm:w-11 items-center justify-center rounded-full bg-red-50 text-red-600 transition-all hover:scale-105 hover:bg-red-100"
+      >
+        <X className="h-5 w-5" />
+      </button>
+    </div>
+  </div>
+
+  {showMessageSearch && (
+    <motion.div
+      initial={{ opacity: 0, y: -6 }}
+      animate={{ opacity: 1, y: 0 }}
+      exit={{ opacity: 0, y: -6 }}
+      className="mt-4 rounded-2xl border border-border bg-muted/20 p-3"
+    >
+      <div className="flex flex-col gap-2 sm:flex-row">
+        <Input
+          value={messageSearchTerm}
+          onChange={(e) => {
+            setMessageSearchTerm(e.target.value);
+            setCurrentSearchIndex(0);
+          }}
+          placeholder="Pesquisar mensagens..."
+          className="h-11"
+          autoFocus
+        />
+
+        <Button
+          type="button"
+          disabled={messageSearchResults.length === 0}
+          onClick={() => goToSearchResult(currentSearchIndex)}
+          className="h-11 shrink-0"
+        >
+          Buscar
+        </Button>
+      </div>
+
+      {messageSearchTerm && (
+        <div className="mt-2 flex flex-wrap items-center justify-between gap-2 text-xs text-muted-foreground">
+          <span>
+            {messageSearchResults.length} resultado
+            {messageSearchResults.length !== 1 ? "s" : ""}
+          </span>
+
+          {messageSearchResults.length > 0 && (
+            <div className="flex items-center gap-3">
+              <button
+                type="button"
+                onClick={() => {
+                  const nextIndex =
+                    currentSearchIndex === 0
+                      ? messageSearchResults.length - 1
+                      : currentSearchIndex - 1;
+
+                  goToSearchResult(nextIndex);
+                }}
+                className="hover:text-foreground"
+              >
+                Anterior
+              </button>
+
+              <span>
+                {currentSearchIndex + 1} de {messageSearchResults.length}
+              </span>
+
+              <button
+                type="button"
+                onClick={() => {
+                  const nextIndex =
+                    currentSearchIndex === messageSearchResults.length - 1
+                      ? 0
+                      : currentSearchIndex + 1;
+
+                  goToSearchResult(nextIndex);
+                }}
+                className="hover:text-foreground"
+              >
+                Próximo
+              </button>
+            </div>
+          )}
+        </div>
+      )}
+    </motion.div>
+  )}
+</div>
+
+
+      {/* Messages */}
+      <div className="flex-1 overflow-y-auto p-4 space-y-3">
+        {messages.length === 0 ? (
+          <p className="text-center text-sm text-muted-foreground py-8">
+            Nenhuma mensagem ainda.
+          </p>
+        ) : (
+          renderMessages()
+        )}
+        <div ref={messagesEndRef} />
+      </div>
+
+      {/* Reply preview */}
+      {replyingTo && (
+        <div className="mx-4 mb-3 rounded-xl border-l-4 border-secondary bg-muted/40 p-3">
+          <div className="flex justify-between gap-3">
+            <div className="min-w-0">
+              <p className="text-xs font-semibold text-secondary">
+                Respondendo {replyingTo.senderName}
+              </p>
+              <p className="text-xs text-muted-foreground line-clamp-2">
+                {replyingTo.message}
+              </p>
+            </div>
+
+            <button
+              type="button"
+              onClick={() => setReplyingTo(null)}
+              className="text-muted-foreground hover:text-foreground"
+            >
+              <X className="w-4 h-4" />
+            </button>
+          </div>
+        </div>
+      )}
+
+      {typingUsers.length > 0 && (
+  <p className="px-4 pb-2 text-xs text-muted-foreground italic">
+    {typingUsers.length === 1
+      ? `${typingUsers[0].employeeName} está digitando...`
+      : `${typingUsers
+          .map((user) => user.employeeName)
+          .join(", ")} estão digitando...`}
+  </p>
+)}
+
+      {/* Input */}
+      <div className="border-t border-border p-4">
+        <div className="flex gap-2">
+          <input
+  ref={chatFileInputRef}
+  type="file"
+  accept="image/*,video/*"
+  multiple
+  className="hidden"
+  onChange={(e) => {
+    const files = Array.from(e.target.files || []);
+
+    const oversizedFile = files.find((file) => file.size > MAX_FILE_SIZE);
+
+    if (oversizedFile) {
+      toast({
+        title: "Arquivo muito grande",
+        description: "Cada arquivo deve ter no máximo 100 MB.",
+        variant: "destructive",
+      });
+
+      e.target.value = "";
+      return;
+    }
+
+    setChatFiles(files);
+  }}
+/>
+
+<div ref={emojiPickerRef} className="relative">
+  <Button
+    type="button"
+    variant="outline"
+    size="icon"
+    onClick={() => setShowEmojiPicker((prev) => !prev)}
+  >
+    <Smile className="w-5 h-5" />
+  </Button>
+
+  {showEmojiPicker && (
+    <div className="absolute bottom-14 left-0 z-[9999]">
+      <EmojiPicker
+        onEmojiClick={(emojiData) => {
+          setNewMessage((prev) => prev + emojiData.emoji);
+        }}
+        theme={Theme.LIGHT}
+        lazyLoadEmojis
+      />
+    </div>
+  )}
+</div>
+
+<Button
+  type="button"
+  variant="outline"
+  size="icon"
+  onClick={() => chatFileInputRef.current?.click()}
+  className={chatFiles.length > 0 ? "border-secondary text-secondary" : ""}
+>
+  <Camera className="w-4 h-4" />
+</Button>
+          <Input
+            value={newMessage}
+            onChange={(e) => {
+  setNewMessage(e.target.value);
+  sendTypingSignal();
+}}
+            placeholder="Escreva uma mensagem..."
+            onKeyDown={(e) => {
+              if (e.key === "Enter") {
+                e.preventDefault();
+                sendMessage();
+              }
+            }}
+          />
+
+          <Button
+            type="button"
+            onClick={sendMessage}
+            disabled={sendingMessage || (!newMessage.trim() && chatFiles.length === 0)}
+          >
+            Enviar
+          </Button>
+        </div>
+      </div>
+         </motion.div>
+    </motion.div>
+  )}
+</AnimatePresence>
 
 {showLogoutConfirm && (
   <div className="fixed inset-0 z-[9998] bg-black/50 flex items-center justify-center p-4">
@@ -1911,6 +3155,31 @@ const getStatusStyle = (status: string) => {
           Tem certeza que deseja sair do sistema?
         </p>
       </div>
+
+      {chatFiles.length > 0 && (
+  <div className="mb-2 rounded-lg border border-border bg-muted/40 px-3 py-2 text-xs">
+    <div className="flex items-center justify-between gap-2">
+      <span className="truncate">
+        {chatFiles.length} arquivo{chatFiles.length > 1 ? "s" : ""} selecionado
+        {chatFiles.length > 1 ? "s" : ""}
+      </span>
+
+      <button
+        type="button"
+        onClick={() => {
+          setChatFiles([]);
+
+          if (chatFileInputRef.current) {
+            chatFileInputRef.current.value = "";
+          }
+        }}
+        className="text-red-600 hover:text-red-700"
+      >
+        Remover
+      </button>
+    </div>
+  </div>
+)}
 
       <div className="flex gap-2">
         <Button
