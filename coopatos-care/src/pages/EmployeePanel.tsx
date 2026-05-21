@@ -26,6 +26,7 @@ import {
   CheckCheck,
   Search,
   Pencil,
+  Filter,
   X,
   Trash2,
 } from "lucide-react";
@@ -240,6 +241,7 @@ const API_URL =
   const [showMessagesModal, setShowMessagesModal] = useState(false);
   const [editDescription, setEditDescription] = useState("");
   const [showMessageSearch, setShowMessageSearch] = useState(false);
+  const [showFilters, setShowFilters] = useState(false);
   const [messageSearchTerm, setMessageSearchTerm] = useState("");
   const [currentSearchIndex, setCurrentSearchIndex] = useState(0);
   const [editReferencePoint, setEditReferencePoint] = useState("");
@@ -1776,7 +1778,7 @@ const getStatusStyle = (status: string) => {
       <div className="min-h-screen bg-background">
   <div className="mx-auto w-full max-w-lg lg:max-w-6xl lg:px-8"></div>
       {/* Header */}
-      <header className="gradient-primary px-4 py-3 flex items-center justify-between sticky top-0 z-10">
+     <header className="sticky top-0 z-[200] gradient-primary px-4 py-3 flex items-center justify-between">
         <div className="flex items-center gap-2">
           <img
             src="/logo-coopatos.png"
@@ -1807,7 +1809,7 @@ const getStatusStyle = (status: string) => {
       </header>
 
       {/* Tabs */}
-<div className="sticky top-[104px] z-10 flex border-b border-border bg-card shadow-sm">
+<div className="sticky top-[104px] z-[120] flex border-b border-border bg-card shadow-sm">
         <button
   onClick={() => {
     setTab("new");
@@ -2074,45 +2076,86 @@ const getStatusStyle = (status: string) => {
               transition={{ duration: 0.15 }}
               className="space-y-3 lg:grid lg:grid-cols-3 lg:gap-4 lg:space-y-0"
             >
-              <div className="lg:col-span-3 space-y-3 mb-2">
-                <Input
-                  placeholder="Buscar por número, descrição, endereço..."
-                  value={searchTerm}
-                  onChange={(e) => setSearchTerm(e.target.value)}
-                />
+               <div className="lg:col-span-3 mb-3 flex justify-end">
+  <Button
+    type="button"
+    variant="outline"
+    onClick={() => setShowFilters((prev) => !prev)}
+    className={`rounded-full gap-2 transition-all ${
+      showFilters ? "bg-secondary text-white border-secondary" : ""
+    }`}
+  >
+    <Filter className="w-4 h-4" />
+    Filtros
+  </Button>
+</div>
 
-                <div className="grid grid-cols-2 gap-2">
-                  <Select value={statusFilter} onValueChange={setStatusFilter}>
-                    <SelectTrigger>
-                      <SelectValue placeholder="Situação" />
-                    </SelectTrigger>
-                    <SelectContent>
-                      <SelectItem value="all">Todas situações</SelectItem>
-                      <SelectItem value="ABERTO">Aberto</SelectItem>
-                      <SelectItem value="EM_ANALISE">Em análise</SelectItem>
-                      <SelectItem value="EM_ANDAMENTO">Em andamento</SelectItem>
-                      <SelectItem value="FINALIZADO">Finalizado</SelectItem>
-                    </SelectContent>
-                  </Select>
+<AnimatePresence>
+  {showFilters && (
+    <motion.div
+      initial={{ opacity: 0, y: -8 }}
+      animate={{ opacity: 1, y: 0 }}
+      exit={{ opacity: 0, y: -8 }}
+      transition={{ duration: 0.15 }}
+      className="lg:col-span-3 mb-4 rounded-2xl border border-border bg-card p-4 shadow-lg"
+    >
+      <div className="space-y-3">
+        <Input
+          placeholder="Buscar por número, descrição, endereço..."
+          value={searchTerm}
+          onChange={(e) => setSearchTerm(e.target.value)}
+        />
 
-                  <Select value={categoryFilter} onValueChange={setCategoryFilter}>
-                    <SelectTrigger>
-                      <SelectValue placeholder="Categoria" />
-                    </SelectTrigger>
-                    <SelectContent>
-                      <SelectItem value="all">Todas categorias</SelectItem>
-                      {categories.map((category) => (
-                        <SelectItem key={category.id} value={String(category.id)}>
-                          <span className="flex items-center gap-2">
-                            {categoryIcons[category.name] || categoryIcons["Outros"]}
-                            {category.name}
-                          </span>
-                        </SelectItem>
-                      ))}
-                    </SelectContent>
-                  </Select>
-                </div>
-              </div>
+        <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+          <Select value={statusFilter} onValueChange={setStatusFilter}>
+            <SelectTrigger>
+              <SelectValue placeholder="Situação" />
+            </SelectTrigger>
+            <SelectContent>
+              <SelectItem value="all">Todas situações</SelectItem>
+              <SelectItem value="ABERTO">Aberto</SelectItem>
+              <SelectItem value="EM_ANALISE">Em análise</SelectItem>
+              <SelectItem value="EM_ANDAMENTO">Em andamento</SelectItem>
+              <SelectItem value="FINALIZADO">Finalizado</SelectItem>
+            </SelectContent>
+          </Select>
+
+          <Select value={categoryFilter} onValueChange={setCategoryFilter}>
+            <SelectTrigger>
+              <SelectValue placeholder="Categoria" />
+            </SelectTrigger>
+            <SelectContent>
+              <SelectItem value="all">Todas categorias</SelectItem>
+              {categories.map((category) => (
+                <SelectItem key={category.id} value={String(category.id)}>
+                  <span className="flex items-center gap-2">
+                    {categoryIcons[category.name] || categoryIcons["Outros"]}
+                    {category.name}
+                  </span>
+                </SelectItem>
+              ))}
+            </SelectContent>
+          </Select>
+        </div>
+
+        <div className="flex justify-end">
+          <Button
+            type="button"
+            variant="ghost"
+            size="sm"
+            onClick={() => {
+              setSearchTerm("");
+              setStatusFilter("all");
+              setCategoryFilter("all");
+            }}
+          >
+            Limpar filtros
+          </Button>
+        </div>
+      </div>
+    </motion.div>
+  )}
+</AnimatePresence>
 
               {filteredReports.length === 0 ? (
                 <div className="lg:col-span-3 text-center py-12 text-muted-foreground">
@@ -2221,45 +2264,86 @@ const getStatusStyle = (status: string) => {
               transition={{ duration: 0.15 }}
               className="space-y-3 lg:grid lg:grid-cols-3 lg:gap-4 lg:space-y-0"
             >
-              <div className="lg:col-span-3 space-y-3 mb-2">
-  <Input
-    placeholder="Buscar por número, nome, descrição, autor..."
-    value={searchTerm}
-    onChange={(e) => setSearchTerm(e.target.value)}
-  />
-
-  <div className="grid grid-cols-2 gap-2">
-    <Select value={statusFilter} onValueChange={setStatusFilter}>
-      <SelectTrigger>
-        <SelectValue placeholder="Situação" />
-      </SelectTrigger>
-      <SelectContent>
-        <SelectItem value="all">Todas situações</SelectItem>
-        <SelectItem value="ABERTO">Aberto</SelectItem>
-        <SelectItem value="EM_ANALISE">Em análise</SelectItem>
-        <SelectItem value="EM_ANDAMENTO">Em andamento</SelectItem>
-        <SelectItem value="FINALIZADO">Finalizado</SelectItem>
-      </SelectContent>
-    </Select>
-
-    <Select value={categoryFilter} onValueChange={setCategoryFilter}>
-      <SelectTrigger>
-        <SelectValue placeholder="Categoria" />
-      </SelectTrigger>
-      <SelectContent>
-        <SelectItem value="all">Todas categorias</SelectItem>
-        {categories.map((category) => (
-          <SelectItem key={category.id} value={String(category.id)}>
-            <span className="flex items-center gap-2">
-              {categoryIcons[category.name] || categoryIcons["Outros"]}
-              {category.name}
-            </span>
-          </SelectItem>
-        ))}
-      </SelectContent>
-    </Select>
-  </div>
+            <div className="lg:col-span-3 mb-3 flex justify-end">
+  <Button
+    type="button"
+    variant="outline"
+    onClick={() => setShowFilters((prev) => !prev)}
+    className={`rounded-full gap-2 transition-all ${
+      showFilters ? "bg-secondary text-white border-secondary" : ""
+    }`}
+  >
+    <Filter className="w-4 h-4" />
+    Filtros
+  </Button>
 </div>
+
+<AnimatePresence>
+  {showFilters && (
+    <motion.div
+      initial={{ opacity: 0, y: -8 }}
+      animate={{ opacity: 1, y: 0 }}
+      exit={{ opacity: 0, y: -8 }}
+      transition={{ duration: 0.15 }}
+      className="lg:col-span-3 mb-4 rounded-2xl border border-border bg-card p-4 shadow-lg"
+    >
+      <div className="space-y-3">
+        <Input
+          placeholder="Buscar por número, nome, descrição, autor..."
+          value={searchTerm}
+          onChange={(e) => setSearchTerm(e.target.value)}
+        />
+
+        <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+          <Select value={statusFilter} onValueChange={setStatusFilter}>
+            <SelectTrigger>
+              <SelectValue placeholder="Situação" />
+            </SelectTrigger>
+            <SelectContent>
+              <SelectItem value="all">Todas situações</SelectItem>
+              <SelectItem value="ABERTO">Aberto</SelectItem>
+              <SelectItem value="EM_ANALISE">Em análise</SelectItem>
+              <SelectItem value="EM_ANDAMENTO">Em andamento</SelectItem>
+              <SelectItem value="FINALIZADO">Finalizado</SelectItem>
+            </SelectContent>
+          </Select>
+
+          <Select value={categoryFilter} onValueChange={setCategoryFilter}>
+            <SelectTrigger>
+              <SelectValue placeholder="Categoria" />
+            </SelectTrigger>
+            <SelectContent>
+              <SelectItem value="all">Todas categorias</SelectItem>
+              {categories.map((category) => (
+                <SelectItem key={category.id} value={String(category.id)}>
+                  <span className="flex items-center gap-2">
+                    {categoryIcons[category.name] || categoryIcons["Outros"]}
+                    {category.name}
+                  </span>
+                </SelectItem>
+              ))}
+            </SelectContent>
+          </Select>
+        </div>
+
+        <div className="flex justify-end">
+          <Button
+            type="button"
+            variant="ghost"
+            size="sm"
+            onClick={() => {
+              setSearchTerm("");
+              setStatusFilter("all");
+              setCategoryFilter("all");
+            }}
+          >
+            Limpar filtros
+          </Button>
+        </div>
+      </div>
+    </motion.div>
+  )}
+</AnimatePresence>
               {filteredAllReports.length === 0 ? (
                 <div className="lg:col-span-3 text-center py-12 text-muted-foreground">
                   <AlertTriangle className="w-12 h-12 mx-auto mb-3 opacity-40" />
