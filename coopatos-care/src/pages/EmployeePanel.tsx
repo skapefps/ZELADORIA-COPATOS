@@ -204,6 +204,9 @@ const API_URL =
   const [unreadCounts, setUnreadCounts] = useState<Record<number, number>>({});
   const [address, setAddress] = useState("");
   const [editAddress, setEditAddress] = useState("");
+  const messagesContainerRef = useRef<HTMLDivElement | null>(null);
+  const [newMessagesCount, setNewMessagesCount] = useState(0);
+  const [isNearBottom, setIsNearBottom] = useState(true);
   const [editCoords, setEditCoords] = useState<{ lat: number; lng: number } | null>(null);
   const [imagePreviews, setImagePreviews] = useState<string[]>([]);
   const [messageMenuId, setMessageMenuId] = useState<number | null>(null);
@@ -448,6 +451,25 @@ const scrollMessagesToBottom = () => {
   });
 };
 
+const handleMessagesScroll = () => {
+  if (!messagesContainerRef.current) return;
+
+  const container = messagesContainerRef.current;
+
+  const distanceFromBottom =
+    container.scrollHeight -
+    container.scrollTop -
+    container.clientHeight;
+
+  const nearBottom = distanceFromBottom < 120;
+
+  setIsNearBottom(nearBottom);
+
+  if (nearBottom) {
+    setNewMessagesCount(0);
+  }
+};
+
 const loadUnreadCount = async (reportId: number) => {
   const employee = JSON.parse(localStorage.getItem("employee") || "{}");
 
@@ -570,6 +592,21 @@ const loadMessages = async (reportId: number) => {
   try {
     const response = await fetch(`${API_URL}/reports/${reportId}/messages`);
     const data = await response.json();
+
+    const previousLastMessageId =
+  messages[messages.length - 1]?.id;
+
+const newLastMessageId =
+  data[data.length - 1]?.id;
+
+const hasNewMessage =
+  previousLastMessageId &&
+  newLastMessageId &&
+  newLastMessageId !== previousLastMessageId;
+
+if (hasNewMessage && !isNearBottom) {
+  setNewMessagesCount((prev) => prev + 1);
+}
 
     setMessages(data);
    if (showMessagesModal) {
@@ -1754,7 +1791,7 @@ const getStatusStyle = (status: string) => {
       </header>
 
       {/* Tabs */}
-      <div className="flex border-b border-border bg-card">
+<div className="sticky top-[104px] z-10 flex border-b border-border bg-card shadow-sm">
         <button
   onClick={() => {
     setTab("new");
@@ -3004,7 +3041,11 @@ if (oversizedFile) {
 
 
       {/* Messages */}
-      <div className="flex-1 overflow-y-auto p-4 space-y-3">
+      <div
+  ref={messagesContainerRef}
+  onScroll={handleMessagesScroll}
+  className="flex-1 overflow-y-auto p-4 space-y-3"
+>
         {messages.length === 0 ? (
           <p className="text-center text-sm text-muted-foreground py-8">
             Nenhuma mensagem ainda.
@@ -3047,6 +3088,24 @@ if (oversizedFile) {
           .map((user) => user.employeeName)
           .join(", ")} estão digitando...`}
   </p>
+)}
+
+{newMessagesCount > 0 && !isNearBottom && (
+  <button
+    type="button"
+    onClick={() => {
+      scrollMessagesToBottom();
+      setNewMessagesCount(0);
+    }}
+    className="absolute bottom-28 right-6 z-40 flex items-center gap-2 rounded-full bg-secondary px-4 py-2 text-sm font-medium text-white shadow-xl transition-all hover:scale-105"
+  >
+    <span>↓</span>
+
+    <span>
+      {newMessagesCount} nova
+      {newMessagesCount > 1 ? "s" : ""}
+    </span>
+  </button>
 )}
 
       {/* Input */}
