@@ -1,8 +1,8 @@
 import React, { useEffect, useState } from "react";
 import { useAuth } from "@/contexts/AuthContext";
 import { useNavigate } from "react-router-dom";
-import { motion } from "framer-motion";
-import { Shield } from "lucide-react";
+import { AnimatePresence, motion } from "framer-motion";
+import { Shield, Eye, EyeOff, X } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -22,8 +22,8 @@ const EmployeeLogin = () => {
   const [loading, setLoading] = useState(false);
   const [showCpf, setShowCpf] = useState(false);
   const [showRecovery, setShowRecovery] = useState(false);
-  const [recoveryName, setRecoveryName] = useState("");
-  const [recoveryPhone, setRecoveryPhone] = useState("");
+  const [recoveryEmail, setRecoveryEmail] = useState("");
+  const [recoveryCpf, setRecoveryCpf] = useState(""); 
   const [sendingRecovery, setSendingRecovery] = useState(false);
 
   const { loginEmployee } = useAuth();
@@ -31,9 +31,9 @@ const EmployeeLogin = () => {
   const { toast } = useToast();
 
   const sendRecoveryRequest = async () => {
-  if (!recoveryName.trim() || !recoveryPhone.trim()) {
+  if (!recoveryEmail.trim() || !recoveryCpf.trim()) {
     toast({
-      title: "Preencha nome e telefone",
+      title: "Preencha e-mail e CPF",
       variant: "destructive",
     });
     return;
@@ -42,17 +42,14 @@ const EmployeeLogin = () => {
   setSendingRecovery(true);
 
   try {
-    const response = await fetch(`${API_URL}/support/recovery-request`, {
+    const response = await fetch(`${API_URL}/employee/recover-registration`, {
       method: "POST",
       headers: {
         "Content-Type": "application/json",
       },
       body: JSON.stringify({
-        type: "EMPLOYEE_ACCESS_RECOVERY",
-        name: recoveryName.trim(),
-        phone: recoveryPhone.trim(),
-        message:
-          "Funcionário esqueceu CPF ou matrícula e solicitou contato.",
+        email: recoveryEmail.trim().toLowerCase(),
+        cpf: recoveryCpf.replace(/\D/g, ""),
       }),
     });
 
@@ -60,20 +57,20 @@ const EmployeeLogin = () => {
 
     if (!response.ok) {
       toast({
-        title: "Erro ao enviar solicitação",
-        description: data.error || "Tente novamente.",
+        title: "Não foi possível recuperar",
+        description: data.error || "Confira os dados informados.",
         variant: "destructive",
       });
       return;
     }
 
     toast({
-      title: "Solicitação enviada!",
-      description: "O administrativo entrará em contato.",
+      title: "E-mail enviado!",
+      description: "Enviamos sua matrícula para o e-mail cadastrado.",
     });
 
-    setRecoveryName("");
-    setRecoveryPhone("");
+    setRecoveryEmail("");
+    setRecoveryCpf("");
     setShowRecovery(false);
   } catch (error) {
     toast({
@@ -84,6 +81,7 @@ const EmployeeLogin = () => {
     setSendingRecovery(false);
   }
 };
+
 
   useEffect(() => {
   const sessionExpired = sessionStorage.getItem("sessionExpired");
@@ -225,12 +223,24 @@ if (!cpf.trim() || cpf.trim().length < 11) {
   />
 
   <button
-    type="button"
-    onClick={() => setShowCpf((prev) => !prev)}
-    className="absolute right-3 top-1/2 -translate-y-1/2 text-muted-foreground"
-  >
-    {showCpf ? "🙈" : "👁️"}
-  </button>
+  type="button"
+  onClick={() => setShowCpf((prev) => !prev)}
+  className="
+    absolute
+    right-3
+    top-1/2
+    -translate-y-1/2
+    text-muted-foreground
+    hover:text-foreground
+    transition-colors
+  "
+>
+  {showCpf ? (
+    <EyeOff className="w-5 h-5" />
+  ) : (
+    <Eye className="w-5 h-5" />
+  )}
+</button>
 </div>
 
             <Button
@@ -251,41 +261,12 @@ if (!cpf.trim() || cpf.trim().length < 11) {
 
 <button
   type="button"
-  onClick={() => setShowRecovery((prev) => !prev)}
+  onClick={() => setShowRecovery(true)}
   className="w-full mt-3 text-sm text-secondary hover:underline"
 >
   Esqueci meu CPF ou matrícula
 </button>
 
-{showRecovery && (
-  <div className="mt-4 rounded-2xl border border-border bg-muted/30 p-4 space-y-3">
-    <p className="text-sm text-muted-foreground text-center">
-      Informe seu nome e telefone para o administrativo entrar em contato.
-    </p>
-
-    <Input
-      placeholder="Qual seu nome?"
-      value={recoveryName}
-      onChange={(e) => setRecoveryName(e.target.value)}
-    />
-
-    <Input
-      placeholder="Telefone para contato"
-      value={recoveryPhone}
-      onChange={(e) => setRecoveryPhone(e.target.value)}
-      inputMode="tel"
-    />
-
-    <Button
-      type="button"
-      className="w-full bg-secondary hover:bg-secondary/90 text-secondary-foreground"
-      disabled={sendingRecovery}
-      onClick={sendRecoveryRequest}
-    >
-      {sendingRecovery ? "Enviando..." : "Solicitar contato"}
-    </Button>
-  </div>
-)}
    
 
           {/* Acesso administrativo */}
@@ -325,6 +306,119 @@ if (!cpf.trim() || cpf.trim().length < 11) {
           </div>
         </div>
       )}
+
+      <AnimatePresence>
+  {showRecovery && (
+    <>
+      <motion.div
+        initial={{ opacity: 0 }}
+        animate={{ opacity: 1 }}
+        exit={{ opacity: 0 }}
+        className="fixed inset-0 z-[9998] bg-black/50"
+        onClick={() => setShowRecovery(false)}
+      />
+
+      <motion.div
+        initial={{
+          opacity: 0,
+          scale: 0.9,
+          y: 20,
+        }}
+        animate={{
+          opacity: 1,
+          scale: 1,
+          y: 0,
+        }}
+        exit={{
+          opacity: 0,
+          scale: 0.9,
+          y: 20,
+        }}
+        transition={{
+          duration: 0.2,
+        }}
+        className="
+          fixed
+          inset-0
+          z-[9999]
+          flex
+          items-center
+          justify-center
+          p-4
+        "
+      >
+        <div
+          className="
+            w-full
+            max-w-md
+            rounded-3xl
+            bg-card
+            border
+            border-border
+            shadow-2xl
+            p-6
+          "
+          onClick={(e) => e.stopPropagation()}
+        >
+          <h3 className="text-lg font-semibold">
+            Recuperar acesso
+          </h3>
+
+          <p className="text-sm text-muted-foreground mt-1 mb-5">
+            Informe seus dados para que o administrativo entre em contato.
+          </p>
+
+          <div className="space-y-3">
+            <Input
+  placeholder="E-mail vinculado à matrícula"
+  value={recoveryEmail}
+  onChange={(e) => setRecoveryEmail(e.target.value)}
+  inputMode="email"
+/>
+
+<Input
+  placeholder="CPF"
+  value={recoveryCpf}
+  onChange={(e) => {
+    const value = e.target.value.replace(/\D/g, "").slice(0, 11);
+
+    const formatted = value
+      .replace(/(\d{3})(\d)/, "$1.$2")
+      .replace(/(\d{3})(\d)/, "$1.$2")
+      .replace(/(\d{3})(\d{1,2})$/, "$1-$2");
+
+    setRecoveryCpf(formatted);
+  }}
+  inputMode="numeric"
+/>
+          </div>
+
+          <div className="mt-5 flex gap-2">
+            <Button
+              variant="outline"
+              className="flex-1"
+              onClick={() =>
+                setShowRecovery(false)
+              }
+            >
+              Cancelar
+            </Button>
+
+            <Button
+              className="flex-1"
+              disabled={sendingRecovery}
+              onClick={sendRecoveryRequest}
+            >
+              {sendingRecovery
+                ? "Enviando..."
+                : "Enviar"}
+            </Button>
+          </div>
+        </div>
+      </motion.div>
+    </>
+  )}
+</AnimatePresence>
 
     </div>
   );

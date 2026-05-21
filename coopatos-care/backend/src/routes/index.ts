@@ -56,42 +56,120 @@ const mailTransporter = nodemailer.createTransport({
   },
 });
 
-router.post("/support/recovery-request", async (req, res) => {
-  const { type, name, phone, message } = req.body;
+router.post("/employee/recover-registration", async (req, res) => {
+  const { email, cpf } = req.body;
 
-  if (!name || !phone) {
+  if (!email || !cpf) {
     return res.status(400).json({
-      error: "Nome e telefone são obrigatórios.",
+      error: "E-mail e CPF são obrigatórios.",
     });
   }
 
-  const subject =
-    type === "EMPLOYEE_ACCESS_RECOVERY"
-      ? "Solicitação de recuperação de acesso - Funcionário"
-      : "Solicitação de suporte";
+  const normalizedEmail = String(email).trim().toLowerCase();
+  const cleanCpf = String(cpf).replace(/\D/g, "");
 
-  await mailTransporter.sendMail({
-    from: process.env.MAIL_FROM,
-    to: process.env.ADMIN_SUPPORT_EMAIL,
-    subject,
-    html: `
-      <h2>${subject}</h2>
-
-      <p><strong>Nome:</strong> ${name}</p>
-      <p><strong>Telefone:</strong> ${phone}</p>
-      <p><strong>Tipo:</strong> ${type}</p>
-      <p><strong>Mensagem:</strong> ${message || "Sem mensagem adicional."}</p>
-
-      <hr />
-
-      <p>Solicitação enviada pelo sistema Zeladoria Coopatos.</p>
-    `,
+  const employee = await prisma.employee.findFirst({
+    where: {
+      email: normalizedEmail,
+      deletedAt: null,
+    },
   });
 
-  return res.json({
-    message: "Solicitação enviada com sucesso.",
-  });
+  const isValidEmployee =
+    employee && employee.cpf.replace(/\D/g, "") === cleanCpf;
+
+  if (!isValidEmployee) {
+    return res.status(404).json({
+      error: "Não encontramos funcionário com esses dados.",
+    });
+  }
+
+  try {
+    await mailTransporter.sendMail({
+      from: process.env.MAIL_FROM,
+      to: employee.email!,
+      subject: "Recuperação de matrícula - Zeladoria Coopatos",
+      html: `
+        <div style="font-family: Arial, sans-serif; background:#f3f4f6; padding:28px;">
+          <div style="max-width:620px; margin:0 auto; background:#ffffff; border-radius:18px; overflow:hidden; border:1px solid #e5e7eb;">
+            
+            <div style="background:#0f5132; padding:24px; text-align:center;">
+              <h1 style="color:#ffffff; margin:0; font-size:22px;">
+                Zeladoria Coopatos
+              </h1>
+              <p style="color:#d1fae5; margin:6px 0 0; font-size:14px;">
+                Recuperação de acesso
+              </p>
+            </div>
+
+            <div style="padding:28px;">
+              <h2 style="color:#111827; margin-top:0;">
+                Olá, ${employee.name}!
+              </h2>
+
+              <p style="font-size:15px; color:#374151; line-height:1.6;">
+                Recebemos uma solicitação para recuperar sua matrícula de acesso ao sistema de Zeladoria Coopatos.
+              </p>
+
+              <p style="font-size:15px; color:#374151; line-height:1.6;">
+                Encontramos seu cadastro com os dados informados:
+              </p>
+
+              <div style="background:#f0fdf4; border:1px solid #bbf7d0; border-radius:14px; padding:18px; margin:22px 0;">
+                <p style="margin:6px 0; font-size:15px;">
+                  <strong>Nome completo:</strong> ${employee.name}
+                </p>
+
+                <p style="margin:6px 0; font-size:15px;">
+                  <strong>Matrícula:</strong> 
+                  <span style="font-size:18px; color:#0f5132; font-weight:700;">
+                    ${employee.registrationNumber}
+                  </span>
+                </p>
+
+                <p style="margin:6px 0; font-size:15px;">
+                  <strong>Departamento:</strong> ${employee.department || "Não informado"}
+                </p>
+              </div>
+
+              <p style="font-size:14px; color:#6b7280; line-height:1.6;">
+                Utilize essa matrícula junto ao seu CPF para acessar novamente o sistema.
+              </p>
+
+              <p style="font-size:13px; color:#9ca3af; line-height:1.6;">
+                Caso você não tenha solicitado essa recuperação, apenas ignore este e-mail.
+              </p>
+            </div>
+
+            <div style="border-top:1px solid #e5e7eb; padding:20px; text-align:center;">
+              <img
+                src="https://zeladoria-coopatos.vercel.app/logo-coopatos.png"
+                alt="Coopatos"
+                style="max-width:130px; margin-bottom:8px;"
+              />
+
+              <p style="font-size:12px; color:#6b7280; margin:0;">
+                Coopatos - Sempre presente!
+              </p>
+            </div>
+          </div>
+        </div>
+      `,
+    });
+
+    return res.json({
+      message: "Matrícula enviada para o e-mail cadastrado.",
+    });
+  } catch (error) {
+    console.error(error);
+
+    return res.status(500).json({
+      error: "Falha ao enviar e-mail.",
+    });
+  }
 });
+
+
 router.get("/", (req, res) => {
   return res.json({
     message: "API funcionando",

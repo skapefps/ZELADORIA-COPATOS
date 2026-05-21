@@ -1505,9 +1505,9 @@ useEffect(() => {
   // Logout
   // =========================
   const handleLogout = () => {
+  localStorage.removeItem("lastActivityAt");
   sessionStorage.removeItem("welcomeShown");
   localStorage.removeItem("employee");
-  localStorage.removeItem("lastActivityAt");
   logout();
   navigate("/");
 };
