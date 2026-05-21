@@ -205,6 +205,7 @@ const API_URL =
   const [address, setAddress] = useState("");
   const [editAddress, setEditAddress] = useState("");
   const messagesContainerRef = useRef<HTMLDivElement | null>(null);
+  const previousMessagesLengthRef = useRef(0);
   const [newMessagesCount, setNewMessagesCount] = useState(0);
   const [isNearBottom, setIsNearBottom] = useState(true);
   const [editCoords, setEditCoords] = useState<{ lat: number; lng: number } | null>(null);
@@ -226,6 +227,9 @@ const API_URL =
   const chatFileInputRef = useRef<HTMLInputElement>(null);
   const emojiPickerRef = useRef<HTMLDivElement | null>(null);
   const messageRefs = useRef<Record<number, HTMLDivElement | null>>({});
+  const isNearBottomRef = useRef(true);
+  const lastMessageIdRef = useRef<number | null>(null);
+  const hasOpenedChatRef = useRef(false);
   const messageMenuRef = useRef<HTMLDivElement | null>(null);
   const messagesEndRef = useRef<HTMLDivElement>(null);
   const [chatFiles, setChatFiles] = useState<File[]>([]);
@@ -463,10 +467,15 @@ const handleMessagesScroll = () => {
 
   const nearBottom = distanceFromBottom < 120;
 
+  isNearBottomRef.current = nearBottom;
   setIsNearBottom(nearBottom);
 
   if (nearBottom) {
     setNewMessagesCount(0);
+
+    if (selectedReport) {
+      markMessagesAsRead(selectedReport.id);
+    }
   }
 };
 
@@ -486,7 +495,6 @@ const loadUnreadCount = async (reportId: number) => {
       ...prev,
       [reportId]: data.unreadCount || 0,
     }));
-    loadMessages(reportId);
   } catch (error) {
     console.error(error);
   }
@@ -591,26 +599,36 @@ const loadMessages = async (reportId: number) => {
 
   try {
     const response = await fetch(`${API_URL}/reports/${reportId}/messages`);
-    const data = await response.json();
+    const data: ReportMessage[] = await response.json();
 
-    const previousLastMessageId =
-  messages[messages.length - 1]?.id;
+    const lastOldId = lastMessageIdRef.current;
+    const lastNewId = data[data.length - 1]?.id || null;
 
-const newLastMessageId =
-  data[data.length - 1]?.id;
+    const hasNewMessage =
+      lastOldId !== null &&
+      lastNewId !== null &&
+      lastNewId !== lastOldId;
 
-const hasNewMessage =
-  previousLastMessageId &&
-  newLastMessageId &&
-  newLastMessageId !== previousLastMessageId;
+    if (hasNewMessage) {
+      const newMessages = data.filter((msg) => msg.id > lastOldId);
+      const newMessagesFromOthers = newMessages.filter(
+        (msg) => msg.senderId !== employee.id
+      );
 
-if (hasNewMessage && !isNearBottom) {
-  setNewMessagesCount((prev) => prev + 1);
-}
+      if (newMessagesFromOthers.length > 0 && !isNearBottomRef.current) {
+        setNewMessagesCount((prev) => prev + newMessagesFromOthers.length);
+      }
+
+      if (isNearBottomRef.current) {
+        setTimeout(() => {
+          jumpMessagesToBottom();
+          markMessagesAsRead(reportId);
+        }, 50);
+      }
+    }
 
     setMessages(data);
-   if (showMessagesModal) {
-}
+    lastMessageIdRef.current = lastNewId;
   } catch (error) {
     console.error(error);
     toast({
@@ -892,7 +910,17 @@ const mediaItems = chatFiles.length
     }
 
     setMessages((prev) => [...prev, data]);
-    scrollMessagesToBottom();
+
+lastMessageIdRef.current = data.id;
+
+setNewMessagesCount(0);
+
+isNearBottomRef.current = true;
+setIsNearBottom(true);
+
+setTimeout(() => {
+  scrollMessagesToBottom();
+}, 100);
     setMyReports((prev) =>
   prev.map((report) =>
     report.id === data.reportId
@@ -1020,16 +1048,6 @@ useEffect(() => {
   return () => clearInterval(interval);
 }, [showMessagesModal, selectedReport?.id]);
 
-useEffect(() => {
-  if (!showMessagesModal || !selectedReport) return;
-
-  const interval = setInterval(async () => {
-    await loadMessages(selectedReport.id);
-    await markMessagesAsRead(selectedReport.id);
-  }, 3000);
-
-  return () => clearInterval(interval);
-}, [showMessagesModal, selectedReport?.id]);
 
   // =========================
   // GPS
@@ -1649,7 +1667,6 @@ const renderMessages = () => {
   src={item.mediaUrl}
   controls
   className="max-h-64 w-full object-cover bg-black"
-  onLoadedMetadata={scrollMessagesToBottom}
 />
         ) : (
           <img
@@ -1659,7 +1676,6 @@ const renderMessages = () => {
   )}
   alt="Mídia da mensagem"
   className="max-h-64 w-full object-cover"
-  onLoad={scrollMessagesToBottom}
 />
         )}
       </div>
@@ -2111,7 +2127,7 @@ const getStatusStyle = (status: string) => {
                 filteredReports.map((report) => (
                   <div
                     key={report.id}
-                    className="bg-card rounded-lg p-4 border border-border"
+                    className="relative bg-card rounded-lg p-4 border border-border"
                   >
                     <div className="mb-3 h-32 rounded-lg overflow-hidden border border-border bg-muted/30 flex items-center justify-center">
                       {report.images?.[0]?.imageUrl ? (
@@ -2776,14 +2792,18 @@ if (oversizedFile) {
     type="button"
     onClick={async () => {
   setShowMessagesModal(true);
+  setNewMessagesCount(0);
+  setIsNearBottom(true);
+  isNearBottomRef.current = true;
+  lastMessageIdRef.current = null;
+  hasOpenedChatRef.current = true;
 
   await loadMessages(selectedReport!.id);
-
   markMessagesAsRead(selectedReport!.id);
 
   setTimeout(() => {
     jumpMessagesToBottom();
-  }, 0);
+  }, 50);
 }}
     className="relative flex w-full items-center gap-3 rounded-2xl border border-secondary/30 bg-secondary/10 p-4 text-left transition hover:bg-secondary/15"
   >
@@ -3096,15 +3116,16 @@ if (oversizedFile) {
     onClick={() => {
       scrollMessagesToBottom();
       setNewMessagesCount(0);
-    }}
-    className="absolute bottom-28 right-6 z-40 flex items-center gap-2 rounded-full bg-secondary px-4 py-2 text-sm font-medium text-white shadow-xl transition-all hover:scale-105"
-  >
-    <span>↓</span>
+      setIsNearBottom(true);
+      isNearBottomRef.current = true;
 
-    <span>
-      {newMessagesCount} nova
-      {newMessagesCount > 1 ? "s" : ""}
-    </span>
+      if (selectedReport) {
+        markMessagesAsRead(selectedReport.id);
+      }
+    }}
+    className="absolute bottom-24 left-1/2 z-40 flex -translate-x-1/2 items-center gap-2 rounded-full bg-secondary px-4 py-2 text-sm font-medium text-white shadow-xl transition-all hover:scale-105"
+  >
+    ↓ {newMessagesCount} nova{newMessagesCount > 1 ? "s" : ""}
   </button>
 )}
 
