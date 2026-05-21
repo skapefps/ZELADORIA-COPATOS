@@ -208,6 +208,7 @@ const API_URL =
   const INACTIVITY_LIMIT = 30 * 60 * 1000; // 30 minutos de inatividade para logout automático
   const messagesContainerRef = useRef<HTMLDivElement | null>(null);
   const previousMessagesLengthRef = useRef(0);
+  const sendingMessageRef = useRef(false);
   const [newMessagesCount, setNewMessagesCount] = useState(0);
   const [isNearBottom, setIsNearBottom] = useState(true);
   const [editCoords, setEditCoords] = useState<{ lat: number; lng: number } | null>(null);
@@ -590,13 +591,16 @@ const loadTypingUsers = async () => {
 useEffect(() => {
   if (!showMessagesModal || !selectedReport) return;
 
-  const interval = setInterval(() => {
-    loadTypingUsers();
-  }, 1500);
+  const interval = setInterval(async () => {
+    await loadMessages(selectedReport.id);
+
+    if (isNearBottomRef.current) {
+      await markMessagesAsRead(selectedReport.id);
+    }
+  }, 1000);
 
   return () => clearInterval(interval);
 }, [showMessagesModal, selectedReport?.id]);
-
 const loadMessages = async (reportId: number) => {
   setLoadingMessages(true);
 
@@ -872,9 +876,17 @@ const filteredEmployees = employees.filter((emp) => {
 });
 
 const sendMessage = async () => {
-  if (!selectedReport || (!newMessage.trim() && chatFiles.length === 0)) return;
+ if (
+  sendingMessageRef.current ||
+  sendingMessage ||
+  !selectedReport ||
+  (!newMessage.trim() && chatFiles.length === 0)
+) {
+  return;
+}
 
-  setSendingMessage(true);
+sendingMessageRef.current = true;
+setSendingMessage(true);
 
   try {
     const employee = JSON.parse(localStorage.getItem("employee") || "{}");
@@ -964,7 +976,8 @@ if (chatFileInputRef.current) {
       variant: "destructive",
     });
   } finally {
-    setSendingMessage(false);
+    sendingMessageRef.current = false;
+setSendingMessage(false);
   }
 };
 
@@ -3338,11 +3351,16 @@ if (oversizedFile) {
 }}
             placeholder="Escreva uma mensagem..."
             onKeyDown={(e) => {
-              if (e.key === "Enter") {
-                e.preventDefault();
-                sendMessage();
-              }
-            }}
+  if (e.key === "Enter") {
+    e.preventDefault();
+
+    if (e.repeat || sendingMessageRef.current || sendingMessage) {
+      return;
+    }
+
+    sendMessage();
+  }
+}}
           />
 
           <Button
