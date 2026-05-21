@@ -496,9 +496,9 @@ const loadUnreadCount = async (reportId: number) => {
     const data = await response.json();
 
     setUnreadCounts((prev) => ({
-      ...prev,
-      [reportId]: data.unreadCount || 0,
-    }));
+  ...prev,
+  [reportId]: 0,
+}));
   } catch (error) {
     console.error(error);
   }
@@ -1053,16 +1053,7 @@ if (oversizedFile) {
   });
 };
 
-useEffect(() => {
-  if (!showMessagesModal || !selectedReport) return;
 
-  const interval = setInterval(() => {
-    loadMessages(selectedReport.id);
-    markMessagesAsRead(selectedReport.id);
-  }, 3000);
-
-  return () => clearInterval(interval);
-}, [showMessagesModal, selectedReport?.id]);
 
 
   // =========================
