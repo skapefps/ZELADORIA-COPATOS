@@ -1,5 +1,6 @@
 import { Router } from "express";
 import { prisma } from "../prisma/client.js";
+import nodemailer from "nodemailer";
 import { v2 as cloudinary } from "cloudinary";
 
 const router = Router();
@@ -45,6 +46,52 @@ const messageInclude = {
   media: true,
 };
 
+const mailTransporter = nodemailer.createTransport({
+  host: process.env.MAIL_HOST,
+  port: Number(process.env.MAIL_PORT || 587),
+  secure: process.env.MAIL_SECURE === "true",
+  auth: {
+    user: process.env.MAIL_USER,
+    pass: process.env.MAIL_PASS,
+  },
+});
+
+router.post("/support/recovery-request", async (req, res) => {
+  const { type, name, phone, message } = req.body;
+
+  if (!name || !phone) {
+    return res.status(400).json({
+      error: "Nome e telefone são obrigatórios.",
+    });
+  }
+
+  const subject =
+    type === "EMPLOYEE_ACCESS_RECOVERY"
+      ? "Solicitação de recuperação de acesso - Funcionário"
+      : "Solicitação de suporte";
+
+  await mailTransporter.sendMail({
+    from: process.env.MAIL_FROM,
+    to: process.env.ADMIN_SUPPORT_EMAIL,
+    subject,
+    html: `
+      <h2>${subject}</h2>
+
+      <p><strong>Nome:</strong> ${name}</p>
+      <p><strong>Telefone:</strong> ${phone}</p>
+      <p><strong>Tipo:</strong> ${type}</p>
+      <p><strong>Mensagem:</strong> ${message || "Sem mensagem adicional."}</p>
+
+      <hr />
+
+      <p>Solicitação enviada pelo sistema Zeladoria Coopatos.</p>
+    `,
+  });
+
+  return res.json({
+    message: "Solicitação enviada com sucesso.",
+  });
+});
 router.get("/", (req, res) => {
   return res.json({
     message: "API funcionando",

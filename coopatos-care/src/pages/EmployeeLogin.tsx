@@ -3,6 +3,7 @@ import { useAuth } from "@/contexts/AuthContext";
 import { useNavigate } from "react-router-dom";
 import { motion } from "framer-motion";
 import { Shield } from "lucide-react";
+import { useToast } from "@/hooks/use-toast";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 
@@ -19,9 +20,70 @@ const EmployeeLogin = () => {
   const [error, setError] = useState("");
   const [cpf, setCpf] = useState("");
   const [loading, setLoading] = useState(false);
+  const [showCpf, setShowCpf] = useState(false);
+  const [showRecovery, setShowRecovery] = useState(false);
+  const [recoveryName, setRecoveryName] = useState("");
+  const [recoveryPhone, setRecoveryPhone] = useState("");
+  const [sendingRecovery, setSendingRecovery] = useState(false);
 
   const { loginEmployee } = useAuth();
   const navigate = useNavigate();
+  const { toast } = useToast();
+
+  const sendRecoveryRequest = async () => {
+  if (!recoveryName.trim() || !recoveryPhone.trim()) {
+    toast({
+      title: "Preencha nome e telefone",
+      variant: "destructive",
+    });
+    return;
+  }
+
+  setSendingRecovery(true);
+
+  try {
+    const response = await fetch(`${API_URL}/support/recovery-request`, {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+      },
+      body: JSON.stringify({
+        type: "EMPLOYEE_ACCESS_RECOVERY",
+        name: recoveryName.trim(),
+        phone: recoveryPhone.trim(),
+        message:
+          "Funcionário esqueceu CPF ou matrícula e solicitou contato.",
+      }),
+    });
+
+    const data = await response.json();
+
+    if (!response.ok) {
+      toast({
+        title: "Erro ao enviar solicitação",
+        description: data.error || "Tente novamente.",
+        variant: "destructive",
+      });
+      return;
+    }
+
+    toast({
+      title: "Solicitação enviada!",
+      description: "O administrativo entrará em contato.",
+    });
+
+    setRecoveryName("");
+    setRecoveryPhone("");
+    setShowRecovery(false);
+  } catch (error) {
+    toast({
+      title: "Erro ao conectar com o servidor",
+      variant: "destructive",
+    });
+  } finally {
+    setSendingRecovery(false);
+  }
+};
 
   useEffect(() => {
   const sessionExpired = sessionStorage.getItem("sessionExpired");
@@ -139,27 +201,37 @@ if (!cpf.trim() || cpf.trim().length < 11) {
                 </p>
               )}
             </div>
-            <Input
-  disabled={loading}
-  type="text"
-  placeholder="Digite seu CPF"
-  value={cpf}
-  onChange={(e) => {
-    const value = e.target.value
-      .replace(/\D/g, "")
-      .slice(0, 11);
+            <div className="relative">
+  <Input
+    disabled={loading}
+    type={showCpf ? "text" : "password"}
+    placeholder="Digite seu CPF"
+    value={cpf}
+    onChange={(e) => {
+      const value = e.target.value
+        .replace(/\D/g, "")
+        .slice(0, 11);
 
-    const formatted = value
-      .replace(/(\d{3})(\d)/, "$1.$2")
-      .replace(/(\d{3})(\d)/, "$1.$2")
-      .replace(/(\d{3})(\d{1,2})$/, "$1-$2");
+      const formatted = value
+        .replace(/(\d{3})(\d)/, "$1.$2")
+        .replace(/(\d{3})(\d)/, "$1.$2")
+        .replace(/(\d{3})(\d{1,2})$/, "$1-$2");
 
-    setCpf(formatted);
-    setError("");
-  }}
-  className="text-center text-lg tracking-widest"
-  inputMode="numeric"
-/>
+      setCpf(formatted);
+      setError("");
+    }}
+    className="text-center text-lg tracking-widest pr-10"
+    inputMode="numeric"
+  />
+
+  <button
+    type="button"
+    onClick={() => setShowCpf((prev) => !prev)}
+    className="absolute right-3 top-1/2 -translate-y-1/2 text-muted-foreground"
+  >
+    {showCpf ? "🙈" : "👁️"}
+  </button>
+</div>
 
             <Button
   type="submit"
@@ -175,7 +247,46 @@ if (!cpf.trim() || cpf.trim().length < 11) {
     "Entrar"
   )}
 </Button>
-          </form>
+</form>
+
+<button
+  type="button"
+  onClick={() => setShowRecovery((prev) => !prev)}
+  className="w-full mt-3 text-sm text-secondary hover:underline"
+>
+  Esqueci meu CPF ou matrícula
+</button>
+
+{showRecovery && (
+  <div className="mt-4 rounded-2xl border border-border bg-muted/30 p-4 space-y-3">
+    <p className="text-sm text-muted-foreground text-center">
+      Informe seu nome e telefone para o administrativo entrar em contato.
+    </p>
+
+    <Input
+      placeholder="Qual seu nome?"
+      value={recoveryName}
+      onChange={(e) => setRecoveryName(e.target.value)}
+    />
+
+    <Input
+      placeholder="Telefone para contato"
+      value={recoveryPhone}
+      onChange={(e) => setRecoveryPhone(e.target.value)}
+      inputMode="tel"
+    />
+
+    <Button
+      type="button"
+      className="w-full bg-secondary hover:bg-secondary/90 text-secondary-foreground"
+      disabled={sendingRecovery}
+      onClick={sendRecoveryRequest}
+    >
+      {sendingRecovery ? "Enviando..." : "Solicitar contato"}
+    </Button>
+  </div>
+)}
+   
 
           {/* Acesso administrativo */}
           <button
