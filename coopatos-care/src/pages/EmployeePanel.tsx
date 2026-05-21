@@ -48,7 +48,7 @@ import { useToast } from "@/hooks/use-toast";
 // =========================
 
 
-const MAX_FILE_SIZE = 100 * 1024 * 1024;
+const MAX_FILE_SIZE = 100 * 1024 * 1024; // TAMANHO maximo do arquivo , atualmente 100mb
 
 type Category = {
   id: number;
@@ -205,6 +205,7 @@ const API_URL =
   const [unreadCounts, setUnreadCounts] = useState<Record<number, number>>({});
   const [address, setAddress] = useState("");
   const [editAddress, setEditAddress] = useState("");
+  const INACTIVITY_LIMIT = 30 * 60 * 1000; // 30 minutos de inatividade para logout automático
   const messagesContainerRef = useRef<HTMLDivElement | null>(null);
   const previousMessagesLengthRef = useRef(0);
   const [newMessagesCount, setNewMessagesCount] = useState(0);
@@ -1447,6 +1448,57 @@ const geocodeAddress = async (typedAddress: string) => {
     setGeocoding(false);
   }
 };
+
+useEffect(() => {
+  const updateLastActivity = () => {
+    localStorage.setItem("lastActivityAt", String(Date.now()));
+  };
+
+  const checkInactivity = () => {
+    const lastActivityAt = Number(localStorage.getItem("lastActivityAt") || 0);
+
+    if (!lastActivityAt) {
+      updateLastActivity();
+      return;
+    }
+
+    const inactiveTime = Date.now() - lastActivityAt;
+
+    if (inactiveTime > INACTIVITY_LIMIT) {
+      sessionStorage.removeItem("welcomeShown");
+      localStorage.removeItem("employee");
+      logout();
+      navigate("/");
+    }
+  };
+
+  const handleUserActivity = () => {
+    updateLastActivity();
+  };
+
+  updateLastActivity();
+
+  window.addEventListener("click", handleUserActivity);
+  window.addEventListener("keydown", handleUserActivity);
+  window.addEventListener("touchstart", handleUserActivity);
+  window.addEventListener("scroll", handleUserActivity);
+
+  window.addEventListener("focus", checkInactivity);
+  document.addEventListener("visibilitychange", () => {
+    if (!document.hidden) {
+      checkInactivity();
+    }
+  });
+
+  return () => {
+    window.removeEventListener("click", handleUserActivity);
+    window.removeEventListener("keydown", handleUserActivity);
+    window.removeEventListener("touchstart", handleUserActivity);
+    window.removeEventListener("scroll", handleUserActivity);
+
+    window.removeEventListener("focus", checkInactivity);
+  };
+}, [logout, navigate]);
   
 
   // =========================
@@ -1455,6 +1507,7 @@ const geocodeAddress = async (typedAddress: string) => {
   const handleLogout = () => {
   sessionStorage.removeItem("welcomeShown");
   localStorage.removeItem("employee");
+  localStorage.removeItem("lastActivityAt");
   logout();
   navigate("/");
 };
@@ -1778,7 +1831,7 @@ const getStatusStyle = (status: string) => {
       <div className="min-h-screen bg-background">
   <div className="mx-auto w-full max-w-lg lg:max-w-6xl lg:px-8"></div>
       {/* Header */}
-     <header className="sticky top-0 z-[200] gradient-primary px-4 py-3 flex items-center justify-between">
+     <header className="sticky top-0 z-[600] gradient-primary px-4 py-3 flex items-center justify-between">
         <div className="flex items-center gap-2">
           <img
             src="/logo-coopatos.png"
@@ -1809,12 +1862,13 @@ const getStatusStyle = (status: string) => {
       </header>
 
       {/* Tabs */}
-<div className="sticky top-[104px] z-[120] flex border-b border-border bg-card shadow-sm">
+<div className="sticky top-[104px] z-[500] flex border-b border-border bg-card shadow-sm pointer-events-auto">
         <button
   onClick={() => {
-    setTab("new");
-    window.scrollTo(0, 0);
-  }}
+  setTab("new");
+  setShowFilters(false);
+  window.scrollTo(0, 0);
+}}
   className={`relative flex-1 py-3 text-sm font-medium flex items-center justify-center gap-2 ${
     tab === "new" ? "text-secondary" : "text-muted-foreground"
   }`}
@@ -1832,9 +1886,10 @@ const getStatusStyle = (status: string) => {
 
         <button
   onClick={() => {
-    setTab("history");
-    window.scrollTo(0, 0);
-  }}
+  setTab("history");
+  setShowFilters(false);
+  window.scrollTo(0, 0);
+}}
   className={`relative flex-1 py-3 text-sm font-medium flex items-center justify-center gap-2 ${
     tab === "history" ? "text-secondary" : "text-muted-foreground"
   }`}
@@ -1851,9 +1906,10 @@ const getStatusStyle = (status: string) => {
 </button>
         <button
   onClick={() => {
-    setTab("reports");
-    window.scrollTo(0, 0);
-  }}
+  setTab("reports");
+  setShowFilters(false);
+  window.scrollTo(0, 0);
+}}
   className={`relative flex-1 py-3 text-sm font-medium flex items-center justify-center gap-2 ${
     tab === "reports" ? "text-secondary" : "text-muted-foreground"
   }`}
