@@ -636,7 +636,7 @@ const handleForceLogout = (data: {
   localStorage.removeItem("lastActivityAt");
   localStorage.removeItem("employee");
   localStorage.removeItem("employeeSessionToken");
-  sessionStorage.removeItem("welcomeShown");
+  localStorage.removeItem("welcomeShown");
 
   logout();
   navigate("/", { replace: true });
@@ -719,7 +719,7 @@ useEffect(() => {
     localStorage.getItem("employee") || "{}"
   );
 
-  const welcomeShown = sessionStorage.getItem("welcomeShown");
+  const welcomeShown = localStorage.getItem("welcomeShown");
 
   if (employee.name && !welcomeShown) {
     toast({
@@ -729,7 +729,7 @@ useEffect(() => {
     "bg-secondary text-secondary-foreground border-secondary",
 });
 
-    sessionStorage.setItem("welcomeShown", "true");
+    localStorage.setItem("welcomeShown", "true");
   }
     async function loadData() {
       try {
@@ -2702,7 +2702,7 @@ useEffect(() => {
     const inactiveTime = Date.now() - lastActivityAt;
 
     if (inactiveTime > INACTIVITY_LIMIT) {
-      sessionStorage.removeItem("welcomeShown");
+      localStorage.removeItem("welcomeShown");
       localStorage.removeItem("employee");
 localStorage.removeItem("employeeSessionToken");
 logout();
@@ -2744,7 +2744,7 @@ navigate("/", { replace: true });
   // =========================
   const handleLogout = () => {
   localStorage.removeItem("lastActivityAt");
-  sessionStorage.removeItem("welcomeShown");
+  localStorage.removeItem("welcomeShown");
   localStorage.removeItem("employee");
   localStorage.removeItem("employeeSessionToken");
 
