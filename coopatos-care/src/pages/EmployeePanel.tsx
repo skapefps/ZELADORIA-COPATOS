@@ -367,6 +367,10 @@ const [isMobileTabs, setIsMobileTabs] = useState(false);
   const [privateTypingUsers, setPrivateTypingUsers] = useState<
   { employeeId: number; employeeName: string }[]
 >([]);
+  const [showPrivateMessageSearch, setShowPrivateMessageSearch] = useState(false);
+  const [privateMessageSearchTerm, setPrivateMessageSearchTerm] = useState("");
+  const [currentPrivateSearchIndex, setCurrentPrivateSearchIndex] = useState(0);
+  const privateMessageRefs = useRef<Record<number, HTMLDivElement | null>>({});
   const [sendingPrivateMessage, setSendingPrivateMessage] = useState(false);
   const [teamEmployees, setTeamEmployees] = useState<EmployeeOption[]>([]);
   const [teamSearch, setTeamSearch] = useState("");
@@ -876,6 +880,42 @@ const goToSearchResult = (index: number) => {
 
   setCurrentSearchIndex(index);
   scrollToMessage(result.id);
+};
+
+const privateMessageSearchResults = privateMessages.filter((msg) =>
+  msg.message
+    ?.toLowerCase()
+    .includes(privateMessageSearchTerm.toLowerCase())
+);
+
+const scrollToPrivateMessage = (messageId: number) => {
+  const element = privateMessageRefs.current[messageId];
+
+  if (!element) return;
+
+  element.scrollIntoView({
+    behavior: "smooth",
+    block: "center",
+  });
+
+  element.classList.add("ring-2", "ring-green-300", "ring-offset-2");
+
+  setTimeout(() => {
+    element.classList.remove(
+      "ring-2",
+      "ring-green-300",
+      "ring-offset-2"
+    );
+  }, 1800);
+};
+
+const goToPrivateSearchResult = (index: number) => {
+  const result = privateMessageSearchResults[index];
+
+  if (!result) return;
+
+  setCurrentPrivateSearchIndex(index);
+  scrollToPrivateMessage(result.id);
 };
 
 const scrollMessagesToBottom = () => {
@@ -5192,23 +5232,91 @@ touch-manipulation
         className="w-full sm:max-w-lg h-[85vh] sm:h-[75vh] rounded-t-3xl sm:rounded-3xl bg-card shadow-2xl border border-border flex flex-col overflow-hidden"
       >
         <div className="flex items-center justify-between border-b border-border p-4">
-          <div>
-            <h2 className="text-base font-bold">
-              {getPrivateChatTitle()}
-            </h2>
-            <p className="text-xs text-muted-foreground">
-              Conversa particular
-            </p>
-          </div>
+  <div>
+    <h2 className="text-base font-bold">
+      {getPrivateChatTitle()}
+    </h2>
+    <p className="text-xs text-muted-foreground">
+      Conversa particular
+    </p>
+  </div>
 
-          <button
-            type="button"
-            onClick={closePrivateChat}
-            className="flex h-9 w-9 items-center justify-center rounded-full bg-red-50 text-red-600 hover:bg-red-100"
-          >
-            <X className="h-5 w-5" />
-          </button>
+<div className="flex items-center gap-2">
+  <button
+    type="button"
+    onClick={() => setShowPrivateMessageSearch((prev) => !prev)}
+    className="flex h-9 w-9 items-center justify-center rounded-full bg-muted text-muted-foreground hover:bg-muted/80"
+  >
+    <Search className="h-4 w-4" />
+  </button>
+
+  <button
+    type="button"
+    onClick={closePrivateChat}
+    className="flex h-9 w-9 items-center justify-center rounded-full bg-red-50 text-red-600 hover:bg-red-100"
+  >
+    <X className="h-5 w-5" />
+  </button>
+</div>
+
+        
         </div>
+
+        {showPrivateMessageSearch && (
+  <div className="border-b border-border bg-card p-3">
+    <div className="flex items-center gap-2">
+      <Input
+        value={privateMessageSearchTerm}
+        onChange={(e) => {
+          setPrivateMessageSearchTerm(e.target.value);
+          setCurrentPrivateSearchIndex(0);
+        }}
+        placeholder="Buscar mensagem..."
+        className="h-9 text-sm"
+      />
+
+      <Button
+        type="button"
+        size="icon"
+        variant="outline"
+        disabled={privateMessageSearchResults.length === 0}
+        onClick={() => {
+          const nextIndex =
+            currentPrivateSearchIndex <= 0
+              ? privateMessageSearchResults.length - 1
+              : currentPrivateSearchIndex - 1;
+
+          goToPrivateSearchResult(nextIndex);
+        }}
+      >
+        ↑
+      </Button>
+
+      <Button
+        type="button"
+        size="icon"
+        variant="outline"
+        disabled={privateMessageSearchResults.length === 0}
+        onClick={() => {
+          const nextIndex =
+            currentPrivateSearchIndex >= privateMessageSearchResults.length - 1
+              ? 0
+              : currentPrivateSearchIndex + 1;
+
+          goToPrivateSearchResult(nextIndex);
+        }}
+      >
+        ↓
+      </Button>
+
+      <span className="min-w-[54px] text-center text-xs text-muted-foreground">
+        {privateMessageSearchTerm
+          ? `${privateMessageSearchResults.length ? currentPrivateSearchIndex + 1 : 0}/${privateMessageSearchResults.length}`
+          : "0/0"}
+      </span>
+    </div>
+  </div>
+)}
 
         <div className="flex-1 overflow-y-auto bg-muted/30 p-3 space-y-2">
           {loadingPrivateMessages ? (
@@ -5226,9 +5334,12 @@ touch-manipulation
 
   return (
     <div
-      key={msg.id}
-      className={`flex ${isMine ? "justify-end" : "justify-start"}`}
-    >
+  key={msg.id}
+  ref={(el) => {
+    privateMessageRefs.current[msg.id] = el;
+  }}
+  className={`flex ${isMine ? "justify-end" : "justify-start"}`}
+>
       <div className="relative group max-w-[82%]">
         <button
           type="button"
