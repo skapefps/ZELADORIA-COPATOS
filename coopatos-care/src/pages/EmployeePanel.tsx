@@ -1157,7 +1157,7 @@ const startAudioRecording = async () => {
     const mimeType = MediaRecorder.isTypeSupported("audio/webm")
       ? "audio/webm"
       : MediaRecorder.isTypeSupported("audio/mp4")
-      ? "audio/mp4"
+      ? "audio/mp4;codecs=mp4a.40.2"
       : "";
 
     const recorder = new MediaRecorder(
