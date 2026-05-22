@@ -199,14 +199,32 @@ const getDepartmentStyle = (department?: string | null) => {
   );
 };
 
+const getCloudinaryAudioPlaybackUrl = (url: string) => {
+  if (!url.includes("res.cloudinary.com")) return url;
+
+  let playbackUrl = url;
+
+  if (playbackUrl.includes("/video/upload/")) {
+    playbackUrl = playbackUrl.replace("/video/upload/", "/video/upload/f_mp4,vc_none/");
+  } else if (playbackUrl.includes("/upload/")) {
+    playbackUrl = playbackUrl.replace("/upload/", "/upload/f_mp4,vc_none/");
+  }
+
+  playbackUrl = playbackUrl.replace(/\.[a-zA-Z0-9]+($|\?)/, ".mp4$1");
+
+  return playbackUrl;
+};
+
 const AudioMessage = ({ url, apiUrl }: { url: string; apiUrl: string }) => {
-  const audioUrl = `${apiUrl}/media-proxy?url=${encodeURIComponent(url)}`;
+  const compatibleUrl = getCloudinaryAudioPlaybackUrl(url);
+  const audioUrl = `${apiUrl}/media-proxy?url=${encodeURIComponent(compatibleUrl)}`;
 
   return (
     <audio
       src={audioUrl}
       controls
       preload="metadata"
+      playsInline
       className="w-full"
     />
   );
@@ -1166,13 +1184,16 @@ const startAudioRecording = async () => {
       audio: true,
     });
 
-    const mimeType = MediaRecorder.isTypeSupported("audio/mp4;codecs=mp4a.40.2")
-  ? "audio/mp4;codecs=mp4a.40.2"
-  : MediaRecorder.isTypeSupported("audio/webm;codecs=opus")
-  ? "audio/webm;codecs=opus"
-  : MediaRecorder.isTypeSupported("audio/webm")
-  ? "audio/webm"
-  : "";
+    const mimeType =
+      MediaRecorder.isTypeSupported("audio/mp4;codecs=mp4a.40.2")
+        ? "audio/mp4;codecs=mp4a.40.2"
+        : MediaRecorder.isTypeSupported("audio/mp4")
+        ? "audio/mp4"
+        : MediaRecorder.isTypeSupported("audio/webm;codecs=opus")
+        ? "audio/webm;codecs=opus"
+        : MediaRecorder.isTypeSupported("audio/webm")
+        ? "audio/webm"
+        : "";
 
     const recorder = new MediaRecorder(
       stream,
@@ -1381,8 +1402,14 @@ setSendingMessage(false);
 
     const fileExtension = url.includes(".mp4")
       ? "mp4"
+      : url.includes(".m4a")
+      ? "m4a"
+      : url.includes(".webm")
+      ? "webm"
       : url.includes(".mov")
       ? "mov"
+      : url.includes(".png")
+      ? "png"
       : "jpg";
 
     const link = document.createElement("a");
@@ -1560,12 +1587,14 @@ const uploadImageToCloudinary = async (file: File) => {
     );
   }
 
+  const isAudio = file.type.startsWith("audio/");
+
   return {
-    imageUrl: data.secure_url,
+    imageUrl: isAudio
+      ? getCloudinaryAudioPlaybackUrl(data.secure_url)
+      : data.secure_url,
     publicId: data.public_id,
-    resourceType: file.type.startsWith("audio/")
-  ? "audio"
-  : data.resource_type || "image",
+    resourceType: isAudio ? "audio" : data.resource_type || "image",
   };
 };
 
@@ -2931,7 +2960,7 @@ const renderReportsTab = () => (
   <motion.div
     className="flex w-full touch-pan-y"
     style={{ x: tabX }}
-    drag="x"
+    drag={tab === "new" ? false : "x"}
     dragElastic={0.05}
     dragMomentum={false}
     dragConstraints={{

@@ -549,6 +549,9 @@ router.patch("/reports/:id/status", async (req, res) => {
     include: reportInclude,
   });
 
+  io.emit("report-updated");
+  io.emit("reports-updated");
+
   return res.json(report);
 });
 
