@@ -904,20 +904,48 @@ const privateMessageSearchResults = privateMessages.filter((msg) =>
 const scrollToPrivateMessage = (messageId: number) => {
   const element = privateMessageRefs.current[messageId];
 
-  if (!element) return;
+  if (!element) {
+    console.log("Mensagem original não encontrada:", messageId);
+    return;
+  }
 
-  element.scrollIntoView({
-    behavior: "smooth",
-    block: "center",
-  });
+  const container = privateMessagesContainerRef.current;
 
-  element.classList.add("ring-2", "ring-green-300", "ring-offset-2");
+  if (container) {
+    const containerRect = container.getBoundingClientRect();
+    const elementRect = element.getBoundingClientRect();
+
+    const top =
+      container.scrollTop +
+      elementRect.top -
+      containerRect.top -
+      container.clientHeight / 2 +
+      element.clientHeight / 2;
+
+    container.scrollTo({
+      top,
+      behavior: "smooth",
+    });
+  } else {
+    element.scrollIntoView({
+      behavior: "smooth",
+      block: "center",
+    });
+  }
+
+  element.classList.add(
+    "ring-2",
+    "ring-green-300",
+    "ring-offset-2",
+    "rounded-2xl"
+  );
 
   setTimeout(() => {
     element.classList.remove(
       "ring-2",
       "ring-green-300",
-      "ring-offset-2"
+      "ring-offset-2",
+      "rounded-2xl"
     );
   }, 1800);
 };
@@ -1013,12 +1041,10 @@ useEffect(() => {
     setPrivateMessageMenuId(null);
   };
 
-  document.addEventListener("click", handleClickOutside);
-  document.addEventListener("touchend", handleClickOutside);
+  document.addEventListener("pointerdown", handleClickOutside);
 
   return () => {
-    document.removeEventListener("click", handleClickOutside);
-    document.removeEventListener("touchend", handleClickOutside);
+    document.removeEventListener("pointerdown", handleClickOutside);
   };
 }, []);
 
@@ -5388,27 +5414,27 @@ touch-manipulation
 >
       <div className="relative group max-w-[82%]">
         <button
-          type="button"
-          onClick={(e) => {
-  e.stopPropagation();
-  setPrivateMessageMenuId(
-    privateMessageMenuId === msg.id ? null : msg.id
-  );
-}}
-          className={`absolute top-1 z-20 flex h-8 w-8 items-center justify-center rounded-full bg-white/90 text-gray-700 shadow-sm hover:bg-gray-100 ${
-            isMine ? "right-1" : "right-1"
-          }`}
-        >
-          <ChevronDown className="h-4 w-4" />
-        </button>
+  type="button"
+  onPointerDown={(e) => e.stopPropagation()}
+  onClick={() => {
+    setPrivateMessageMenuId(
+      privateMessageMenuId === msg.id ? null : msg.id
+    );
+  }}
+  className={`absolute top-1 z-20 flex h-8 w-8 items-center justify-center rounded-full bg-white/90 text-gray-700 shadow-sm hover:bg-gray-100 ${
+    isMine ? "right-1" : "right-1"
+  }`}
+>
+  <ChevronDown className="h-4 w-4" />
+</button>
 
         {privateMessageMenuId === msg.id && (
   <div
-  onClick={(e) => e.stopPropagation()}
-    className={`absolute top-10 z-30 w-40 overflow-hidden rounded-xl border border-border bg-white shadow-xl ${
-      isMine ? "right-0" : "right-0"
-    }`}
-  >
+  onPointerDown={(e) => e.stopPropagation()}
+  className={`absolute top-10 z-30 w-40 overflow-hidden rounded-xl border border-border bg-white shadow-xl ${
+    isMine ? "right-0" : "right-0"
+  }`}
+>
             <button
   type="button"
   onClick={(e) => {
@@ -5466,14 +5492,13 @@ touch-manipulation
           {msg.replyToMessage && (
   <button
     type="button"
+    onPointerDown={(e) => e.stopPropagation()}
+    onClick={(e) => {
+      e.stopPropagation();
+      scrollToPrivateMessage(msg.replyToMessage!.id);
+    }}
     className="mb-2 w-full rounded-lg border-l-4 border-green-200 bg-white/50 px-2 py-1 text-left text-xs"
   >
-    <p className="font-semibold text-green-800">
-      Respondendo a{" "}
-      {msg.replyToMessage.sender?.id === employee.id
-        ? "você"
-        : msg.replyToMessage.sender?.name || "Mensagem"}
-    </p>
 
     <p className="truncate text-gray-600">
       {msg.replyToMessage.message || "Mídia"}
