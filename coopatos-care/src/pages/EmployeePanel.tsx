@@ -2964,13 +2964,13 @@ const renderReportsTab = () => (
   <motion.div
     className="flex w-full touch-pan-y"
     style={{ x: tabX }}
-    drag={tab === "new" ? false : "x"}
+    drag="x"
     dragElastic={0.05}
     dragMomentum={false}
     dragConstraints={{
-      left: -tabsContainerWidth * 2,
-      right: 0,
-    }}
+  left: -tabsContainerWidth * 2,
+  right: 0,
+}}
     onDragEnd={handleTabDragEnd}
   >
     <div className="w-full min-w-full shrink-0 p-4">
