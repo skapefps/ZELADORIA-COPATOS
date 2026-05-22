@@ -140,9 +140,14 @@ if (!cpf.trim() || cpf.trim().length < 11) {
 
       localStorage.setItem("employee", JSON.stringify(data.employee));
 
-      loginEmployee(matricula.trim());
+localStorage.setItem(
+  "employeeSessionToken",
+  data.sessionToken || ""
+);
 
-      navigate("/funcionario", { replace: true });
+loginEmployee(matricula.trim());
+
+navigate("/funcionario", { replace: true });
     } catch (error) {
       console.error("Erro no login:", error);
       setError("Erro ao conectar com o servidor");

@@ -1,6 +1,7 @@
 import { Router } from "express";
 import { io } from "../server.js";
 import { prisma } from "../prisma/client.js";
+import crypto from "crypto";
 import nodemailer from "nodemailer";
 import { v2 as cloudinary } from "cloudinary";
 
@@ -45,6 +46,46 @@ const messageInclude = {
     },
   },
   media: true,
+};
+
+const createNotification = async ({
+  recipientId,
+  actorId,
+  type,
+  title,
+  body,
+  reportId,
+  messageId,
+  privateConversationId,
+  privateMessageId,
+}: {
+  recipientId: number;
+  actorId?: number | null;
+  type: string;
+  title: string;
+  body?: string | null;
+  reportId?: number | null;
+  messageId?: number | null;
+  privateConversationId?: number | null;
+  privateMessageId?: number | null;
+}) => {
+  const notification = await prisma.notification.create({
+    data: {
+      recipientId,
+      actorId: actorId || null,
+      type,
+      title,
+      body: body || null,
+      reportId: reportId || null,
+      messageId: messageId || null,
+      privateConversationId: privateConversationId || null,
+      privateMessageId: privateMessageId || null,
+    },
+  });
+
+  io.to(`employee-${recipientId}`).emit("notification-created", notification);
+
+  return notification;
 };
 
 const mailTransporter = nodemailer.createTransport({
@@ -177,6 +218,118 @@ router.get("/", (req, res) => {
   });
 });
 
+router.get("/notifications/:employeeId", async (req, res) => {
+  try {
+    const employeeId = Number(req.params.employeeId);
+
+    const notifications = await prisma.notification.findMany({
+      where: {
+        recipientId: employeeId,
+      },
+      orderBy: {
+        createdAt: "desc",
+      },
+      take: 50,
+      include: {
+        actor: {
+          select: {
+            id: true,
+            name: true,
+            department: true,
+          },
+        },
+        report: {
+          include: {
+            category: true,
+            status: true,
+          },
+        },
+        message: true,
+      },
+    });
+
+    return res.json(notifications);
+  } catch (error) {
+    console.error(error);
+    return res.status(500).json({
+      error: "Erro ao carregar notificações.",
+    });
+  }
+});
+
+router.post("/notifications/:id/read", async (req, res) => {
+  try {
+    const id = Number(req.params.id);
+
+    const notification = await prisma.notification.update({
+      where: {
+        id,
+      },
+      data: {
+        readAt: new Date(),
+      },
+    });
+
+    return res.json(notification);
+  } catch (error) {
+    console.error(error);
+    return res.status(500).json({
+      error: "Erro ao marcar notificação como lida.",
+    });
+  }
+});
+
+router.post("/notifications/:employeeId/read-all", async (req, res) => {
+  try {
+    const employeeId = Number(req.params.employeeId);
+
+    await prisma.notification.updateMany({
+      where: {
+        recipientId: employeeId,
+        readAt: null,
+      },
+      data: {
+        readAt: new Date(),
+      },
+    });
+
+    return res.json({
+      message: "Notificações marcadas como lidas.",
+    });
+  } catch (error) {
+    console.error(error);
+    return res.status(500).json({
+      error: "Erro ao marcar notificações como lidas.",
+    });
+  }
+});
+
+router.get("/employees/team", async (req, res) => {
+  try {
+    const employees = await prisma.employee.findMany({
+      where: {
+        deletedAt: null,
+      },
+      select: {
+        id: true,
+        name: true,
+        registrationNumber: true,
+        department: true,
+      },
+      orderBy: {
+        name: "asc",
+      },
+    });
+
+    return res.json(employees);
+  } catch (error) {
+    console.error(error);
+    return res.status(500).json({
+      error: "Erro ao carregar equipe.",
+    });
+  }
+});
+
 router.get("/employees", async (req, res) => {
   const employees = await prisma.employee.findMany({
     where: {
@@ -271,6 +424,15 @@ router.post("/reports/:id/participants", async (req, res) => {
     },
   });
 
+  await createNotification({
+  recipientId: participant.employeeId,
+  actorId: null,
+  type: "PARTICIPANT_ADDED",
+  title: "Você foi adicionado a um chamado",
+  body: `Você foi adicionado ao chamado #${reportId}.`,
+  reportId,
+});
+
    io.emit("participant-added");
 io.emit("reports-updated");
 
@@ -317,7 +479,16 @@ router.delete("/reports/:id/participants/:participantId", async (req, res) => {
       },
     });
 
-    io.emit("participant-removed");
+    await createNotification({
+  recipientId: participant.employeeId,
+  actorId: employeeId ? Number(employeeId) : null,
+  type: "PARTICIPANT_REMOVED",
+  title: "Você foi removido de um chamado",
+  body: `Você foi removido do chamado #${reportId}.`,
+  reportId,
+});
+
+io.emit("participant-removed");
 io.emit("reports-updated");
 
     return res.json({
@@ -513,10 +684,28 @@ router.post("/employee-login", async (req, res) => {
     });
   }
 
-  return res.json({
-    message: "Login realizado com sucesso.",
-    employee,
-  });
+  const sessionToken = crypto.randomUUID();
+
+const updatedEmployee = await prisma.employee.update({
+  where: {
+    id: employee.id,
+  },
+  data: {
+    activeSessionToken: sessionToken,
+  },
+});
+
+io.to(`employee-${employee.id}`).emit("force-logout", {
+  reason: "Sua conta foi acessada em outro dispositivo ou guia.",
+  sessionToken,
+});
+
+return res.json({
+  message: "Login realizado com sucesso.",
+  employee: updatedEmployee,
+  sessionToken,
+});
+
 });
 
 router.get("/employees/:employeeId/reports", async (req, res) => {
@@ -537,7 +726,7 @@ router.get("/employees/:employeeId/reports", async (req, res) => {
 
 router.patch("/reports/:id/status", async (req, res) => {
   const id = Number(req.params.id);
-  const { statusId } = req.body;
+  const { statusId, actorId } = req.body;
 
   const report = await prisma.report.update({
     where: {
@@ -548,6 +737,21 @@ router.patch("/reports/:id/status", async (req, res) => {
     },
     include: reportInclude,
   });
+
+  const participants = report.participants || [];
+
+for (const participant of participants) {
+  if (participant.employeeId === Number(actorId)) continue;
+
+  await createNotification({
+    recipientId: participant.employeeId,
+    actorId: actorId ? Number(actorId) : null,
+    type: "REPORT_STATUS_CHANGED",
+    title: "Status do chamado alterado",
+    body: `O chamado #${report.id} mudou para ${report.status.name}.`,
+    reportId: report.id,
+  });
+}
 
   io.emit("report-updated");
   io.emit("reports-updated");
@@ -656,6 +860,7 @@ router.post("/reports/:id/messages", async (req, res) => {
   message,
   replyToMessageId,
   mediaItems,
+  mentionedEmployeeIds,
 } = req.body;
 
   if ((!message || !message.trim()) && (!mediaItems || mediaItems.length === 0)) {
@@ -685,6 +890,52 @@ router.post("/reports/:id/messages", async (req, res) => {
 },
     include: messageInclude,
   });
+
+  const report = await prisma.report.findUnique({
+  where: {
+    id: reportId,
+  },
+  include: {
+    participants: true,
+  },
+});
+
+const mentionedIds = Array.isArray(mentionedEmployeeIds)
+  ? mentionedEmployeeIds.map((id) => Number(id))
+  : [];
+
+if (mentionedIds.length > 0) {
+  await prisma.reportMessageMention.createMany({
+    data: mentionedIds.map((employeeId) => ({
+      messageId: newMessage.id,
+      employeeId,
+    })),
+    skipDuplicates: true,
+  });
+}
+
+const participants = report?.participants || [];
+
+for (const participant of participants) {
+  if (participant.employeeId === Number(senderId)) continue;
+
+  const wasMentioned = mentionedIds.includes(participant.employeeId);
+
+  await createNotification({
+    recipientId: participant.employeeId,
+    actorId: senderId ? Number(senderId) : null,
+    type: wasMentioned ? "MENTION" : "REPORT_MESSAGE",
+    title: wasMentioned
+      ? "Você foi mencionado em uma conversa"
+      : "Nova mensagem em um chamado",
+    body: wasMentioned
+      ? `${senderName} mencionou você no chamado #${reportId}.`
+      : `${senderName} enviou uma mensagem no chamado #${reportId}.`,
+    reportId,
+    messageId: newMessage.id,
+  });
+}
+
   io.to(`report-${reportId}`).emit("new-message", newMessage);
   return res.status(201).json(newMessage);
 });

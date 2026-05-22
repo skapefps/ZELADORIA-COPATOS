@@ -16,10 +16,20 @@ model Employee {
   phone              String?
   messageReads ReportMessageRead[]
   department         String?
+  activeSessionToken String?
 
   reports            Report[]
   messages           ReportMessage[]
   participations     ReportParticipant[]
+
+  notificationsReceived Notification[] @relation("NotificationRecipient")
+  notificationsTriggered Notification[] @relation("NotificationActor")
+
+  messageMentions        ReportMessageMention[]
+
+  privateConversationParticipants PrivateConversationParticipant[]
+  privateMessages                 PrivateMessage[]
+  privateMessageReads             PrivateMessageRead[]
 
   user               User?
 
@@ -98,6 +108,7 @@ model Report {
   images           ReportImage[]
   messages         ReportMessage[]
   participants     ReportParticipant[]
+  notifications    Notification[]
 
   createdAt        DateTime @default(now())
   updatedAt        DateTime @updatedAt
@@ -133,6 +144,8 @@ model ReportMessage {
   senderName String
   senderRole String
   media      ReportMessageMedia[]
+  mentions   ReportMessageMention[]
+  notifications Notification[]
   message    String
 
   report     Report    @relation(fields: [reportId], references: [id])
@@ -200,6 +213,130 @@ model ReportParticipant {
 
   @@unique([reportId, employeeId])
   @@index([reportId])
+  @@index([employeeId])
+}
+
+model ReportMessageMention {
+  id         Int      @id @default(autoincrement())
+
+  messageId  Int
+  employeeId Int
+
+  message    ReportMessage @relation(fields: [messageId], references: [id])
+  employee   Employee      @relation(fields: [employeeId], references: [id])
+
+  createdAt  DateTime @default(now())
+
+  @@unique([messageId, employeeId])
+  @@index([messageId])
+  @@index([employeeId])
+}
+
+model Notification {
+  id          Int      @id @default(autoincrement())
+
+  recipientId Int
+  actorId     Int?
+
+  type        String
+  title       String
+  body        String?
+
+  reportId    Int?
+  messageId   Int?
+  privateConversationId Int?
+  privateMessageId      Int?
+
+  readAt      DateTime?
+  createdAt   DateTime @default(now())
+
+  recipient   Employee @relation("NotificationRecipient", fields: [recipientId], references: [id])
+  actor       Employee? @relation("NotificationActor", fields: [actorId], references: [id])
+
+  report      Report? @relation(fields: [reportId], references: [id])
+  message     ReportMessage? @relation(fields: [messageId], references: [id])
+
+  privateConversation PrivateConversation? @relation(fields: [privateConversationId], references: [id])
+  privateMessage      PrivateMessage? @relation(fields: [privateMessageId], references: [id])
+
+  @@index([recipientId])
+  @@index([actorId])
+  @@index([reportId])
+  @@index([messageId])
+  @@index([privateConversationId])
+  @@index([privateMessageId])
+  @@index([readAt])
+  @@index([createdAt])
+}
+
+model PrivateConversation {
+  id           Int      @id @default(autoincrement())
+
+  participants PrivateConversationParticipant[]
+  messages     PrivateMessage[]
+  notifications Notification[]
+
+  createdAt    DateTime @default(now())
+  updatedAt    DateTime @updatedAt
+
+  @@index([updatedAt])
+}
+
+model PrivateConversationParticipant {
+  id             Int      @id @default(autoincrement())
+
+  conversationId Int
+  employeeId     Int
+
+  conversation   PrivateConversation @relation(fields: [conversationId], references: [id])
+  employee       Employee            @relation(fields: [employeeId], references: [id])
+
+  createdAt      DateTime @default(now())
+
+  @@unique([conversationId, employeeId])
+  @@index([conversationId])
+  @@index([employeeId])
+}
+
+model PrivateMessage {
+  id             Int      @id @default(autoincrement())
+
+  conversationId Int
+  senderId       Int
+
+  message        String
+  mediaUrl       String?
+  publicId       String?
+  resourceType   String? @default("text")
+
+  conversation   PrivateConversation @relation(fields: [conversationId], references: [id])
+  sender         Employee            @relation(fields: [senderId], references: [id])
+
+  reads          PrivateMessageRead[]
+  notifications  Notification[]
+
+  createdAt      DateTime @default(now())
+
+  @@index([conversationId])
+  @@index([senderId])
+  @@index([createdAt])
+}
+
+model PrivateMessageRead {
+  id              Int      @id @default(autoincrement())
+
+  conversationId  Int
+  employeeId      Int
+  lastReadMessageId Int?
+
+  employee        Employee @relation(fields: [employeeId], references: [id])
+  lastReadMessage PrivateMessage? @relation(fields: [lastReadMessageId], references: [id])
+
+  updatedAt       DateTime @updatedAt
+  createdAt       DateTime @default(now())
+
+  @@unique([conversationId, employeeId])
+  @@index([conversationId])
   @@index([employeeId])
 }
 

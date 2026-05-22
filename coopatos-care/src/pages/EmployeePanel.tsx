@@ -32,7 +32,9 @@ import {
   Mic,
   Square,
   Trash2,
-  Images
+  Images,
+  Bell,
+  Users
 } from "lucide-react";
 
 import { Button } from "@/components/ui/button";
@@ -143,6 +145,24 @@ type EmployeeOption = {
   name: string;
   registrationNumber: string;
   department?: string | null;
+};
+
+type AppNotification = {
+  id: number;
+  recipientId: number;
+  actorId?: number | null;
+  type: string;
+  title: string;
+  body?: string | null;
+  reportId?: number | null;
+  messageId?: number | null;
+  readAt?: string | null;
+  createdAt: string;
+  actor?: {
+    id: number;
+    name: string;
+    department?: string | null;
+  } | null;
 };
 
 const categoryIcons: Record<string, React.ReactNode> = {
@@ -274,6 +294,13 @@ const [isMobileTabs, setIsMobileTabs] = useState(false);
   const [showLogoutConfirm, setShowLogoutConfirm] = useState(false);
 
   const [showParticipantModal, setShowParticipantModal] = useState(false);
+  const [showQuickMenu, setShowQuickMenu] = useState(false);
+  const [showNotificationsPanel, setShowNotificationsPanel] = useState(false);
+  const [showTeamPanel, setShowTeamPanel] = useState(false);
+  const [teamEmployees, setTeamEmployees] = useState<EmployeeOption[]>([]);
+  const [teamSearch, setTeamSearch] = useState("");
+  const [teamDepartmentFilter, setTeamDepartmentFilter] = useState("all");
+  const [notifications, setNotifications] = useState<AppNotification[]>([]);
   const [employees, setEmployees] = useState<EmployeeOption[]>([]);
   const [employeeSearch, setEmployeeSearch] = useState("");
   const [addingParticipant, setAddingParticipant] = useState(false);
@@ -302,6 +329,7 @@ const [isMobileTabs, setIsMobileTabs] = useState(false);
   const [showChatMediaModal, setShowChatMediaModal] = useState(false);
   const [showFilters, setShowFilters] = useState(false);
   const [messageSearchTerm, setMessageSearchTerm] = useState("");
+  const [onlineEmployeeIds, setOnlineEmployeeIds] = useState<number[]>([]);
   const [currentSearchIndex, setCurrentSearchIndex] = useState(0);
   const [editReferencePoint, setEditReferencePoint] = useState("");
   const employeeName = employee.name || "";
@@ -450,15 +478,71 @@ const handleTabDragEnd = (_: unknown, info: { offset: { x: number } }) => {
 
   useEffect(() => {
   socketRef.current = io(API_URL, {
-    transports: ["polling", "websocket"],
-    reconnectionAttempts: 5,
-  });
+  transports: ["polling", "websocket"],
+  reconnectionAttempts: 5,
+ query: {
+  employeeId: employee.id,
+  sessionToken: localStorage.getItem("employeeSessionToken") || "",
+},
+});
 
   return () => {
     socketRef.current?.disconnect();
     socketRef.current = null;
   };
 }, [API_URL]);
+
+useEffect(() => {
+  if (!socketRef.current) return;
+
+  const socket = socketRef.current;
+
+  const handlePresenceUpdate = (
+    data: { onlineEmployeeIds: number[] }
+  ) => {
+    setOnlineEmployeeIds(data.onlineEmployeeIds || []);
+  };
+
+  socket.on("presence-updated", handlePresenceUpdate);
+
+  const handleNotificationCreated = (notification: AppNotification) => {
+  setNotifications((prev) => [notification, ...prev]);
+};
+
+socket.on("notification-created", handleNotificationCreated);
+
+const handleForceLogout = (data: {
+  reason?: string;
+  sessionToken?: string;
+}) => {
+  const currentToken = localStorage.getItem("employeeSessionToken");
+
+  if (data.sessionToken && data.sessionToken === currentToken) return;
+
+  localStorage.removeItem("lastActivityAt");
+  localStorage.removeItem("employee");
+  localStorage.removeItem("employeeSessionToken");
+  sessionStorage.removeItem("welcomeShown");
+
+  logout();
+  navigate("/", { replace: true });
+
+  toast({
+    title: "Sessão encerrada",
+    description:
+      data.reason || "Sua conta foi acessada em outro local.",
+    variant: "destructive",
+  });
+};
+
+socket.on("force-logout", handleForceLogout);
+
+  return () => {
+    socket.off("presence-updated", handlePresenceUpdate);
+    socket.off("notification-created", handleNotificationCreated);
+    socket.off("force-logout", handleForceLogout);
+  };
+}, []);
 
 useEffect(() => {
   if (!socketRef.current) return;
@@ -558,7 +642,9 @@ participatingData.forEach((report: Report) => {
       }
     }
 
-    loadData();
+loadData();
+loadNotifications();
+loadTeamEmployees();
   }, [toast,API_URL]);
 
   const filteredReports = myReports.filter((report) => {
@@ -632,6 +718,33 @@ const filteredAllReports = allReports.filter((report) => {
     categoryFilter === "all" || String(report.category.id) === categoryFilter;
 
   return matchesSearch && matchesStatus && matchesCategory;
+});
+
+const unreadNotificationsCount = notifications.filter(
+  (notification) => !notification.readAt
+).length;
+
+const teamDepartments = Array.from(
+  new Set(
+    teamEmployees
+      .map((emp) => emp.department)
+      .filter(Boolean)
+  )
+);
+
+const filteredTeamEmployees = teamEmployees.filter((emp) => {
+  const search = teamSearch.toLowerCase();
+
+  const matchesSearch =
+    emp.name.toLowerCase().includes(search) ||
+    emp.registrationNumber.includes(search) ||
+    emp.department?.toLowerCase().includes(search);
+
+  const matchesDepartment =
+    teamDepartmentFilter === "all" ||
+    emp.department === teamDepartmentFilter;
+
+  return matchesSearch && matchesDepartment;
 });
 
 const messageSearchResults = messages.filter((msg) =>
@@ -885,6 +998,104 @@ const loadMessages = async (reportId: number) => {
     setLoadingMessages(false);
   }
 };
+
+const loadTeamEmployees = async () => {
+  try {
+    const response = await fetch(`${API_URL}/employees/team`);
+    const data = await response.json();
+
+    setTeamEmployees(data);
+  } catch (error) {
+    console.error(error);
+    toast({
+      title: "Erro ao carregar equipe",
+      variant: "destructive",
+    });
+  }
+};
+
+const loadNotifications = async () => {
+  const employee = JSON.parse(localStorage.getItem("employee") || "{}");
+
+  if (!employee.id) return;
+
+  try {
+    const response = await fetch(`${API_URL}/notifications/${employee.id}`);
+    const data = await response.json();
+
+    setNotifications(data);
+  } catch (error) {
+    console.error(error);
+  }
+};
+
+const markNotificationAsRead = async (notificationId: number) => {
+  try {
+    await fetch(`${API_URL}/notifications/${notificationId}/read`, {
+      method: "POST",
+    });
+
+    setNotifications((prev) =>
+      prev.map((notification) =>
+        notification.id === notificationId
+          ? {
+              ...notification,
+              readAt: new Date().toISOString(),
+            }
+          : notification
+      )
+    );
+  } catch (error) {
+    console.error(error);
+  }
+};
+
+const markAllNotificationsAsRead = async () => {
+  const employee = JSON.parse(localStorage.getItem("employee") || "{}");
+
+  if (!employee.id) return;
+
+  try {
+    await fetch(`${API_URL}/notifications/${employee.id}/read-all`, {
+      method: "POST",
+    });
+
+    setNotifications((prev) =>
+      prev.map((notification) => ({
+        ...notification,
+        readAt: notification.readAt || new Date().toISOString(),
+      }))
+    );
+  } catch (error) {
+    console.error(error);
+  }
+};
+
+const openNotification = async (notification: AppNotification) => {
+  await markNotificationAsRead(notification.id);
+
+  if (notification.reportId) {
+    const report =
+      [...myReports, ...allReports].find(
+        (item) => item.id === notification.reportId
+      ) || null;
+
+    if (report) {
+      openReportDetails(report);
+
+      setShowNotificationsPanel(false);
+      setShowQuickMenu(false);
+
+      if (notification.messageId) {
+        setTimeout(() => {
+          scrollToMessage(notification.messageId!);
+        }, 700);
+      }
+    }
+  }
+};
+
+
 
 const loadEmployees = async () => {
   try {
@@ -1889,8 +2100,9 @@ useEffect(() => {
     if (inactiveTime > INACTIVITY_LIMIT) {
       sessionStorage.removeItem("welcomeShown");
       localStorage.removeItem("employee");
-      logout();
-      navigate("/");
+localStorage.removeItem("employeeSessionToken");
+logout();
+navigate("/", { replace: true });
     }
   };
 
@@ -1930,8 +2142,11 @@ useEffect(() => {
   localStorage.removeItem("lastActivityAt");
   sessionStorage.removeItem("welcomeShown");
   localStorage.removeItem("employee");
+  localStorage.removeItem("employeeSessionToken");
+
   logout();
-  navigate("/");
+
+  navigate("/", { replace: true });
 };
   const openReportDetails = (report: Report) => {
   setShowMessageSearch(false);
@@ -4149,6 +4364,292 @@ touch-manipulation
                   </div>
                 </div>
               ))}
+            </div>
+          )}
+        </div>
+      </motion.div>
+    </motion.div>
+  )}
+</AnimatePresence>
+
+<div className="fixed bottom-5 right-5 z-[9000]">
+  <AnimatePresence>
+    {showQuickMenu && (
+      <motion.div
+        initial={{ opacity: 0, y: 12, scale: 0.95 }}
+        animate={{ opacity: 1, y: 0, scale: 1 }}
+        exit={{ opacity: 0, y: 12, scale: 0.95 }}
+        className="mb-3 space-y-2"
+      >
+        <button
+          type="button"
+          onClick={() => {
+            setShowNotificationsPanel(true);
+            setShowQuickMenu(false);
+          }}
+          className="relative flex w-48 items-center gap-3 rounded-2xl border border-border bg-card px-4 py-3 text-sm font-medium shadow-lg"
+        >
+          <Bell className="h-4 w-4" />
+          Notificações
+
+          {unreadNotificationsCount > 0 && (
+            <span className="ml-auto flex h-5 min-w-5 items-center justify-center rounded-full bg-red-500 px-1 text-[11px] font-bold text-white">
+              {unreadNotificationsCount}
+            </span>
+          )}
+        </button>
+
+        <button
+          type="button"
+          onClick={() => {
+  setShowTeamPanel(true);
+  setShowQuickMenu(false);
+  loadTeamEmployees();
+}}
+          className="flex w-48 items-center gap-3 rounded-2xl border border-border bg-card px-4 py-3 text-sm font-medium shadow-lg"
+        >
+          <Users className="h-4 w-4" />
+          Equipe
+        </button>
+      </motion.div>
+    )}
+  </AnimatePresence>
+
+  <button
+    type="button"
+    onClick={() => setShowQuickMenu((prev) => !prev)}
+    className="relative flex h-14 w-14 items-center justify-center rounded-full bg-secondary text-white shadow-2xl"
+  >
+    <Plus
+      className={`h-7 w-7 transition-transform ${
+        showQuickMenu ? "rotate-45" : ""
+      }`}
+    />
+
+    {unreadNotificationsCount > 0 && (
+      <span className="absolute -right-1 -top-1 flex h-6 min-w-6 items-center justify-center rounded-full bg-red-500 px-1 text-xs font-bold text-white">
+        {unreadNotificationsCount}
+      </span>
+    )}
+  </button>
+</div>
+
+<AnimatePresence>
+  {showNotificationsPanel && (
+    <motion.div
+      className="fixed inset-0 z-[9100] bg-black/50 flex items-end sm:items-center justify-center p-4"
+      initial={{ opacity: 0 }}
+      animate={{ opacity: 1 }}
+      exit={{ opacity: 0 }}
+      onClick={() => setShowNotificationsPanel(false)}
+    >
+      <motion.div
+        initial={{ opacity: 0, y: 40, scale: 0.98 }}
+        animate={{ opacity: 1, y: 0, scale: 1 }}
+        exit={{ opacity: 0, y: 40, scale: 0.98 }}
+        onClick={(e) => e.stopPropagation()}
+        className="w-full max-w-md max-h-[80vh] overflow-hidden rounded-3xl bg-card shadow-2xl border border-border flex flex-col"
+      >
+        <div className="flex items-center justify-between border-b border-border p-4">
+          <div>
+            <h2 className="text-lg font-bold">Notificações</h2>
+            <p className="text-xs text-muted-foreground">
+              {unreadNotificationsCount} não lida
+              {unreadNotificationsCount !== 1 ? "s" : ""}
+            </p>
+          </div>
+
+          <div className="flex items-center gap-2">
+            {notifications.length > 0 && (
+              <button
+                type="button"
+                onClick={markAllNotificationsAsRead}
+                className="text-xs font-medium text-secondary hover:underline"
+              >
+                Marcar todas
+              </button>
+            )}
+
+            <button
+              type="button"
+              onClick={() => setShowNotificationsPanel(false)}
+              className="flex h-9 w-9 items-center justify-center rounded-full bg-red-50 text-red-600 hover:bg-red-100"
+            >
+              <X className="h-5 w-5" />
+            </button>
+          </div>
+        </div>
+
+        <div className="overflow-y-auto p-3">
+          {notifications.length === 0 ? (
+            <p className="py-10 text-center text-sm text-muted-foreground">
+              Nenhuma notificação ainda.
+            </p>
+          ) : (
+            <div className="space-y-2">
+              {notifications.map((notification) => (
+                <button
+                  key={notification.id}
+                  type="button"
+                  onClick={() => openNotification(notification)}
+                  className={`w-full rounded-2xl border p-3 text-left transition ${
+                    notification.readAt
+                      ? "border-border bg-muted/30"
+                      : "border-secondary/40 bg-secondary/10"
+                  }`}
+                >
+                  <div className="flex items-start gap-3">
+                    <div
+                      className={`mt-1 h-2.5 w-2.5 rounded-full ${
+                        notification.readAt
+                          ? "bg-muted-foreground/40"
+                          : "bg-red-500"
+                      }`}
+                    />
+
+                    <div className="min-w-0 flex-1">
+                      <p className="text-sm font-semibold">
+                        {notification.title}
+                      </p>
+
+                      {notification.body && (
+                        <p className="mt-1 text-xs text-muted-foreground">
+                          {notification.body}
+                        </p>
+                      )}
+
+                      <p className="mt-2 text-[11px] text-muted-foreground">
+                        {new Date(notification.createdAt).toLocaleString(
+                          "pt-BR"
+                        )}
+                      </p>
+                    </div>
+                  </div>
+                </button>
+              ))}
+            </div>
+          )}
+        </div>
+      </motion.div>
+    </motion.div>
+  )}
+</AnimatePresence>
+
+<AnimatePresence>
+  {showTeamPanel && (
+    <motion.div
+      className="fixed inset-0 z-[9100] bg-black/50 flex items-end sm:items-center justify-center p-4"
+      initial={{ opacity: 0 }}
+      animate={{ opacity: 1 }}
+      exit={{ opacity: 0 }}
+      onClick={() => setShowTeamPanel(false)}
+    >
+      <motion.div
+        initial={{ opacity: 0, y: 40, scale: 0.98 }}
+        animate={{ opacity: 1, y: 0, scale: 1 }}
+        exit={{ opacity: 0, y: 40, scale: 0.98 }}
+        onClick={(e) => e.stopPropagation()}
+        className="w-full max-w-md max-h-[80vh] overflow-hidden rounded-3xl bg-card shadow-2xl border border-border flex flex-col"
+      >
+        <div className="flex items-center justify-between border-b border-border p-4">
+          <div>
+            <h2 className="text-lg font-bold">Equipe</h2>
+            <p className="text-xs text-muted-foreground">
+              {filteredTeamEmployees.length} funcionário
+              {filteredTeamEmployees.length !== 1 ? "s" : ""}
+            </p>
+          </div>
+
+          <button
+            type="button"
+            onClick={() => setShowTeamPanel(false)}
+            className="flex h-9 w-9 items-center justify-center rounded-full bg-red-50 text-red-600 hover:bg-red-100"
+          >
+            <X className="h-5 w-5" />
+          </button>
+        </div>
+
+        <div className="border-b border-border p-3 space-y-2">
+          <Input
+            value={teamSearch}
+            onChange={(e) => setTeamSearch(e.target.value)}
+            placeholder="Buscar por nome, matrícula ou setor..."
+            className="h-10"
+          />
+
+          <Select
+            value={teamDepartmentFilter}
+            onValueChange={setTeamDepartmentFilter}
+          >
+            <SelectTrigger className="h-10">
+              <SelectValue placeholder="Filtrar por departamento" />
+            </SelectTrigger>
+
+            <SelectContent>
+              <SelectItem value="all">Todos os departamentos</SelectItem>
+
+              {teamDepartments.map((department) => (
+                <SelectItem key={department} value={department!}>
+                  {department}
+                </SelectItem>
+              ))}
+            </SelectContent>
+          </Select>
+        </div>
+
+        <div className="overflow-y-auto p-3">
+          {filteredTeamEmployees.length === 0 ? (
+            <p className="py-10 text-center text-sm text-muted-foreground">
+              Nenhum funcionário encontrado.
+            </p>
+          ) : (
+            <div className="space-y-2">
+              {filteredTeamEmployees.map((emp) => {
+                const isOnline = onlineEmployeeIds.includes(emp.id);
+
+                return (
+                  <div
+                    key={emp.id}
+                    className="flex items-center justify-between gap-3 rounded-2xl border border-border bg-muted/30 p-3"
+                  >
+                    <div className="flex min-w-0 items-center gap-3">
+                      <span
+                        className={`h-3 w-3 shrink-0 rounded-full ${
+                          isOnline ? "bg-green-500" : "bg-red-500"
+                        }`}
+                        title={isOnline ? "Online" : "Offline"}
+                      />
+
+                      <div className="min-w-0">
+                        <p className="truncate text-sm font-semibold">
+                          {emp.name}
+                        </p>
+
+                        <p className="truncate text-xs text-muted-foreground">
+                          {emp.department || "Sem departamento"} • Matrícula{" "}
+                          {emp.registrationNumber}
+                        </p>
+                      </div>
+                    </div>
+
+                    <Button
+                      type="button"
+                      size="sm"
+                      variant="outline"
+                      className="h-8 shrink-0"
+                      onClick={() => {
+                        toast({
+                          title: "Chat privado",
+                          description:
+                            "A próxima etapa será abrir conversa particular.",
+                        });
+                      }}
+                    >
+                      Conversar
+                    </Button>
+                  </div>
+                );
+              })}
             </div>
           )}
         </div>
