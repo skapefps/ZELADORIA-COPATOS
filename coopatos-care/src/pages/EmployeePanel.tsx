@@ -701,6 +701,12 @@ useEffect(() => {
 }, []);
 
 useEffect(() => {
+  if (!showPrivateChatModal) return;
+
+  scrollPrivateMessagesToBottom();
+}, [privateMessages.length, showPrivateChatModal]);
+
+useEffect(() => {
   const employee = localStorage.getItem("employee");
 
   if (!employee) {
@@ -939,11 +945,20 @@ const scrollMessagesToBottom = () => {
 const scrollPrivateMessagesToBottom = () => {
   requestAnimationFrame(() => {
     setTimeout(() => {
+      const container = privateMessagesContainerRef.current;
+
+      if (container) {
+        container.scrollTo({
+          top: container.scrollHeight,
+          behavior: "smooth",
+        });
+      }
+
       privateMessagesEndRef.current?.scrollIntoView({
         behavior: "smooth",
         block: "end",
       });
-    }, 80);
+    }, 120);
   });
 };
 
@@ -999,9 +1014,11 @@ useEffect(() => {
   };
 
   document.addEventListener("click", handleClickOutside);
+  document.addEventListener("touchend", handleClickOutside);
 
   return () => {
     document.removeEventListener("click", handleClickOutside);
+    document.removeEventListener("touchend", handleClickOutside);
   };
 }, []);
 
