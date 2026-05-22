@@ -3049,38 +3049,39 @@ className="flex absolute top-1 right-1 z-20 h-8 w-8 items-center justify-center 
           )}
 
           {messageMenuId === msg.id && (
-            <div
-  ref={messageMenuRef}
-  className={`absolute z-40 top-8 ${
-                isMine ? "right-2" : "left-2"
-              } w-44 rounded-xl border border-border bg-card text-foreground shadow-xl overflow-hidden`}
-            >
+  <div
+    ref={messageMenuRef}
+    onPointerDown={(e) => e.stopPropagation()}
+    className={`absolute z-40 top-8 ${
+      isMine ? "right-2" : "left-2"
+    } w-44 rounded-xl border border-border bg-card text-foreground shadow-xl overflow-hidden`}
+  >
               <button
-                type="button"
-                onClick={() => {
-                  setReplyingTo(msg);
-                  setMessageMenuId(null);
-                }}
-                className="w-full flex items-center gap-2 px-3 py-2 text-sm hover:bg-muted"
-              >
-                <Reply className="w-4 h-4" />
-                Responder
-              </button>
+  type="button"
+  onClick={() => {
+    setReplyingTo(msg);
+    setMessageMenuId(null);
+  }}
+  className="w-full flex items-center gap-2 px-3 py-2 text-sm hover:bg-muted"
+>
+  <Reply className="w-4 h-4" />
+  Responder
+</button>
 
               {isMine && (
                 <>
                   <button
-                    type="button"
-                    onClick={() => {
-                      setEditingMessageId(msg.id);
-                      setEditingMessageText(msg.message);
-                      setMessageMenuId(null);
-                    }}
-                    className="w-full flex items-center gap-2 px-3 py-2 text-sm hover:bg-muted"
-                  >
-                    <Pencil className="w-4 h-4" />
-                    Editar
-                  </button>
+  type="button"
+  onClick={() => {
+    setEditingMessageId(msg.id);
+    setEditingMessageText(msg.message);
+    setMessageMenuId(null);
+  }}
+  className="w-full flex items-center gap-2 px-3 py-2 text-sm hover:bg-muted"
+>
+  <Pencil className="w-4 h-4" />
+  Editar
+</button>
 
                   <button
                     type="button"
