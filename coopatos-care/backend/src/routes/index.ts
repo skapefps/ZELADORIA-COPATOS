@@ -1,4 +1,5 @@
 import { Router } from "express";
+import { io } from "../server.js";
 import { prisma } from "../prisma/client.js";
 import nodemailer from "nodemailer";
 import { v2 as cloudinary } from "cloudinary";
@@ -558,7 +559,7 @@ router.post("/reports/:id/messages", async (req, res) => {
 },
     include: messageInclude,
   });
-
+  io.to(`report-${reportId}`).emit("new-message", newMessage);
   return res.status(201).json(newMessage);
 });
 
@@ -742,7 +743,11 @@ router.post("/reports/:id/mark-read", async (req, res) => {
       lastReadMessageId: lastMessage?.id || null,
     },
   });
-
+  io.to(`report-${reportId}`).emit("messages-read", {
+  reportId,
+  employeeId: Number(employeeId),
+  lastReadMessageId: lastMessage?.id || null,
+});
   return res.json({
     message: "Conversa marcada como lida.",
   });

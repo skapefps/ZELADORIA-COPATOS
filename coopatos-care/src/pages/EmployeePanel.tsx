@@ -1,8 +1,9 @@
 import React, { useEffect, useRef, useState } from "react";
 import { useNavigate } from "react-router-dom";
+import { io } from "socket.io-client";
 import EmojiPicker, { Theme } from "emoji-picker-react";
 import { useAuth } from "@/contexts/AuthContext";
-import { motion, AnimatePresence } from "framer-motion";
+import { motion, AnimatePresence, useMotionValue, animate } from "framer-motion";
 import {
   Camera,
   MapPin,
@@ -29,6 +30,7 @@ import {
   Filter,
   X,
   Trash2,
+  Images
 } from "lucide-react";
 
 import { Button } from "@/components/ui/button";
@@ -200,7 +202,20 @@ const API_URL =
   window.location.hostname === "127.0.0.1"
     ? "http://localhost:3333"
     : import.meta.env.VITE_API_URL || "https://zeladoria-coopatos-api.onrender.com";
+
+  const socketRef = useRef<ReturnType<typeof io> | null>(null);
   const [selectedFiles, setSelectedFiles] = useState<File[]>([]);
+  const touchStartX = useRef(0);
+ const tabsOrder: Array<"new" | "history" | "reports"> = [
+  "new",
+  "history",
+  "reports",
+];
+
+const tabX = useMotionValue(0);
+const tabsContainerRef = useRef<HTMLDivElement | null>(null);
+const [tabsContainerWidth, setTabsContainerWidth] = useState(0);
+const [isMobileTabs, setIsMobileTabs] = useState(false);
   const [readMessagesByReport, setReadMessagesByReport] = useState<Record<number, number>>({});
   const [unreadCounts, setUnreadCounts] = useState<Record<number, number>>({});
   const [address, setAddress] = useState("");
@@ -243,6 +258,7 @@ const API_URL =
   const [showMessagesModal, setShowMessagesModal] = useState(false);
   const [editDescription, setEditDescription] = useState("");
   const [showMessageSearch, setShowMessageSearch] = useState(false);
+  const [showChatMediaModal, setShowChatMediaModal] = useState(false);
   const [showFilters, setShowFilters] = useState(false);
   const [messageSearchTerm, setMessageSearchTerm] = useState("");
   const [currentSearchIndex, setCurrentSearchIndex] = useState(0);
@@ -256,9 +272,11 @@ const API_URL =
   const [sendingMessage, setSendingMessage] = useState(false);
   const navigate = useNavigate();
   const { toast } = useToast();
-  const [expandedMedia, setExpandedMedia] = useState<{
-  url: string;
-  type?: string | null;
+ const [expandedMedia, setExpandedMedia] = useState<{
+  items: {
+    mediaUrl: string;
+    resourceType?: string | null;
+  }[];
   index: number;
 } | null>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
@@ -284,10 +302,81 @@ const API_URL =
   const [searchTerm, setSearchTerm] = useState("");
   const [statusFilter, setStatusFilter] = useState("all");
   const [categoryFilter, setCategoryFilter] = useState("all");
+  useEffect(() => {
+  const updateWidth = () => {
+    setIsMobileTabs(window.innerWidth < 768);
+
+    if (tabsContainerRef.current) {
+      setTabsContainerWidth(tabsContainerRef.current.offsetWidth);
+    }
+  };
+
+  updateWidth();
+
+  window.addEventListener("resize", updateWidth);
+
+  return () => {
+    window.removeEventListener("resize", updateWidth);
+  };
+}, []);
+
+useEffect(() => {
+  const currentIndex = tabsOrder.indexOf(tab);
+
+  if (!tabsContainerWidth) return;
+
+  animate(tabX, -currentIndex * tabsContainerWidth, {
+    type: "spring",
+    stiffness: 280,
+    damping: 32,
+  });
+}, [tab, tabsContainerWidth]);
+
+const handleTabDragEnd = (_: unknown, info: { offset: { x: number } }) => {
+  if (!tabsContainerWidth) return;
+
+  const currentIndex = tabsOrder.indexOf(tab);
+  const dragDistance = info.offset.x;
+  const limit = tabsContainerWidth * 0.18;
+
+  if (dragDistance < -limit) {
+    const nextIndex = Math.min(currentIndex + 1, tabsOrder.length - 1);
+    setTab(tabsOrder[nextIndex]);
+    setShowFilters(false);
+    window.scrollTo(0, 0);
+    return;
+  }
+
+  if (dragDistance > limit) {
+    const previousIndex = Math.max(currentIndex - 1, 0);
+    setTab(tabsOrder[previousIndex]);
+    setShowFilters(false);
+    window.scrollTo(0, 0);
+    return;
+  }
+
+  animate(tabX, -currentIndex * tabsContainerWidth, {
+    type: "spring",
+    stiffness: 280,
+    damping: 32,
+  });
+};
 
   // =========================
   // Load categories and reports
   // =========================
+
+  useEffect(() => {
+  socketRef.current = io(API_URL, {
+    transports: ["polling", "websocket"],
+    reconnectionAttempts: 5,
+  });
+
+  return () => {
+    socketRef.current?.disconnect();
+    socketRef.current = null;
+  };
+}, [API_URL]);
 
   useEffect(() => {
   window.scrollTo({
@@ -497,7 +586,7 @@ const loadUnreadCount = async (reportId: number) => {
 
     setUnreadCounts((prev) => ({
   ...prev,
-  [reportId]: 0,
+  [reportId]: data.unreadCount || 0,
 }));
   } catch (error) {
     console.error(error);
@@ -591,15 +680,55 @@ const loadTypingUsers = async () => {
 useEffect(() => {
   if (!showMessagesModal || !selectedReport) return;
 
-  const interval = setInterval(async () => {
-    await loadMessages(selectedReport.id);
-
-    if (isNearBottomRef.current) {
-      await markMessagesAsRead(selectedReport.id);
-    }
+  const interval = setInterval(() => {
+    loadTypingUsers();
   }, 1000);
 
   return () => clearInterval(interval);
+}, [showMessagesModal, selectedReport?.id]);
+
+useEffect(() => {
+  if (!showMessagesModal || !selectedReport || !socketRef.current) return;
+
+  const socket = socketRef.current;
+
+  socket.emit("join-report", selectedReport.id);
+
+  socket.on("new-message", (message: ReportMessage) => {
+    setMessages((prev) => {
+      if (prev.some((msg) => msg.id === message.id)) return prev;
+      return [...prev, message];
+    });
+
+    lastMessageIdRef.current = message.id;
+
+    if (message.senderId !== employee.id) {
+      if (isNearBottomRef.current) {
+        markMessagesAsRead(selectedReport.id);
+        jumpMessagesToBottom();
+      } else {
+        setNewMessagesCount((prev) => prev + 1);
+      }
+    }
+  });
+
+  socket.on("messages-read", ({ employeeId, lastReadMessageId }) => {
+    setMessages((prev) =>
+      prev.map((msg) => ({
+        ...msg,
+        readByEmployeeIds:
+          lastReadMessageId && msg.id <= lastReadMessageId
+            ? Array.from(new Set([...(msg.readByEmployeeIds || []), employeeId]))
+            : msg.readByEmployeeIds,
+      }))
+    );
+  });
+
+  return () => {
+    socket.emit("leave-report", selectedReport.id);
+    socket.off("new-message");
+    socket.off("messages-read");
+  };
 }, [showMessagesModal, selectedReport?.id]);
 const loadMessages = async (reportId: number) => {
   setLoadingMessages(true);
@@ -924,7 +1053,10 @@ const mediaItems = chatFiles.length
       return;
     }
 
-    setMessages((prev) => [...prev, data]);
+    setMessages((prev) => {
+  if (prev.some((msg) => msg.id === data.id)) return prev;
+  return [...prev, data];
+});
 
 lastMessageIdRef.current = data.id;
 
@@ -1716,7 +1848,7 @@ const renderMessages = () => {
 
           {msg.media && msg.media.length > 0 && (
   <div className="mb-2 grid gap-2">
-    {msg.media.map((item) => (
+    {msg.media.map((item, index) => (
       <div
         key={item.id}
         className="overflow-hidden rounded-xl border border-gray-200"
@@ -1734,7 +1866,16 @@ const renderMessages = () => {
     "/upload/w_600,q_auto,f_auto/"
   )}
   alt="Mídia da mensagem"
-  className="max-h-64 w-full object-cover"
+  className="max-h-64 w-full cursor-pointer object-cover"
+  onClick={() =>
+  setExpandedMedia({
+  items: chatMedia.map((media) => ({
+    mediaUrl: media.mediaUrl,
+    resourceType: media.resourceType,
+  })),
+  index,
+})
+}
 />
         )}
       </div>
@@ -1831,110 +1972,16 @@ const getStatusStyle = (status: string) => {
   return statusColors[status] || "bg-gray-100 text-gray-700 border-gray-200";
 };
 
-  return (
-      <div className="min-h-screen bg-background">
-  <div className="mx-auto w-full max-w-lg lg:max-w-6xl lg:px-8"></div>
-      {/* Header */}
-     <header className="sticky top-0 z-[600] gradient-primary px-4 py-3 flex items-center justify-between">
-        <div className="flex items-center gap-2">
-          <img
-            src="/logo-coopatos.png"
-            alt="Logo Coopatos"
-            className="w-20 h-20 rounded-xl"
-          />
-          <div>
-            <h1 className="text-primary-foreground font-bold text-lg">
-              Zeladoria Coopatos
-            </h1>
-            <p className="text-primary-foreground/60 text-xs">
-                  {employeeName}
-            </p>
+const chatMedia = messages.flatMap((msg) =>
+  (msg.media || []).map((media) => ({
+    ...media,
+    messageId: msg.id,
+    senderName: msg.senderName,
+    createdAt: msg.createdAt,
+  }))
+);
 
-            <p className="text-primary-foreground/50 text-[11px]">
-                Matrícula: {matricula}
-          </p>
-          </div>
-        </div>
-
-        <button
-  onClick={() => setShowLogoutConfirm(true)}
-  className="text-red-400 hover:text-red-500 transition-colors"
-  title="Sair"
->
-  <LogOut className="w-5 h-5" />
-</button>
-      </header>
-
-      {/* Tabs */}
-<div className="sticky top-[104px] z-[500] flex border-b border-border bg-card shadow-sm pointer-events-auto">
-        <button
-  onClick={() => {
-  setTab("new");
-  setShowFilters(false);
-  window.scrollTo(0, 0);
-}}
-  className={`relative flex-1 py-3 text-sm font-medium flex items-center justify-center gap-2 ${
-    tab === "new" ? "text-secondary" : "text-muted-foreground"
-  }`}
->
-  <Plus className="w-4 h-4" /> Novo Chamado
-
-  {tab === "new" && (
-    <motion.span
-      layoutId="activeTab"
-      className="absolute bottom-0 left-0 right-0 h-0.5 bg-secondary"
-      transition={{ type: "spring", stiffness: 450, damping: 35 }}
-    />
-  )}
-</button>
-
-        <button
-  onClick={() => {
-  setTab("history");
-  setShowFilters(false);
-  window.scrollTo(0, 0);
-}}
-  className={`relative flex-1 py-3 text-sm font-medium flex items-center justify-center gap-2 ${
-    tab === "history" ? "text-secondary" : "text-muted-foreground"
-  }`}
->
-  <List className="w-4 h-4" /> Meus Reportes ({myReports.length})
-
-  {tab === "history" && (
-    <motion.span
-      layoutId="activeTab"
-      className="absolute bottom-0 left-0 right-0 h-0.5 bg-secondary"
-      transition={{ type: "spring", stiffness: 450, damping: 35 }}
-    />
-  )}
-</button>
-        <button
-  onClick={() => {
-  setTab("reports");
-  setShowFilters(false);
-  window.scrollTo(0, 0);
-}}
-  className={`relative flex-1 py-3 text-sm font-medium flex items-center justify-center gap-2 ${
-    tab === "reports" ? "text-secondary" : "text-muted-foreground"
-  }`}
->
-  <List className="w-4 h-4" />
-  Reportes ({allReports.length})
-
-  {tab === "reports" && (
-    <motion.span
-      layoutId="activeTab"
-      className="absolute bottom-0 left-0 right-0 h-0.5 bg-secondary"
-      transition={{ type: "spring", stiffness: 450, damping: 35 }}
-    />
-  )}
-</button>
-      </div>
-
-      {/* Content */}
-      <div className="flex-1 p-4 lg:py-8">
-        <AnimatePresence mode="wait">
-          {tab === "new" ? (
+const renderNewTab = () => (
            <motion.form
   key="form"
   initial={{ opacity: 0 }}
@@ -2127,7 +2174,9 @@ const getStatusStyle = (status: string) => {
   )}
 </Button>
             </motion.form>
-                   ) : tab === "history" ? (
+);
+
+const renderHistoryTab = () => (
             <motion.div
               key="history"
               initial={{ opacity: 0 }}
@@ -2315,7 +2364,9 @@ const getStatusStyle = (status: string) => {
                 ))
               )}
             </motion.div>
-          ) : (
+);
+
+const renderReportsTab = () => (
             <motion.div
               key="reports"
               initial={{ opacity: 0 }}
@@ -2508,19 +2559,162 @@ const getStatusStyle = (status: string) => {
                 ))
               )}
             </motion.div>
-          )}
-        </AnimatePresence>
+);
+
+  return (
+      <div className="min-h-screen bg-background">
+  <div className="mx-auto w-full max-w-lg lg:max-w-6xl lg:px-8"></div>
+      {/* Header */}
+     <header className="sticky top-0 z-[600] gradient-primary px-4 py-3 flex items-center justify-between">
+        <div className="flex items-center gap-2">
+          <img
+            src="/logo-coopatos.png"
+            alt="Logo Coopatos"
+            className="w-20 h-20 rounded-xl"
+          />
+          <div>
+            <h1 className="text-primary-foreground font-bold text-lg">
+              Zeladoria Coopatos
+            </h1>
+            <p className="text-primary-foreground/60 text-xs">
+                  {employeeName}
+            </p>
+
+            <p className="text-primary-foreground/50 text-[11px]">
+                Matrícula: {matricula}
+          </p>
+          </div>
+        </div>
+
+        <button
+  onClick={() => setShowLogoutConfirm(true)}
+  className="text-red-400 hover:text-red-500 transition-colors"
+  title="Sair"
+>
+  <LogOut className="w-5 h-5" />
+</button>
+      </header>
+
+      {/* Tabs */}
+<div className="sticky top-[104px] z-[500] flex border-b border-border bg-card shadow-sm pointer-events-auto">
+        <button
+  onClick={() => {
+  setTab("new");
+  setShowFilters(false);
+  window.scrollTo(0, 0);
+}}
+  className={`relative flex-1 py-3 text-sm font-medium flex items-center justify-center gap-2 ${
+    tab === "new" ? "text-secondary" : "text-muted-foreground"
+  }`}
+>
+  <Plus className="w-4 h-4" /> Novo Chamado
+
+  {tab === "new" && (
+    <motion.span
+      layoutId="activeTab"
+      className="absolute bottom-0 left-0 right-0 h-0.5 bg-secondary"
+      transition={{ type: "spring", stiffness: 450, damping: 35 }}
+    />
+  )}
+</button>
+
+        <button
+  onClick={() => {
+  setTab("history");
+  setShowFilters(false);
+  window.scrollTo(0, 0);
+}}
+  className={`relative flex-1 py-3 text-sm font-medium flex items-center justify-center gap-2 ${
+    tab === "history" ? "text-secondary" : "text-muted-foreground"
+  }`}
+>
+  <List className="w-4 h-4" /> Meus Reportes ({myReports.length})
+
+  {tab === "history" && (
+    <motion.span
+      layoutId="activeTab"
+      className="absolute bottom-0 left-0 right-0 h-0.5 bg-secondary"
+      transition={{ type: "spring", stiffness: 450, damping: 35 }}
+    />
+  )}
+</button>
+        <button
+  onClick={() => {
+  setTab("reports");
+  setShowFilters(false);
+  window.scrollTo(0, 0);
+}}
+  className={`relative flex-1 py-3 text-sm font-medium flex items-center justify-center gap-2 ${
+    tab === "reports" ? "text-secondary" : "text-muted-foreground"
+  }`}
+>
+  <List className="w-4 h-4" />
+  Reportes ({allReports.length})
+
+  {tab === "reports" && (
+    <motion.span
+      layoutId="activeTab"
+      className="absolute bottom-0 left-0 right-0 h-0.5 bg-secondary"
+      transition={{ type: "spring", stiffness: 450, damping: 35 }}
+    />
+  )}
+</button>
+      </div>
+
+      {/* Content */}
+     <div
+  ref={tabsContainerRef}
+  className="flex-1 overflow-hidden"
+>
+        {isMobileTabs ? (
+  <motion.div
+    className="flex w-full touch-pan-y"
+    style={{ x: tabX }}
+    drag="x"
+    dragElastic={0.05}
+    dragMomentum={false}
+    dragConstraints={{
+      left: -tabsContainerWidth * 2,
+      right: 0,
+    }}
+    onDragEnd={handleTabDragEnd}
+  >
+    <div className="w-full min-w-full shrink-0 p-4">
+      {renderNewTab()}
+    </div>
+
+    <div className="w-full min-w-full shrink-0 p-4">
+      {renderHistoryTab()}
+    </div>
+
+    <div className="w-full min-w-full shrink-0 p-4">
+      {renderReportsTab()}
+    </div>
+  </motion.div>
+) : (
+  <div className="p-4 lg:py-8">
+    <AnimatePresence mode="wait" initial={false}>
+      {tab === "new"
+        ? renderNewTab()
+        : tab === "history"
+        ? renderHistoryTab()
+        : renderReportsTab()}
+    </AnimatePresence>
+  </div>
+)}
 
         <AnimatePresence>
   {selectedReport && (
     <motion.div
       className="fixed inset-0 bg-black/50 flex items-center justify-center z-[2000] p-4"
+      onClick={() => setSelectedReport(null)}
       initial={{ opacity: 0 }}
       animate={{ opacity: 1 }}
       exit={{ opacity: 0 }}
     >
       <motion.div
         initial={{ opacity: 0, scale: 0.92, y: 20 }}
+        onClick={(e) => e.stopPropagation()}
         animate={{ opacity: 1, scale: 1, y: 0 }}
         exit={{ opacity: 0, scale: 0.75, y: 40 }}
         transition={{ duration: 0.18, ease: "easeInOut" }}
@@ -2565,12 +2759,14 @@ const getStatusStyle = (status: string) => {
 <button
   type="button"
   onClick={() =>
-  setExpandedMedia({
-  url: selectedReport.images![detailImageIndex].imageUrl,
-  type: selectedReport.images![detailImageIndex].resourceType,
-  index: detailImageIndex,
-})
-}
+    setExpandedMedia({
+      items: (selectedReport.images || []).map((image) => ({
+        mediaUrl: image.imageUrl,
+        resourceType: image.resourceType,
+      })),
+      index: detailImageIndex,
+    })
+  }
   className="absolute top-2 right-2 bg-black/60 hover:bg-black/80 text-white rounded-full w-9 h-9 flex items-center justify-center transition-colors"
 >
   <Expand className="w-4 h-4" />
@@ -3013,8 +3209,14 @@ if (oversizedFile) {
 </AnimatePresence>
 
 {showParticipantModal && (
-  <div className="fixed inset-0 z-[9998] bg-black/50 flex items-center justify-center p-4">
-    <div className="bg-card rounded-2xl p-5 w-full max-w-md shadow-2xl border border-border">
+  <div
+    className="fixed inset-0 z-[9998] bg-black/50 flex items-center justify-center p-4"
+    onClick={() => setShowParticipantModal(false)}
+  >
+    <div
+      className="bg-card rounded-2xl p-5 w-full max-w-md shadow-2xl border border-border"
+      onClick={(e) => e.stopPropagation()}
+    >
       <div className="flex items-center justify-between mb-4">
         <div>
           <h3 className="text-lg font-semibold">
@@ -3075,9 +3277,11 @@ if (oversizedFile) {
       initial={{ opacity: 0 }}
       animate={{ opacity: 1 }}
       exit={{ opacity: 0 }}
+      onClick={() => setShowMessagesModal(false)}
     >
       <motion.div
         initial={{ opacity: 0, scale: 0.92, y: 20 }}
+        onClick={(e) => e.stopPropagation()}
         animate={{ opacity: 1, scale: 1, y: 0 }}
         exit={{ opacity: 0, scale: 0.75, y: 40 }}
         transition={{ duration: 0.18, ease: "easeInOut" }}
@@ -3091,6 +3295,8 @@ if (oversizedFile) {
       <h2 className="text-xl sm:text-2xl font-bold text-foreground leading-tight">
         Conversas do chamado #{selectedReport.id}
       </h2>
+
+      
 
       <p className="mt-1 text-sm text-muted-foreground line-clamp-2">
         {selectedReport.title || selectedReport.description}
@@ -3113,6 +3319,20 @@ if (oversizedFile) {
           }`}
         />
       </button>
+
+      <button
+  type="button"
+  onClick={() => setShowChatMediaModal(true)}
+  className="relative flex h-10 w-10 sm:h-11 sm:w-11 items-center justify-center rounded-full border bg-muted text-muted-foreground border-border hover:bg-muted/80"
+>
+  <Images className="h-5 w-5" />
+
+  {chatMedia.length > 0 && (
+    <span className="absolute -right-1 -top-1 flex h-5 min-w-5 items-center justify-center rounded-full bg-secondary px-1 text-[10px] font-bold text-white">
+      {chatMedia.length}
+    </span>
+  )}
+</button>
 
       <button
         type="button"
@@ -3152,6 +3372,8 @@ if (oversizedFile) {
           Buscar
         </Button>
       </div>
+
+      
 
       {messageSearchTerm && (
         <div className="mt-2 flex flex-wrap items-center justify-between gap-2 text-xs text-muted-foreground">
@@ -3368,9 +3590,205 @@ if (oversizedFile) {
   )}
 </AnimatePresence>
 
+<AnimatePresence>
+  {expandedMedia && (
+    <motion.div
+      className="fixed inset-0 z-[12000] bg-black/90 flex items-center justify-center p-4"
+      initial={{ opacity: 0 }}
+      animate={{ opacity: 1 }}
+      exit={{ opacity: 0 }}
+    >
+      <button
+        type="button"
+        onClick={() => setExpandedMedia(null)}
+        className="absolute right-4 top-4 z-10 flex h-10 w-10 items-center justify-center rounded-full bg-white/10 text-white hover:bg-white/20"
+      >
+        <X className="h-6 w-6" />
+      </button>
+
+      {expandedMedia.items.length > 1 && (
+        <>
+          <button
+            type="button"
+            onClick={() =>
+              setExpandedMedia((prev) =>
+                prev
+                  ? {
+                      ...prev,
+                      index:
+                        prev.index === 0
+                          ? prev.items.length - 1
+                          : prev.index - 1,
+                    }
+                  : prev
+              )
+            }
+            className="absolute left-4 top-1/2 z-10 flex h-11 w-11 -translate-y-1/2 items-center justify-center rounded-full bg-white/10 text-3xl text-white hover:bg-white/20"
+          >
+            ‹
+          </button>
+
+          <button
+            type="button"
+            onClick={() =>
+              setExpandedMedia((prev) =>
+                prev
+                  ? {
+                      ...prev,
+                      index:
+                        prev.index === prev.items.length - 1
+                          ? 0
+                          : prev.index + 1,
+                    }
+                  : prev
+              )
+            }
+            className="
+absolute
+right-2
+sm:right-4
+top-1/2
+-ztranslate-y-1/2
+z-[10001]
+bg-black/70
+text-white
+rounded-full
+w-12
+h-12
+sm:w-10
+sm:h-10
+flex
+items-center
+justify-center
+text-3xl
+touch-manipulation
+"
+          >
+            ›
+          </button>
+
+          <div className="absolute bottom-5 left-1/2 -translate-x-1/2 rounded-full bg-white/10 px-3 py-1 text-sm text-white">
+            {expandedMedia.index + 1} / {expandedMedia.items.length}
+          </div>
+        </>
+      )}
+
+      {expandedMedia.items[expandedMedia.index]?.resourceType === "video" ? (
+        <video
+          src={expandedMedia.items[expandedMedia.index]?.mediaUrl}
+          controls
+          autoPlay
+          className="max-h-[85vh] max-w-full rounded-xl bg-black"
+        />
+      ) : (
+        <img
+          src={expandedMedia.items[expandedMedia.index]?.mediaUrl}
+          alt="Mídia ampliada"
+          className="max-h-[85vh] max-w-full rounded-xl object-contain"
+        />
+      )}
+    </motion.div>
+  )}
+</AnimatePresence>
+
+<AnimatePresence>
+  {showChatMediaModal && (
+    <motion.div
+      className="fixed inset-0 z-[11000] bg-black/60 flex items-center justify-center p-4"
+      onClick={() => setShowChatMediaModal(false)}
+      initial={{ opacity: 0 }}
+      animate={{ opacity: 1 }}
+      exit={{ opacity: 0 }}
+    >
+      <motion.div
+  initial={{ opacity: 0, scale: 0.92 }}
+  onClick={(e) => e.stopPropagation()}
+        animate={{ opacity: 1, scale: 1 }}
+        exit={{ opacity: 0, scale: 0.92 }}
+        className="w-full max-w-3xl max-h-[85vh] overflow-hidden rounded-3xl bg-card shadow-2xl border border-border flex flex-col"
+      >
+        <div className="flex items-center justify-between border-b border-border p-4">
+          <div>
+            <h2 className="text-lg font-bold">Mídias da conversa</h2>
+            <p className="text-sm text-muted-foreground">
+              {chatMedia.length} arquivo{chatMedia.length !== 1 ? "s" : ""}
+            </p>
+          </div>
+
+          <button
+            type="button"
+            onClick={() => setShowChatMediaModal(false)}
+            className="flex h-9 w-9 items-center justify-center rounded-full bg-red-50 text-red-600 hover:bg-red-100"
+          >
+            <X className="h-5 w-5" />
+          </button>
+        </div>
+
+        <div className="overflow-y-auto p-4">
+          {chatMedia.length === 0 ? (
+            <p className="py-10 text-center text-sm text-muted-foreground">
+              Nenhuma mídia enviada nesta conversa.
+            </p>
+          ) : (
+            <div className="grid grid-cols-2 sm:grid-cols-3 gap-3">
+              {chatMedia.map((item, index) => (
+                <button
+                  key={`${item.messageId}-${item.id}`}
+                  type="button"
+                  onClick={() =>
+                    setExpandedMedia({
+  items: chatMedia.map((media) => ({
+    mediaUrl: media.mediaUrl,
+    resourceType: media.resourceType,
+  })),
+  index,
+})
+                  }
+                  className="overflow-hidden rounded-xl border border-border bg-muted text-left"
+                >
+                  {item.resourceType === "video" ? (
+                    <video
+                      src={item.mediaUrl}
+                      className="h-32 w-full object-cover bg-black"
+                    />
+                  ) : (
+                    <img
+                      src={item.mediaUrl.replace(
+                        "/upload/",
+                        "/upload/w_400,q_auto,f_auto/"
+                      )}
+                      alt="Mídia da conversa"
+                      className="h-32 w-full object-cover"
+                    />
+                  )}
+
+                  <div className="p-2">
+                    <p className="truncate text-xs font-medium">
+                      {item.senderName}
+                    </p>
+                    <p className="text-[11px] text-muted-foreground">
+                      {new Date(item.createdAt).toLocaleString("pt-BR")}
+                    </p>
+                  </div>
+                </button>
+              ))}
+            </div>
+          )}
+        </div>
+      </motion.div>
+    </motion.div>
+  )}
+</AnimatePresence>
+
 {showLogoutConfirm && (
-  <div className="fixed inset-0 z-[9998] bg-black/50 flex items-center justify-center p-4">
-    <div className="bg-card rounded-2xl p-6 w-full max-w-sm shadow-2xl border border-border">
+  <div
+    className="fixed inset-0 z-[9998] bg-black/50 flex items-center justify-center p-4"
+    onClick={() => setShowLogoutConfirm(false)}
+  >
+    <div
+      className="bg-card rounded-2xl p-6 w-full max-w-sm shadow-2xl border border-border"
+      onClick={(e) => e.stopPropagation()}
+    >
       <div className="text-center">
         <div className="mx-auto mb-4 flex h-12 w-12 items-center justify-center rounded-full bg-red-100">
           <LogOut className="w-6 h-6 text-red-600" />
@@ -3430,49 +3848,84 @@ if (oversizedFile) {
   </div>
 )}
 
-{expandedMedia && selectedReport?.images && (
+{expandedMedia && (
   <div
     className="fixed inset-0 z-[9999] bg-black/90 flex items-center justify-center p-4"
     onClick={() => setExpandedMedia(null)}
-  >
-    {expandedMedia.type === "video" ? (
-      <video
-        src={expandedMedia.url}
-        controls
-        autoPlay
-        className="max-w-full max-h-full object-contain rounded-lg bg-black"
-        onClick={(e) => e.stopPropagation()}
-      />
-    ) : (
-      <img
-        src={expandedMedia.url}
-        alt="Mídia ampliada"
-        className="max-w-full max-h-full object-contain rounded-lg"
-        onClick={(e) => e.stopPropagation()}
-      />
-    )}
+    onTouchStart={(e) => {
+      touchStartX.current = e.changedTouches[0].clientX;
+    }}
+    onTouchEnd={(e) => {
+      const endX = e.changedTouches[0].clientX;
+      const diff = touchStartX.current - endX;
 
-    {selectedReport.images.length > 1 && (
+      if (!expandedMedia || expandedMedia.items.length <= 1) return;
+
+      if (diff > 50) {
+        setExpandedMedia((prev) =>
+          prev
+            ? {
+                ...prev,
+                index:
+                  prev.index === prev.items.length - 1 ? 0 : prev.index + 1,
+              }
+            : prev
+        );
+      }
+
+      if (diff < -50) {
+        setExpandedMedia((prev) =>
+          prev
+            ? {
+                ...prev,
+                index:
+                  prev.index === 0 ? prev.items.length - 1 : prev.index - 1,
+              }
+            : prev
+        );
+      }
+    }}
+  >
+
+    {expandedMedia.items.length > 1 && (
       <>
         <button
           type="button"
           onClick={(e) => {
             e.stopPropagation();
 
-            const newIndex =
-              expandedMedia.index === 0
-                ? selectedReport.images!.length - 1
-                : expandedMedia.index - 1;
-
-            const media = selectedReport.images![newIndex];
-
-            setExpandedMedia({
-              url: media.imageUrl,
-              type: media.resourceType,
-              index: newIndex,
-            });
+            setExpandedMedia((prev) =>
+              prev
+                ? {
+                    ...prev,
+                    index:
+                      prev.index === 0
+                        ? prev.items.length - 1
+                        : prev.index - 1,
+                  }
+                : prev
+            );
           }}
-          className="absolute left-4 top-1/2 -translate-y-1/2 bg-black/60 hover:bg-black/80 text-white rounded-full w-10 h-10 flex items-center justify-center text-2xl"
+          className="
+absolute
+left-2
+sm:left-4
+top-1/2
+-ztranslate-y-1/2
+z-[10001]
+bg-black/70
+text-white
+rounded-full
+w-12
+h-12
+sm:w-10
+sm:h-10
+flex
+items-center
+justify-center
+text-3xl
+touch-manipulation
+"
         >
           ‹
         </button>
@@ -3482,36 +3935,39 @@ if (oversizedFile) {
           onClick={(e) => {
             e.stopPropagation();
 
-            const newIndex =
-              expandedMedia.index === selectedReport.images!.length - 1
-                ? 0
-                : expandedMedia.index + 1;
-
-            const media = selectedReport.images![newIndex];
-
-            setExpandedMedia({
-              url: media.imageUrl,
-              type: media.resourceType,
-              index: newIndex,
-            });
+            setExpandedMedia((prev) =>
+              prev
+                ? {
+                    ...prev,
+                    index:
+                      prev.index === prev.items.length - 1
+                        ? 0
+                        : prev.index + 1,
+                  }
+                : prev
+            );
           }}
           className="absolute right-4 top-1/2 -translate-y-1/2 bg-black/60 hover:bg-black/80 text-white rounded-full w-10 h-10 flex items-center justify-center text-2xl"
         >
           ›
         </button>
+
+        <div className="absolute bottom-5 left-1/2 -translate-x-1/2 rounded-full bg-black/60 px-3 py-1 text-sm text-white">
+          {expandedMedia.index + 1} / {expandedMedia.items.length}
+        </div>
       </>
     )}
 
     <button
-  type="button"
-  onClick={(e) => {
-    e.stopPropagation();
-    downloadMedia(expandedMedia.url);
-  }}
-  className="absolute top-4 right-16 bg-black/60 hover:bg-black/80 text-white rounded-full px-4 h-10 flex items-center justify-center text-sm"
->
-  Baixar
-</button>
+      type="button"
+      onClick={(e) => {
+        e.stopPropagation();
+        downloadMedia(expandedMedia.items[expandedMedia.index]?.mediaUrl);
+      }}
+      className="absolute top-4 right-16 bg-black/60 hover:bg-black/80 text-white rounded-full px-4 h-10 flex items-center justify-center text-sm"
+    >
+      Baixar
+    </button>
 
     <button
       type="button"
