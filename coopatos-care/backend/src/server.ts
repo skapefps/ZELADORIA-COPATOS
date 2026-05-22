@@ -49,6 +49,14 @@ io.on("connection", (socket) => {
     socket.leave(`report-${reportId}`);
   });
 
+  socket.on("join-private-conversation", (conversationId) => {
+  socket.join(`private-conversation-${conversationId}`);
+});
+
+socket.on("leave-private-conversation", (conversationId) => {
+  socket.leave(`private-conversation-${conversationId}`);
+});
+
   socket.on("disconnect", () => {
     if (employeeId) {
       onlineEmployees.delete(employeeId);

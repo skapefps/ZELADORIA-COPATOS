@@ -165,6 +165,55 @@ type AppNotification = {
   } | null;
 };
 
+type PrivateConversation = {
+  id: number;
+  participants: {
+    id: number;
+    employeeId: number;
+    employee: {
+      id: number;
+      name: string;
+      department?: string | null;
+    };
+  }[];
+  messages?: PrivateMessage[];
+  createdAt: string;
+  updatedAt: string;
+  replyToMessageId?: number | null;
+};
+
+
+type PrivateMessage = {
+  id: number;
+  conversationId: number;
+  senderId: number;
+  message: string;
+  mediaUrl?: string | null;
+  publicId?: string | null;
+  resourceType?: string | null;
+  createdAt: string;
+  sender?: {
+    id: number;
+    name: string;
+    department?: string | null;
+  };
+    media?: {
+    id: number;
+    mediaUrl: string;
+    publicId?: string | null;
+    resourceType?: string | null;
+  }[];
+  replyToMessageId?: number | null;
+replyToMessage?: {
+  id: number;
+  message: string;
+  sender?: {
+    id: number;
+    name: string;
+  } | null;
+} | null;
+};
+
 const categoryIcons: Record<string, React.ReactNode> = {
   "Hídrico": <Droplets className="w-4 h-4 text-blue-500" />,
   "Elétrico": <Zap className="w-4 h-4 text-yellow-500" />,
@@ -245,7 +294,7 @@ const AudioMessage = ({ url, apiUrl }: { url: string; apiUrl: string }) => {
       controls
       preload="metadata"
       playsInline
-      className="w-full"
+      className="w-[260px] max-w-full block"
     />
   );
 };
@@ -297,6 +346,28 @@ const [isMobileTabs, setIsMobileTabs] = useState(false);
   const [showQuickMenu, setShowQuickMenu] = useState(false);
   const [showNotificationsPanel, setShowNotificationsPanel] = useState(false);
   const [showTeamPanel, setShowTeamPanel] = useState(false);
+  const [showPrivateChatModal, setShowPrivateChatModal] = useState(false);
+  const [privateConversation, setPrivateConversation] =
+  useState<PrivateConversation | null>(null);
+  const [privateMessages, setPrivateMessages] = useState<PrivateMessage[]>([]);
+  const [privateMessageText, setPrivateMessageText] = useState("");
+  const [privateChatFiles, setPrivateChatFiles] = useState<File[]>([]);
+  const [privateMessageMenuId, setPrivateMessageMenuId] = useState<number | null>(null);
+  const [editingPrivateMessageId, setEditingPrivateMessageId] = useState<number | null>(null);
+  const [editingPrivateMessageText, setEditingPrivateMessageText] = useState("");
+  const [replyingToPrivateMessage, setReplyingToPrivateMessage] = useState<PrivateMessage | null>(null);
+  const privateChatFileInputRef = useRef<HTMLInputElement>(null);
+  const [showPrivateEmojiPicker, setShowPrivateEmojiPicker] = useState(false);
+  const [isRecordingPrivateAudio, setIsRecordingPrivateAudio] = useState(false);
+  const [privateAudioSeconds, setPrivateAudioSeconds] = useState(0);
+  const privateMediaRecorderRef = useRef<MediaRecorder | null>(null);
+  const privateAudioChunksRef = useRef<Blob[]>([]);
+  const privateAudioTimerRef = useRef<number | null>(null);
+  const [loadingPrivateMessages, setLoadingPrivateMessages] = useState(false);
+  const [privateTypingUsers, setPrivateTypingUsers] = useState<
+  { employeeId: number; employeeName: string }[]
+>([]);
+  const [sendingPrivateMessage, setSendingPrivateMessage] = useState(false);
   const [teamEmployees, setTeamEmployees] = useState<EmployeeOption[]>([]);
   const [teamSearch, setTeamSearch] = useState("");
   const [teamDepartmentFilter, setTeamDepartmentFilter] = useState("all");
@@ -511,6 +582,38 @@ useEffect(() => {
 
 socket.on("notification-created", handleNotificationCreated);
 
+const handlePrivateMessage = (message: PrivateMessage) => {
+  setPrivateMessages((prev) => {
+    if (prev.some((msg) => msg.id === message.id)) return prev;
+
+    if (
+      privateConversation &&
+      message.conversationId === privateConversation.id
+    ) {
+      return [...prev, message];
+    }
+
+    return prev;
+  });
+};
+
+socket.on("private-message", handlePrivateMessage);
+
+const handlePrivateMessageUpdated = (message: PrivateMessage) => {
+  setPrivateMessages((prev) =>
+    prev.map((msg) => (msg.id === message.id ? message : msg))
+  );
+};
+
+const handlePrivateMessageDeleted = (data: { messageId: number }) => {
+  setPrivateMessages((prev) =>
+    prev.filter((msg) => msg.id !== data.messageId)
+  );
+};
+
+socket.on("private-message-updated", handlePrivateMessageUpdated);
+socket.on("private-message-deleted", handlePrivateMessageDeleted);
+
 const handleForceLogout = (data: {
   reason?: string;
   sessionToken?: string;
@@ -540,7 +643,22 @@ socket.on("force-logout", handleForceLogout);
   return () => {
     socket.off("presence-updated", handlePresenceUpdate);
     socket.off("notification-created", handleNotificationCreated);
+    socket.off("private-message", handlePrivateMessage);
+    socket.off("private-message-updated", handlePrivateMessageUpdated);
+  socket.off("private-message-deleted", handlePrivateMessageDeleted);
     socket.off("force-logout", handleForceLogout);
+  };
+}, []);
+
+useEffect(() => {
+  validateCurrentSession();
+
+  const interval = window.setInterval(() => {
+    validateCurrentSession();
+  }, 10000);
+
+  return () => {
+    window.clearInterval(interval);
   };
 }, []);
 
@@ -817,21 +935,15 @@ const loadUnreadCount = async (reportId: number) => {
 };
 
 useEffect(() => {
-  const handleClickOutside = (event: MouseEvent | TouchEvent) => {
-    if (
-      messageMenuRef.current &&
-      !messageMenuRef.current.contains(event.target as Node)
-    ) {
-      setMessageMenuId(null);
-    }
+  const handleClickOutside = () => {
+    setMessageMenuId(null);
+    setPrivateMessageMenuId(null);
   };
 
-  document.addEventListener("mousedown", handleClickOutside);
-  document.addEventListener("touchstart", handleClickOutside);
+  document.addEventListener("click", handleClickOutside);
 
   return () => {
-    document.removeEventListener("mousedown", handleClickOutside);
-    document.removeEventListener("touchstart", handleClickOutside);
+    document.removeEventListener("click", handleClickOutside);
   };
 }, []);
 
@@ -882,6 +994,54 @@ const sendTypingSignal = async () => {
   }
 };
 
+const sendPrivateTypingSignal = async () => {
+  if (!privateConversation) return;
+
+  const employeeData = JSON.parse(
+    localStorage.getItem("employee") || "{}"
+  );
+
+  if (!employeeData.id || !employeeData.name) return;
+
+  try {
+    await fetch(
+      `${API_URL}/private-conversations/${privateConversation.id}/typing`,
+      {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify({
+          employeeId: employeeData.id,
+          employeeName: employeeData.name,
+        }),
+      }
+    );
+  } catch (error) {
+    console.error(error);
+  }
+};
+
+const loadPrivateTypingUsers = async () => {
+  if (!privateConversation) return;
+
+  const employeeData = JSON.parse(
+    localStorage.getItem("employee") || "{}"
+  );
+
+  try {
+    const response = await fetch(
+      `${API_URL}/private-conversations/${privateConversation.id}/typing?employeeId=${employeeData.id}`
+    );
+
+    const data = await response.json();
+
+    setPrivateTypingUsers(data.typingUsers || []);
+  } catch (error) {
+    console.error(error);
+  }
+};
+
 const loadTypingUsers = async () => {
   if (!selectedReport) return;
 
@@ -909,6 +1069,16 @@ useEffect(() => {
 
   return () => clearInterval(interval);
 }, [showMessagesModal, selectedReport?.id]);
+
+useEffect(() => {
+  if (!showPrivateChatModal || !privateConversation) return;
+
+  const interval = setInterval(() => {
+    loadPrivateTypingUsers();
+  }, 1000);
+
+  return () => clearInterval(interval);
+}, [showPrivateChatModal, privateConversation?.id]);
 
 useEffect(() => {
   if (!showMessagesModal || !selectedReport || !socketRef.current) return;
@@ -997,6 +1167,324 @@ const loadMessages = async (reportId: number) => {
   } finally {
     setLoadingMessages(false);
   }
+};
+
+const getPrivateChatTitle = () => {
+  if (!privateConversation) return "Conversa";
+
+  const otherParticipant = privateConversation.participants.find(
+    (participant) => participant.employee.id !== employee.id
+  );
+
+  return otherParticipant?.employee.name || "Conversa";
+};
+
+const loadPrivateMessages = async (conversationId: number) => {
+  setLoadingPrivateMessages(true);
+
+  try {
+    const response = await fetch(
+      `${API_URL}/private-conversations/${conversationId}/messages`
+    );
+
+    const data = await response.json();
+
+    setPrivateMessages(data);
+  } catch (error) {
+    console.error(error);
+
+    toast({
+      title: "Erro ao carregar conversa",
+      variant: "destructive",
+    });
+  } finally {
+    setLoadingPrivateMessages(false);
+  }
+};
+
+const openPrivateConversation = async (otherEmployeeId: number) => {
+  try {
+    const response = await fetch(`${API_URL}/private-conversations`, {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+      },
+      body: JSON.stringify({
+        employeeId: employee.id,
+        otherEmployeeId,
+      }),
+    });
+
+    const data = await response.json();
+
+    if (!response.ok) {
+      toast({
+        title: "Erro ao abrir conversa",
+        description: data.error || "Erro desconhecido",
+        variant: "destructive",
+      });
+      return;
+    }
+
+    setPrivateConversation(data);
+    setShowTeamPanel(false);
+    setShowPrivateChatModal(true);
+
+    await loadPrivateMessages(data.id);
+
+    socketRef.current?.emit("join-private-conversation", data.id);
+  } catch (error) {
+    console.error(error);
+
+    toast({
+      title: "Erro ao conectar com o servidor",
+      variant: "destructive",
+    });
+  }
+};
+
+const startPrivateAudioRecording = async () => {
+  try {
+    const stream = await navigator.mediaDevices.getUserMedia({
+      audio: true,
+    });
+
+    const mimeType =
+      MediaRecorder.isTypeSupported("audio/mp4;codecs=mp4a.40.2")
+        ? "audio/mp4;codecs=mp4a.40.2"
+        : MediaRecorder.isTypeSupported("audio/mp4")
+        ? "audio/mp4"
+        : MediaRecorder.isTypeSupported("audio/webm;codecs=opus")
+        ? "audio/webm;codecs=opus"
+        : MediaRecorder.isTypeSupported("audio/webm")
+        ? "audio/webm"
+        : "";
+
+    const recorder = new MediaRecorder(
+      stream,
+      mimeType ? { mimeType } : undefined
+    );
+
+    privateMediaRecorderRef.current = recorder;
+    privateAudioChunksRef.current = [];
+
+    recorder.ondataavailable = (event) => {
+      if (event.data.size > 0) {
+        privateAudioChunksRef.current.push(event.data);
+      }
+    };
+
+    recorder.onstop = () => {
+      const finalMimeType = recorder.mimeType || mimeType || "audio/webm";
+      const extension = finalMimeType.includes("mp4") ? "m4a" : "webm";
+
+      const audioBlob = new Blob(privateAudioChunksRef.current, {
+        type: finalMimeType,
+      });
+
+      const audioFile = new File(
+        [audioBlob],
+        `audio-privado-${Date.now()}.${extension}`,
+        { type: finalMimeType }
+      );
+
+      setPrivateChatFiles((prev) => [...prev, audioFile]);
+
+      stream.getTracks().forEach((track) => track.stop());
+
+      if (privateAudioTimerRef.current) {
+        window.clearInterval(privateAudioTimerRef.current);
+      }
+
+      setIsRecordingPrivateAudio(false);
+      setPrivateAudioSeconds(0);
+      privateMediaRecorderRef.current = null;
+      privateAudioChunksRef.current = [];
+    };
+
+    recorder.start();
+    setIsRecordingPrivateAudio(true);
+    setPrivateAudioSeconds(0);
+
+    privateAudioTimerRef.current = window.setInterval(() => {
+      setPrivateAudioSeconds((prev) => prev + 1);
+    }, 1000);
+  } catch (error) {
+    toast({
+      title: "Microfone bloqueado",
+      description: "Permita o acesso ao microfone para gravar áudio.",
+      variant: "destructive",
+    });
+  }
+};
+
+const stopPrivateAudioRecording = () => {
+  if (privateMediaRecorderRef.current?.state === "recording") {
+    privateMediaRecorderRef.current.stop();
+  }
+};
+
+const sendPrivateMessage = async () => {
+  if (
+  !privateConversation ||
+  sendingPrivateMessage ||
+  (!privateMessageText.trim() && privateChatFiles.length === 0)
+) {
+  return;
+}
+
+  setSendingPrivateMessage(true);
+
+  try {
+    const mediaItems = privateChatFiles.length
+  ? await Promise.all(
+      privateChatFiles.map((file) => uploadImageToCloudinary(file))
+    )
+  : [];
+    const response = await fetch(
+      `${API_URL}/private-conversations/${privateConversation.id}/messages`,
+      {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+        },
+       body: JSON.stringify({
+  senderId: employee.id,
+ message: privateMessageText.trim() || "",
+  mediaItems,
+replyToMessageId: replyingToPrivateMessage?.id || null,
+}),
+      }
+    );
+
+    const data = await response.json();
+
+    if (!response.ok) {
+      toast({
+        title: "Erro ao enviar mensagem",
+        description: data.error || "Erro desconhecido",
+        variant: "destructive",
+      });
+      return;
+    }
+
+    setPrivateMessages((prev) => {
+      if (prev.some((msg) => msg.id === data.id)) return prev;
+      return [...prev, data];
+    });
+
+    setPrivateMessageText("");
+    setReplyingToPrivateMessage(null);
+    setPrivateChatFiles([]);
+
+if (privateChatFileInputRef.current) {
+  privateChatFileInputRef.current.value = "";
+}
+  } catch (error) {
+    console.error(error);
+
+    toast({
+      title: "Erro ao conectar com o servidor",
+      variant: "destructive",
+    });
+  } finally {
+    setSendingPrivateMessage(false);
+  }
+};
+
+const updatePrivateMessage = async () => {
+  if (
+    !privateConversation ||
+    !editingPrivateMessageId ||
+    !editingPrivateMessageText.trim()
+  ) {
+    return;
+  }
+
+  try {
+    const response = await fetch(
+      `${API_URL}/private-conversations/${privateConversation.id}/messages/${editingPrivateMessageId}`,
+      {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          senderId: employee.id,
+          message: editingPrivateMessageText.trim(),
+        }),
+      }
+    );
+
+    const data = await response.json();
+
+    if (!response.ok) {
+      toast({
+        title: "Erro ao editar mensagem",
+        description: data.error || "Erro desconhecido",
+        variant: "destructive",
+      });
+      return;
+    }
+
+    setPrivateMessages((prev) =>
+      prev.map((msg) => (msg.id === data.id ? data : msg))
+    );
+
+    setEditingPrivateMessageId(null);
+    setEditingPrivateMessageText("");
+    setPrivateMessageMenuId(null);
+  } catch (error) {
+    console.error(error);
+  }
+};
+
+const deletePrivateMessage = async (messageId: number) => {
+  if (!privateConversation) return;
+
+  try {
+    const response = await fetch(
+      `${API_URL}/private-conversations/${privateConversation.id}/messages/${messageId}`,
+      {
+        method: "DELETE",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          senderId: employee.id,
+        }),
+      }
+    );
+
+    const data = await response.json();
+
+    if (!response.ok) {
+      toast({
+        title: "Erro ao apagar mensagem",
+        description: data.error || "Erro desconhecido",
+        variant: "destructive",
+      });
+      return;
+    }
+
+    setPrivateMessages((prev) =>
+      prev.filter((msg) => msg.id !== messageId)
+    );
+
+    setPrivateMessageMenuId(null);
+  } catch (error) {
+    console.error(error);
+  }
+};
+
+const closePrivateChat = () => {
+  if (privateConversation) {
+    socketRef.current?.emit(
+      "leave-private-conversation",
+      privateConversation.id
+    );
+  }
+
+  setShowPrivateChatModal(false);
+  setPrivateConversation(null);
+  setPrivateMessages([]);
+  setPrivateMessageText("");
 };
 
 const loadTeamEmployees = async () => {
@@ -1475,6 +1963,14 @@ useEffect(() => {
     }
 
     mediaRecorderRef.current?.stream
+      ?.getTracks()
+      ?.forEach((track) => track.stop());
+
+    if (privateAudioTimerRef.current) {
+      window.clearInterval(privateAudioTimerRef.current);
+    }
+
+    privateMediaRecorderRef.current?.stream
       ?.getTracks()
       ?.forEach((track) => track.stop());
   };
@@ -2148,6 +2644,41 @@ navigate("/", { replace: true });
 
   navigate("/", { replace: true });
 };
+
+const validateCurrentSession = async () => {
+  try {
+    const employeeData = JSON.parse(
+      localStorage.getItem("employee") || "{}"
+    );
+
+    if (!employeeData?.id) return;
+
+    const localToken =
+      localStorage.getItem("employeeSessionToken");
+
+    const response = await fetch(
+      `${API_URL}/employee-session/${employeeData.id}`
+    );
+
+    const data = await response.json();
+
+    if (
+      data.activeSessionToken &&
+      data.activeSessionToken !== localToken
+    ) {
+      toast({
+        title: "Sessão encerrada",
+        description:
+          "Sua conta foi acessada em outro dispositivo.",
+        variant: "destructive",
+      });
+
+      handleLogout();
+    }
+  } catch (error) {
+    console.error(error);
+  }
+};
   const openReportDetails = (report: Report) => {
   setShowMessageSearch(false);
   setMessageSearchTerm("");
@@ -2277,16 +2808,7 @@ const renderMessages = () => {
           e.preventDefault();
           setMessageMenuId(msg.id);
         }}
-        onTouchStart={() => {
-          const timer = setTimeout(() => {
-            setMessageMenuId(msg.id);
-          }, 500);
 
-          const clearTimer = () => clearTimeout(timer);
-
-          window.addEventListener("touchend", clearTimer, { once: true });
-          window.addEventListener("touchmove", clearTimer, { once: true });
-        }}
       >
         <div
           className="relative max-w-[85%] rounded-2xl px-3 py-2 text-sm shadow-sm bg-white text-gray-900 border border-gray-200"
@@ -2296,7 +2818,7 @@ const renderMessages = () => {
   onClick={() =>
     setMessageMenuId(messageMenuId === msg.id ? null : msg.id)
   }
-  className="hidden md:flex absolute top-1 right-1 z-20 h-8 w-8 items-center justify-center rounded-full bg-white/90 text-gray-700 shadow-sm hover:bg-gray-100 hover:text-gray-900"
+className="flex absolute top-1 right-1 z-20 h-8 w-8 items-center justify-center rounded-full bg-white/90 text-gray-700 shadow-sm hover:bg-gray-100 hover:text-gray-900"
 >
   <ChevronDown className="w-4 h-4 pointer-events-none" />
 </button>
@@ -4244,7 +4766,7 @@ touch-manipulation
             src={expandedMedia.items[expandedMedia.index]?.mediaUrl}
             controls
             autoPlay
-            className="w-full"
+            className="w-[260px] max-w-full block"
           />
         </div>
       ) : expandedMedia.items[expandedMedia.index]?.resourceType === "video" ? (
@@ -4335,7 +4857,7 @@ touch-manipulation
                   className="cursor-pointer overflow-hidden rounded-xl border border-border bg-muted text-left"
                 >
                   {item.resourceType === "audio" ? (
-                    <div className="flex h-32 w-full items-center justify-center bg-muted px-2">
+                    <div className="w-[260px] max-w-full overflow-hidden rounded-xl bg-gray-50">
                       <AudioMessage url={item.mediaUrl} apiUrl={API_URL} />
                     </div>
                   ) : item.resourceType === "video" ? (
@@ -4633,26 +5155,450 @@ touch-manipulation
                     </div>
 
                     <Button
-                      type="button"
-                      size="sm"
-                      variant="outline"
-                      className="h-8 shrink-0"
-                      onClick={() => {
-                        toast({
-                          title: "Chat privado",
-                          description:
-                            "A próxima etapa será abrir conversa particular.",
-                        });
-                      }}
-                    >
-                      Conversar
-                    </Button>
+  type="button"
+  size="sm"
+  variant="outline"
+  className="h-8 shrink-0"
+  onClick={() => openPrivateConversation(emp.id)}
+  disabled={emp.id === employee.id}
+>
+  Conversar
+</Button>
                   </div>
                 );
               })}
             </div>
           )}
         </div>
+      </motion.div>
+    </motion.div>
+  )}
+</AnimatePresence>
+
+<AnimatePresence>
+  {showPrivateChatModal && privateConversation && (
+    <motion.div
+      className="fixed inset-0 z-[9200] bg-black/60 flex items-end sm:items-center justify-center p-0 sm:p-4"
+      initial={{ opacity: 0 }}
+      animate={{ opacity: 1 }}
+      exit={{ opacity: 0 }}
+      onClick={closePrivateChat}
+    >
+      <motion.div
+        initial={{ opacity: 0, y: 40, scale: 0.98 }}
+        animate={{ opacity: 1, y: 0, scale: 1 }}
+        exit={{ opacity: 0, y: 40, scale: 0.98 }}
+        onClick={(e) => e.stopPropagation()}
+        className="w-full sm:max-w-lg h-[85vh] sm:h-[75vh] rounded-t-3xl sm:rounded-3xl bg-card shadow-2xl border border-border flex flex-col overflow-hidden"
+      >
+        <div className="flex items-center justify-between border-b border-border p-4">
+          <div>
+            <h2 className="text-base font-bold">
+              {getPrivateChatTitle()}
+            </h2>
+            <p className="text-xs text-muted-foreground">
+              Conversa particular
+            </p>
+          </div>
+
+          <button
+            type="button"
+            onClick={closePrivateChat}
+            className="flex h-9 w-9 items-center justify-center rounded-full bg-red-50 text-red-600 hover:bg-red-100"
+          >
+            <X className="h-5 w-5" />
+          </button>
+        </div>
+
+        <div className="flex-1 overflow-y-auto bg-muted/30 p-3 space-y-2">
+          {loadingPrivateMessages ? (
+            <p className="py-10 text-center text-sm text-muted-foreground">
+              Carregando conversa...
+            </p>
+          ) : privateMessages.length === 0 ? (
+            <p className="py-10 text-center text-sm text-muted-foreground">
+              Nenhuma mensagem ainda.
+            </p>
+          ) : (
+           privateMessages.map((msg) => {
+  const isMine = msg.senderId === employee.id;
+  const isEditingThisMessage = editingPrivateMessageId === msg.id;
+
+  return (
+    <div
+      key={msg.id}
+      className={`flex ${isMine ? "justify-end" : "justify-start"}`}
+    >
+      <div className="relative group max-w-[82%]">
+        <button
+          type="button"
+          onClick={(e) => {
+  e.stopPropagation();
+  setPrivateMessageMenuId(
+    privateMessageMenuId === msg.id ? null : msg.id
+  );
+}}
+          className={`absolute top-1 z-20 flex h-8 w-8 items-center justify-center rounded-full bg-white/90 text-gray-700 shadow-sm hover:bg-gray-100 ${
+            isMine ? "right-1" : "right-1"
+          }`}
+        >
+          <ChevronDown className="h-4 w-4" />
+        </button>
+
+        {privateMessageMenuId === msg.id && (
+  <div
+  onClick={(e) => e.stopPropagation()}
+    className={`absolute top-10 z-30 w-40 overflow-hidden rounded-xl border border-border bg-white shadow-xl ${
+      isMine ? "right-0" : "right-0"
+    }`}
+  >
+            <button
+  type="button"
+  onClick={(e) => {
+    e.stopPropagation();
+    setReplyingToPrivateMessage(msg);
+    setPrivateMessageMenuId(null);
+  }}
+  className="flex w-full items-center gap-2 px-3 py-2 text-left text-xs hover:bg-muted"
+>
+  <Reply className="h-3.5 w-3.5" />
+  Responder
+</button>
+
+            {isMine && msg.message?.trim() && (
+              <button
+                type="button"
+                onClick={() => {
+                  setEditingPrivateMessageId(msg.id);
+                  setEditingPrivateMessageText(msg.message);
+                  setPrivateMessageMenuId(null);
+                }}
+                className="flex w-full items-center gap-2 px-3 py-2 text-left text-xs hover:bg-muted"
+              >
+                <Pencil className="h-3.5 w-3.5" />
+                Editar
+              </button>
+            )}
+
+            {isMine && (
+              <button
+                type="button"
+                onClick={() => deletePrivateMessage(msg.id)}
+                className="flex w-full items-center gap-2 px-3 py-2 text-left text-xs text-red-600 hover:bg-red-50"
+              >
+                <Trash2 className="h-3.5 w-3.5" />
+                Excluir
+              </button>
+            )}
+          </div>
+        )}
+
+        <div
+          className={`min-w-[170px] rounded-2xl px-3 py-2 pr-10 text-sm shadow-sm border ${
+            isMine
+              ? "bg-emerald-50 text-emerald-900 border-emerald-200"
+              : "bg-white text-gray-900 border-gray-200"
+          }`}
+        >
+          {!isMine && (
+            <p className="mb-1 text-[11px] font-semibold opacity-70">
+              {msg.sender?.name}
+            </p>
+          )}
+
+          {msg.replyToMessage && (
+  <button
+    type="button"
+    className="mb-2 w-full rounded-lg border-l-4 border-green-200 bg-white/50 px-2 py-1 text-left text-xs"
+  >
+    <p className="font-semibold text-green-800">
+      Respondendo a{" "}
+      {msg.replyToMessage.sender?.id === employee.id
+        ? "você"
+        : msg.replyToMessage.sender?.name || "Mensagem"}
+    </p>
+
+    <p className="truncate text-gray-600">
+      {msg.replyToMessage.message || "Mídia"}
+    </p>
+  </button>
+)}
+
+          
+
+          {msg.media && msg.media.length > 0 && (
+            <div className="mb-2 grid gap-2">
+              {msg.media.map((item, index) => (
+                <div
+                  key={item.id}
+                  className="overflow-hidden rounded-xl border border-gray-200"
+                >
+                  {item.resourceType === "audio" ? (
+                    <div className="w-[260px] max-w-full overflow-hidden rounded-xl bg-gray-50">
+                      <AudioMessage url={item.mediaUrl} apiUrl={API_URL} />
+                    </div>
+                  ) : item.resourceType === "video" ? (
+                    <video
+                      src={item.mediaUrl}
+                      controls
+                      className="max-h-64 w-full object-cover bg-black"
+                    />
+                  ) : (
+                    <img
+                      src={item.mediaUrl.replace(
+                        "/upload/",
+                        "/upload/w_600,q_auto,f_auto/"
+                      )}
+                      alt="Mídia da conversa"
+                      className="max-h-64 w-full cursor-pointer object-cover"
+                      onClick={() =>
+                        setExpandedMedia({
+                          items: (msg.media || []).map((media) => ({
+                            mediaUrl: media.mediaUrl,
+                            resourceType: media.resourceType,
+                          })),
+                          index,
+                        })
+                      }
+                    />
+                  )}
+                </div>
+              ))}
+            </div>
+          )}
+
+
+          {isEditingThisMessage ? (
+            <div className="space-y-2">
+              <Textarea
+                value={editingPrivateMessageText}
+                onChange={(e) =>
+                  setEditingPrivateMessageText(e.target.value)
+                }
+                className="min-h-[70px] bg-white text-gray-900"
+              />
+
+              <div className="flex justify-end gap-2">
+                <Button
+                  type="button"
+                  size="sm"
+                  variant="outline"
+                  onClick={() => {
+                    setEditingPrivateMessageId(null);
+                    setEditingPrivateMessageText("");
+                  }}
+                >
+                  Cancelar
+                </Button>
+
+                <Button
+                  type="button"
+                  size="sm"
+                  onClick={updatePrivateMessage}
+                >
+                  Salvar
+                </Button>
+              </div>
+            </div>
+          ) : (
+            msg.message?.trim() && (
+              <p className="whitespace-pre-wrap pr-1">
+                {msg.message}
+              </p>
+            )
+          )}
+
+          <p className="mt-1 text-[10px] opacity-60 text-right">
+            {new Date(msg.createdAt).toLocaleTimeString("pt-BR", {
+              hour: "2-digit",
+              minute: "2-digit",
+            })}
+          </p>
+        </div>
+      </div>
+    </div>
+  );
+})
+          )}
+        </div>
+
+       <div className="border-t border-border bg-card p-3">
+
+        <input
+  ref={privateChatFileInputRef}
+  type="file"
+  accept="image/*,video/*,audio/*"
+  multiple
+  className="hidden"
+  onChange={(e) => {
+    const files = Array.from(e.target.files || []);
+
+    const oversizedFile = files.find((file) => file.size > MAX_FILE_SIZE);
+
+    if (oversizedFile) {
+      toast({
+        title: "Arquivo muito grande",
+        description: "Cada arquivo deve ter no máximo 100 MB.",
+        variant: "destructive",
+      });
+
+      e.target.value = "";
+      return;
+    }
+
+    setPrivateChatFiles(files);
+  }}
+/>
+
+        {privateChatFiles.length > 0 && (
+  <div className="mb-2 flex flex-wrap gap-2">
+    {privateChatFiles.map((file, index) => (
+      <div
+        key={`${file.name}-${index}`}
+        className="flex items-center gap-2 rounded-full bg-muted px-3 py-1 text-xs"
+      >
+        <span className="max-w-[180px] truncate">
+          {file.name}
+        </span>
+
+        <button
+          type="button"
+          onClick={() =>
+            setPrivateChatFiles((prev) =>
+              prev.filter((_, fileIndex) => fileIndex !== index)
+            )
+          }
+          className="text-red-600 hover:text-red-700"
+        >
+          <X className="h-3 w-3" />
+        </button>
+      </div>
+    ))}
+  </div>
+)}
+
+{privateTypingUsers.length > 0 && (
+  <div className="mb-2 text-xs text-muted-foreground">
+    {privateTypingUsers.length === 1
+      ? `${privateTypingUsers[0].employeeName} está digitando...`
+      : `${privateTypingUsers.length} pessoas estão digitando...`}
+  </div>
+)}
+
+
+  {replyingToPrivateMessage && (
+    <div className="mb-2 flex items-center justify-between rounded-xl border-l-4 border-secondary bg-muted px-3 py-2 text-xs">
+      <div className="min-w-0">
+       <p className="font-semibold">
+  Respondendo a{" "}
+  {replyingToPrivateMessage.sender?.name ||
+    (replyingToPrivateMessage.senderId === employee.id
+      ? "você"
+      : "Mensagem")}
+</p>
+        <p className="truncate text-muted-foreground">
+          {replyingToPrivateMessage.message || "Mídia"}
+        </p>
+      </div>
+
+      <button
+        type="button"
+        onClick={() => setReplyingToPrivateMessage(null)}
+        className="ml-2 text-muted-foreground hover:text-foreground"
+      >
+        <X className="h-4 w-4" />
+      </button>
+    </div>
+  )}
+
+  <div className="flex items-end gap-2">
+    <Button
+      type="button"
+      variant="outline"
+      size="icon"
+      onClick={() => privateChatFileInputRef.current?.click()}
+      className="h-11 w-11 shrink-0"
+    >
+      <Camera className="h-4 w-4" />
+    </Button>
+
+    <Button
+      type="button"
+      variant="outline"
+      size="icon"
+      onClick={
+        isRecordingPrivateAudio
+          ? stopPrivateAudioRecording
+          : startPrivateAudioRecording
+      }
+      className={`h-11 w-11 shrink-0 ${
+        isRecordingPrivateAudio
+          ? "border-red-500 text-red-600 animate-pulse"
+          : ""
+      }`}
+    >
+      {isRecordingPrivateAudio ? (
+        <Square className="h-4 w-4" />
+      ) : (
+        <Mic className="h-4 w-4" />
+      )}
+    </Button>
+
+    <div className="relative">
+      <Button
+        type="button"
+        variant="outline"
+        size="icon"
+        onClick={() => setShowPrivateEmojiPicker((prev) => !prev)}
+        className="h-11 w-11 shrink-0"
+      >
+        <Smile className="h-4 w-4" />
+      </Button>
+
+      {showPrivateEmojiPicker && (
+        <div className="absolute bottom-12 left-0 z-[9300]">
+          <EmojiPicker
+            theme={Theme.LIGHT}
+            onEmojiClick={(emojiData) => {
+              setPrivateMessageText((prev) => prev + emojiData.emoji);
+              setShowPrivateEmojiPicker(false);
+            }}
+          />
+        </div>
+      )}
+    </div>
+
+    <Textarea
+      value={privateMessageText}
+      onChange={(e) => {
+  setPrivateMessageText(e.target.value);
+  sendPrivateTypingSignal();
+}}
+      placeholder="Digite uma mensagem..."
+      rows={1}
+      className="min-h-[44px] max-h-28 resize-none text-base flex-1"
+      onKeyDown={(e) => {
+        if (e.key === "Enter" && !e.shiftKey) {
+          e.preventDefault();
+          sendPrivateMessage();
+        }
+      }}
+    />
+
+    <Button
+      type="button"
+      size="icon"
+      disabled={
+        sendingPrivateMessage ||
+        (!privateMessageText.trim() && privateChatFiles.length === 0)
+      }
+      onClick={sendPrivateMessage}
+      className="h-11 w-11 shrink-0 bg-secondary hover:bg-secondary/90"
+    >
+      <Send className="h-4 w-4" />
+    </Button>
+  </div>
+</div>
       </motion.div>
     </motion.div>
   )}

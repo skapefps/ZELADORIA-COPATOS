@@ -211,6 +211,32 @@ router.post("/employee/recover-registration", async (req, res) => {
   }
 });
 
+router.get("/employee-session/:id", async (req, res) => {
+  try {
+    const employeeId = Number(req.params.id);
+
+    const employee = await prisma.employee.findUnique({
+      where: {
+        id: employeeId,
+      },
+      select: {
+        activeSessionToken: true,
+      },
+    });
+
+    return res.json({
+      activeSessionToken:
+        employee?.activeSessionToken || null,
+    });
+  } catch (error) {
+    console.error(error);
+
+    return res.status(500).json({
+      error: "Erro ao verificar sessão.",
+    });
+  }
+});
+
 
 router.get("/", (req, res) => {
   return res.json({
@@ -819,6 +845,410 @@ router.get("/media-proxy", async (req, res) => {
   }
 });
 
+router.post("/private-conversations", async (req, res) => {
+  try {
+    const { employeeId, otherEmployeeId } = req.body;
+
+    if (!employeeId || !otherEmployeeId) {
+      return res.status(400).json({
+        error: "Funcionários são obrigatórios.",
+      });
+    }
+
+    const employeeA = Number(employeeId);
+    const employeeB = Number(otherEmployeeId);
+
+    if (employeeA === employeeB) {
+      return res.status(400).json({
+        error: "Não é possível conversar consigo mesmo.",
+      });
+    }
+
+    const existing = await prisma.privateConversation.findFirst({
+      where: {
+        AND: [
+          {
+            participants: {
+              some: {
+                employeeId: employeeA,
+              },
+            },
+          },
+          {
+            participants: {
+              some: {
+                employeeId: employeeB,
+              },
+            },
+          },
+        ],
+      },
+      include: {
+        participants: {
+          include: {
+            employee: true,
+          },
+        },
+        messages: {
+          orderBy: {
+            createdAt: "desc",
+          },
+          take: 1,
+        },
+      },
+    });
+
+    if (existing) {
+      return res.json(existing);
+    }
+
+    const conversation = await prisma.privateConversation.create({
+      data: {
+        participants: {
+          create: [
+            {
+              employeeId: employeeA,
+            },
+            {
+              employeeId: employeeB,
+            },
+          ],
+        },
+      },
+      include: {
+        participants: {
+          include: {
+            employee: true,
+          },
+        },
+        messages: true,
+      },
+    });
+
+    return res.status(201).json(conversation);
+  } catch (error) {
+    console.error(error);
+    return res.status(500).json({
+      error: "Erro ao criar conversa privada.",
+    });
+  }
+});
+
+router.get("/private-conversations/:employeeId", async (req, res) => {
+  try {
+    const employeeId = Number(req.params.employeeId);
+
+    const conversations = await prisma.privateConversation.findMany({
+      where: {
+        participants: {
+          some: {
+            employeeId,
+          },
+        },
+      },
+      include: {
+        participants: {
+          include: {
+            employee: true,
+          },
+        },
+        messages: {
+          orderBy: {
+            createdAt: "desc",
+          },
+          take: 1,
+        },
+      },
+      orderBy: {
+        updatedAt: "desc",
+      },
+    });
+
+    return res.json(conversations);
+  } catch (error) {
+    console.error(error);
+    return res.status(500).json({
+      error: "Erro ao carregar conversas privadas.",
+    });
+  }
+});
+
+router.get("/private-conversations/:conversationId/messages", async (req, res) => {
+  try {
+    const conversationId = Number(req.params.conversationId);
+
+    const messages = await prisma.privateMessage.findMany({
+      where: {
+        conversationId,
+      },
+      include: {
+  sender: {
+    select: {
+      id: true,
+      name: true,
+      department: true,
+    },
+  },
+  media: true,
+  replyToMessage: {
+  select: {
+    id: true,
+    message: true,
+    sender: {
+      select: {
+        id: true,
+        name: true,
+      },
+    },
+  },
+},
+},
+      orderBy: {
+        createdAt: "asc",
+      },
+    });
+
+    return res.json(messages);
+  } catch (error) {
+    console.error(error);
+    return res.status(500).json({
+      error: "Erro ao carregar mensagens privadas.",
+    });
+  }
+});
+
+router.post("/private-conversations/:conversationId/messages", async (req, res) => {
+  try {
+    const conversationId = Number(req.params.conversationId);
+    const { senderId, message, mediaItems, replyToMessageId } = req.body;
+
+    if (!senderId) {
+      return res.status(400).json({
+        error: "Funcionário é obrigatório.",
+      });
+    }
+
+    if ((!message || !message.trim()) && (!mediaItems || mediaItems.length === 0)) {
+  return res.status(400).json({
+    error: "Mensagem ou mídia é obrigatória.",
+  });
+}
+
+    const conversation = await prisma.privateConversation.findUnique({
+      where: {
+        id: conversationId,
+      },
+      include: {
+        participants: true,
+      },
+    });
+
+    if (!conversation) {
+      return res.status(404).json({
+        error: "Conversa não encontrada.",
+      });
+    }
+
+    const isParticipant = conversation.participants.some(
+      (participant) => participant.employeeId === Number(senderId)
+    );
+
+    if (!isParticipant) {
+      return res.status(403).json({
+        error: "Você não participa dessa conversa.",
+      });
+    }
+
+    const newMessage = await prisma.privateMessage.create({
+  data: {
+    conversationId,
+    senderId: Number(senderId),
+    message: message?.trim() || "",
+    replyToMessageId: replyToMessageId ? Number(replyToMessageId) : null,
+    media: mediaItems?.length
+      ? {
+          create: mediaItems.map((item: any) => ({
+            mediaUrl: item.imageUrl,
+            publicId: item.publicId,
+            resourceType: item.resourceType || "image",
+          })),
+        }
+      : undefined,
+  },
+      include: {
+  sender: {
+    select: {
+      id: true,
+      name: true,
+      department: true,
+    },
+  },
+  media: true,
+  replyToMessage: {
+  select: {
+    id: true,
+    message: true,
+    sender: {
+      select: {
+        id: true,
+        name: true,
+      },
+    },
+  },
+},
+},
+    });
+
+    await prisma.privateConversation.update({
+      where: {
+        id: conversationId,
+      },
+      data: {
+        updatedAt: new Date(),
+      },
+    });
+
+    const recipients = conversation.participants.filter(
+      (participant) => participant.employeeId !== Number(senderId)
+    );
+
+    for (const recipient of recipients) {
+      await createNotification({
+        recipientId: recipient.employeeId,
+        actorId: Number(senderId),
+        type: "PRIVATE_MESSAGE",
+        title: "Nova mensagem privada",
+        body: `${newMessage.sender.name} enviou uma mensagem para você.`,
+        privateConversationId: conversationId,
+        privateMessageId: newMessage.id,
+      });
+
+      io.to(`employee-${recipient.employeeId}`).emit(
+        "private-message",
+        newMessage
+      );
+    }
+
+    io.to(`private-conversation-${conversationId}`).emit(
+      "private-message",
+      newMessage
+    );
+
+    return res.status(201).json(newMessage);
+  } catch (error) {
+    console.error(error);
+    return res.status(500).json({
+      error: "Erro ao enviar mensagem privada.",
+    });
+  }
+});
+
+router.patch("/private-conversations/:conversationId/messages/:messageId", async (req, res) => {
+  try {
+    const conversationId = Number(req.params.conversationId);
+    const messageId = Number(req.params.messageId);
+    const { senderId, message } = req.body;
+
+    if (!senderId || !message?.trim()) {
+      return res.status(400).json({ error: "Dados inválidos." });
+    }
+
+    const existingMessage = await prisma.privateMessage.findFirst({
+      where: { id: messageId, conversationId },
+    });
+
+    if (!existingMessage) {
+      return res.status(404).json({ error: "Mensagem não encontrada." });
+    }
+
+    if (existingMessage.senderId !== Number(senderId)) {
+      return res.status(403).json({
+        error: "Você só pode editar suas próprias mensagens.",
+      });
+    }
+
+    const updatedMessage = await prisma.privateMessage.update({
+      where: { id: messageId },
+      data: { message: message.trim() },
+      include: {
+        sender: {
+          select: { id: true, name: true, department: true },
+        },
+        media: true,
+      },
+    });
+
+    io.to(`private-conversation-${conversationId}`).emit(
+      "private-message-updated",
+      updatedMessage
+    );
+
+    return res.json(updatedMessage);
+  } catch (error) {
+    console.error(error);
+    return res.status(500).json({
+      error: "Erro ao editar mensagem privada.",
+    });
+  }
+});
+
+router.delete("/private-conversations/:conversationId/messages/:messageId", async (req, res) => {
+  try {
+    const conversationId = Number(req.params.conversationId);
+    const messageId = Number(req.params.messageId);
+    const { senderId } = req.body;
+
+    const existingMessage = await prisma.privateMessage.findFirst({
+      where: { id: messageId, conversationId },
+    });
+
+    if (!existingMessage) {
+      return res.status(404).json({ error: "Mensagem não encontrada." });
+    }
+
+    if (existingMessage.senderId !== Number(senderId)) {
+      return res.status(403).json({
+        error: "Você só pode apagar suas próprias mensagens.",
+      });
+    }
+
+    const medias = await prisma.privateMessageMedia.findMany({
+      where: { messageId },
+    });
+
+    for (const media of medias) {
+      if (media.publicId) {
+        await cloudinary.uploader.destroy(media.publicId, {
+          resource_type:
+            media.resourceType === "audio"
+              ? "video"
+              : media.resourceType || "image",
+        });
+      }
+    }
+
+    await prisma.privateMessageMedia.deleteMany({
+      where: { messageId },
+    });
+
+    await prisma.privateMessage.delete({
+      where: { id: messageId },
+    });
+
+    io.to(`private-conversation-${conversationId}`).emit(
+      "private-message-deleted",
+      { conversationId, messageId }
+    );
+
+    return res.json({ message: "Mensagem apagada com sucesso." });
+  } catch (error) {
+    console.error(error);
+    return res.status(500).json({
+      error: "Erro ao apagar mensagem privada.",
+    });
+  }
+});
+
 router.get("/reports/:id/messages", async (req, res) => {
   const reportId = Number(req.params.id);
 
@@ -1134,6 +1564,68 @@ const typingUsersByReport = new Map<
   number,
   { employeeId: number; employeeName: string; timestamp: number }[]
 >();
+
+const typingUsersByPrivateConversation = new Map<
+  number,
+  { employeeId: number; employeeName: string; timestamp: number }[]
+>();
+
+
+router.post("/private-conversations/:id/typing", (req, res) => {
+  const conversationId = Number(req.params.id);
+  const { employeeId, employeeName } = req.body;
+
+  if (!employeeId || !employeeName) {
+    return res.status(400).json({
+      error: "Funcionário é obrigatório.",
+    });
+  }
+
+  const now = Date.now();
+
+  const current =
+    typingUsersByPrivateConversation.get(conversationId) || [];
+
+  const withoutUser = current.filter(
+    (user) => user.employeeId !== Number(employeeId)
+  );
+
+  typingUsersByPrivateConversation.set(conversationId, [
+    ...withoutUser,
+    {
+      employeeId: Number(employeeId),
+      employeeName,
+      timestamp: now,
+    },
+  ]);
+
+  return res.json({
+    message: "Digitando atualizado.",
+  });
+});
+
+router.get("/private-conversations/:id/typing", (req, res) => {
+  const conversationId = Number(req.params.id);
+  const employeeId = Number(req.query.employeeId);
+
+  const now = Date.now();
+
+  const current =
+    typingUsersByPrivateConversation.get(conversationId) || [];
+
+  const activeUsers = current.filter(
+    (user) =>
+      now - user.timestamp < 4000 &&
+      user.employeeId !== employeeId
+  );
+
+  typingUsersByPrivateConversation.set(conversationId, activeUsers);
+
+  return res.json({
+    typingUsers: activeUsers,
+  });
+});
+
 
 router.post("/reports/:id/typing", (req, res) => {
   const reportId = Number(req.params.id);
