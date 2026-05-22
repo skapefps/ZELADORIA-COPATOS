@@ -200,51 +200,11 @@ const getDepartmentStyle = (department?: string | null) => {
 };
 
 const AudioMessage = ({ url, apiUrl }: { url: string; apiUrl: string }) => {
-  const [audioSrc, setAudioSrc] = useState("");
-  const [loading, setLoading] = useState(true);
-
-  useEffect(() => {
-    let objectUrl = "";
-
-    const loadAudio = async () => {
-      try {
-        setLoading(true);
-
-        const response = await fetch(
-          `${apiUrl}/media-proxy?url=${encodeURIComponent(url)}`
-        );
-
-        const blob = await response.blob();
-        objectUrl = URL.createObjectURL(blob);
-
-        setAudioSrc(objectUrl);
-      } catch (error) {
-        console.error("Erro ao carregar áudio:", error);
-      } finally {
-        setLoading(false);
-      }
-    };
-
-    loadAudio();
-
-    return () => {
-      if (objectUrl) {
-        URL.revokeObjectURL(objectUrl);
-      }
-    };
-  }, [url, apiUrl]);
-
-  if (loading) {
-    return (
-      <div className="rounded-xl bg-muted px-3 py-3 text-xs text-muted-foreground">
-        Carregando áudio...
-      </div>
-    );
-  }
+  const audioUrl = `${apiUrl}/media-proxy?url=${encodeURIComponent(url)}`;
 
   return (
     <audio
-      src={audioSrc}
+      src={audioUrl}
       controls
       preload="metadata"
       className="w-full"
@@ -3945,6 +3905,20 @@ if (oversizedFile) {
       >
         <X className="h-6 w-6" />
       </button>
+      <button
+  type="button"
+  onClick={(e) => {
+    e.stopPropagation();
+    const currentMedia = expandedMedia.items[expandedMedia.index];
+
+    if (currentMedia?.mediaUrl) {
+      downloadMedia(currentMedia.mediaUrl);
+    }
+  }}
+  className="absolute top-4 right-16 bg-black/60 hover:bg-black/80 text-white rounded-full px-4 h-10 flex items-center justify-center text-sm"
+>
+  Baixar
+</button>
 
       {expandedMedia.items.length > 1 && (
         <>

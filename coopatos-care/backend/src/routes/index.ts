@@ -554,27 +554,56 @@ router.patch("/reports/:id/status", async (req, res) => {
 
 router.get("/media-proxy", async (req, res) => {
   try {
-    const url = String(req.query.url || "");
+    let url = String(req.query.url || "");
 
     if (!url || !url.startsWith("https://res.cloudinary.com/")) {
       return res.status(400).json({ error: "URL inválida." });
     }
 
-    const response = await fetch(url);
+    const range = req.headers.range;
 
-    if (!response.ok) {
+    const headers: Record<string, string> = {};
+
+    if (range) {
+      headers.Range = range;
+    }
+
+    const response = await fetch(url, {
+      headers,
+    });
+
+    if (!response.ok && response.status !== 206) {
       return res.status(502).json({ error: "Erro ao carregar mídia." });
     }
 
     const contentType =
       response.headers.get("content-type") || "application/octet-stream";
 
-    const arrayBuffer = await response.arrayBuffer();
-    const buffer = Buffer.from(arrayBuffer);
+    const contentLength = response.headers.get("content-length");
+    const contentRange = response.headers.get("content-range");
+    const acceptRanges = response.headers.get("accept-ranges");
+
+    res.status(response.status);
 
     res.setHeader("Content-Type", contentType);
-    res.setHeader("Content-Length", buffer.length);
     res.setHeader("Cache-Control", "public, max-age=31536000");
+
+    if (contentLength) {
+      res.setHeader("Content-Length", contentLength);
+    }
+
+    if (contentRange) {
+      res.setHeader("Content-Range", contentRange);
+    }
+
+    if (acceptRanges) {
+      res.setHeader("Accept-Ranges", acceptRanges);
+    } else {
+      res.setHeader("Accept-Ranges", "bytes");
+    }
+
+    const arrayBuffer = await response.arrayBuffer();
+    const buffer = Buffer.from(arrayBuffer);
 
     return res.send(buffer);
   } catch (error) {
