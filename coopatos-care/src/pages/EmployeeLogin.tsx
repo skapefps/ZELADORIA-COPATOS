@@ -15,6 +15,7 @@ const API_URL =
       "https://zeladoria-coopatos-api.onrender.com";
 
 const EmployeeLogin = () => {
+  
   const [matricula, setMatricula] = useState("");
   const [showTimeoutModal, setShowTimeoutModal] = useState(false);
   const [error, setError] = useState("");
@@ -29,6 +30,14 @@ const EmployeeLogin = () => {
   const { loginEmployee } = useAuth();
   const navigate = useNavigate();
   const { toast } = useToast();
+
+  useEffect(() => {
+  const employee = localStorage.getItem("employee");
+
+  if (employee) {
+    navigate("/funcionario", { replace: true });
+  }
+}, [navigate]);
 
   const sendRecoveryRequest = async () => {
   if (!recoveryEmail.trim() || !recoveryCpf.trim()) {
@@ -63,6 +72,8 @@ const EmployeeLogin = () => {
       });
       return;
     }
+
+    
 
     toast({
       title: "E-mail enviado!",
@@ -131,7 +142,7 @@ if (!cpf.trim() || cpf.trim().length < 11) {
 
       loginEmployee(matricula.trim());
 
-      navigate("/funcionario");
+      navigate("/funcionario", { replace: true });
     } catch (error) {
       console.error("Erro no login:", error);
       setError("Erro ao conectar com o servidor");

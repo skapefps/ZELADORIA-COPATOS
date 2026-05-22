@@ -271,7 +271,65 @@ router.post("/reports/:id/participants", async (req, res) => {
     },
   });
 
+   io.emit("participant-added");
+io.emit("reports-updated");
+
   return res.status(201).json(participant);
+});
+
+router.delete("/reports/:id/participants/:participantId", async (req, res) => {
+  try {
+    const reportId = Number(req.params.id);
+    const participantId = Number(req.params.participantId);
+    const { employeeId } = req.body;
+
+    const report = await prisma.report.findUnique({
+      where: { id: reportId },
+      include: {
+        participants: true,
+      },
+    });
+
+    if (!report) {
+      return res.status(404).json({ error: "Chamado não encontrado." });
+    }
+
+    if (report.employeeId !== Number(employeeId)) {
+      return res.status(403).json({
+        error: "Apenas o criador do chamado pode remover participantes.",
+      });
+    }
+
+    const participant = await prisma.reportParticipant.findFirst({
+      where: {
+        id: participantId,
+        reportId,
+      },
+    });
+
+    if (!participant) {
+      return res.status(404).json({ error: "Participante não encontrado." });
+    }
+
+    await prisma.reportParticipant.delete({
+      where: {
+        id: participantId,
+      },
+    });
+
+    io.emit("participant-removed");
+io.emit("reports-updated");
+
+    return res.json({
+      message: "Participante removido com sucesso.",
+      participantId,
+    });
+  } catch (error) {
+    console.error(error);
+    return res.status(500).json({
+      error: "Erro ao remover participante.",
+    });
+  }
 });
 
 router.post("/reports", async (req, res) => {
@@ -333,6 +391,9 @@ router.post("/reports", async (req, res) => {
     include: reportInclude,
   });
 
+  io.emit("report-created");
+  io.emit("reports-updated");
+
   return res.status(201).json(report);
 });
 
@@ -365,6 +426,8 @@ router.patch("/reports/:id", async (req, res) => {
     include: reportInclude,
   });
 
+  io.emit("report-updated");
+  io.emit("reports-updated");
   return res.json(report);
 });
 

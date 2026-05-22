@@ -29,6 +29,8 @@ import {
   Pencil,
   Filter,
   X,
+  Mic,
+  Square,
   Trash2,
   Images
 } from "lucide-react";
@@ -184,6 +186,8 @@ const departmentColors: Record<string, string> = {
     "bg-orange-100 text-orange-800 border-orange-200",
 };
 
+
+
 const getDepartmentStyle = (department?: string | null) => {
   if (!department) {
     return "bg-gray-100 text-gray-700 border-gray-200";
@@ -194,6 +198,8 @@ const getDepartmentStyle = (department?: string | null) => {
     "bg-gray-100 text-gray-700 border-gray-200"
   );
 };
+
+
 
 const EmployeePanel = () => {
   const employee = JSON.parse(localStorage.getItem("employee") || "{}");
@@ -251,6 +257,11 @@ const [isMobileTabs, setIsMobileTabs] = useState(false);
   const messageMenuRef = useRef<HTMLDivElement | null>(null);
   const messagesEndRef = useRef<HTMLDivElement>(null);
   const [chatFiles, setChatFiles] = useState<File[]>([]);
+  const [isRecordingAudio, setIsRecordingAudio] = useState(false);
+  const [audioSeconds, setAudioSeconds] = useState(0);
+  const mediaRecorderRef = useRef<MediaRecorder | null>(null);
+  const audioChunksRef = useRef<Blob[]>([]);
+  const audioTimerRef = useRef<number | null>(null);
   const { matricula, logout } = useAuth();
   const [selectedReport, setSelectedReport] = useState<Report | null>(null);
   const [isEditing, setIsEditing] = useState(false);
@@ -302,6 +313,47 @@ const [isMobileTabs, setIsMobileTabs] = useState(false);
   const [searchTerm, setSearchTerm] = useState("");
   const [statusFilter, setStatusFilter] = useState("all");
   const [categoryFilter, setCategoryFilter] = useState("all");
+
+  const refreshReports = async () => {
+  try {
+    const employee = JSON.parse(localStorage.getItem("employee") || "{}");
+
+    if (!employee.id) return;
+
+    const reportsResponse = await fetch(
+      `${API_URL}/employees/${employee.id}/reports`
+    );
+    const reportsData = await reportsResponse.json();
+    setMyReports(reportsData);
+
+    reportsData.forEach((report: Report) => {
+      loadUnreadCount(report.id);
+    });
+
+    const participatingResponse = await fetch(
+      `${API_URL}/employees/${employee.id}/participating-reports`
+    );
+    const participatingData = await participatingResponse.json();
+    setAllReports(participatingData);
+
+    participatingData.forEach((report: Report) => {
+      loadUnreadCount(report.id);
+    });
+
+    if (selectedReport) {
+      const updatedSelected =
+        [...reportsData, ...participatingData].find(
+          (report) => report.id === selectedReport.id
+        ) || null;
+
+      if (updatedSelected) {
+        setSelectedReport(updatedSelected);
+      }
+    }
+  } catch (error) {
+    console.error(error);
+  }
+};
   useEffect(() => {
   const updateWidth = () => {
     setIsMobileTabs(window.innerWidth < 768);
@@ -378,12 +430,40 @@ const handleTabDragEnd = (_: unknown, info: { offset: { x: number } }) => {
   };
 }, [API_URL]);
 
+useEffect(() => {
+  if (!socketRef.current) return;
+
+  const socket = socketRef.current;
+
+  const handleReportsUpdate = () => {
+    refreshReports();
+  };
+
+ socket.on("reports-updated", handleReportsUpdate);
+
+  return () => {
+    socket.off("reports-updated", handleReportsUpdate);
+    socket.off("report-created", handleReportsUpdate);
+    socket.off("report-updated", handleReportsUpdate);
+    socket.off("participant-added", handleReportsUpdate);
+    socket.off("participant-removed", handleReportsUpdate);
+  };
+}, [selectedReport?.id]);
+
   useEffect(() => {
   window.scrollTo({
     top: 0,
     behavior: "instant",
   });
 }, []);
+
+useEffect(() => {
+  const employee = localStorage.getItem("employee");
+
+  if (!employee) {
+    navigate("/", { replace: true });
+  }
+}, [navigate]);
 
   useEffect(() => {
   const employee = JSON.parse(
@@ -989,6 +1069,70 @@ const addParticipant = async (employeeId: number) => {
   }
 };
 
+const removeParticipant = async (participantId: number) => {
+  if (!selectedReport) return;
+
+  const employee = JSON.parse(localStorage.getItem("employee") || "{}");
+
+  try {
+    const response = await fetch(
+      `${API_URL}/reports/${selectedReport.id}/participants/${participantId}`,
+      {
+        method: "DELETE",
+        headers: {
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify({
+          employeeId: employee.id,
+        }),
+      }
+    );
+
+    const data = await response.json();
+
+    if (!response.ok) {
+      toast({
+        title: "Erro ao remover participante",
+        description: data.error || "Erro desconhecido",
+        variant: "destructive",
+      });
+      return;
+    }
+
+    const updatedReport = {
+      ...selectedReport,
+      participants: (selectedReport.participants || []).filter(
+        (participant) => participant.id !== participantId
+      ),
+    };
+
+    setSelectedReport(updatedReport);
+
+    setMyReports((prev) =>
+      prev.map((report) =>
+        report.id === updatedReport.id ? updatedReport : report
+      )
+    );
+
+    setAllReports((prev) =>
+      prev.map((report) =>
+        report.id === updatedReport.id ? updatedReport : report
+      )
+    );
+
+    toast({
+      title: "Participante removido.",
+    });
+  } catch (error) {
+    console.error(error);
+
+    toast({
+      title: "Erro ao conectar com o servidor",
+      variant: "destructive",
+    });
+  }
+};
+
 const filteredEmployees = employees.filter((emp) => {
   const search = employeeSearch.toLowerCase();
 
@@ -1003,6 +1147,92 @@ const filteredEmployees = employees.filter((emp) => {
       emp.department?.toLowerCase().includes(search))
   );
 });
+
+const startAudioRecording = async () => {
+  try {
+    const stream = await navigator.mediaDevices.getUserMedia({
+      audio: true,
+    });
+
+    const mimeType = MediaRecorder.isTypeSupported("audio/webm")
+      ? "audio/webm"
+      : MediaRecorder.isTypeSupported("audio/mp4")
+      ? "audio/mp4"
+      : "";
+
+    const recorder = new MediaRecorder(
+      stream,
+      mimeType ? { mimeType } : undefined
+    );
+    mediaRecorderRef.current = recorder;
+    audioChunksRef.current = [];
+
+    recorder.ondataavailable = (event) => {
+      if (event.data.size > 0) {
+        audioChunksRef.current.push(event.data);
+      }
+    };
+
+    recorder.onstop = () => {
+      const finalMimeType = recorder.mimeType || mimeType || "audio/webm";
+      const extension = finalMimeType.includes("mp4") ? "m4a" : "webm";
+      const audioBlob = new Blob(audioChunksRef.current, {
+        type: finalMimeType,
+      });
+
+      const audioFile = new File(
+        [audioBlob],
+        `audio-${Date.now()}.${extension}`,
+        { type: finalMimeType }
+      );
+
+      setChatFiles((prev) => [...prev, audioFile]);
+
+      stream.getTracks().forEach((track) => track.stop());
+
+      if (audioTimerRef.current) {
+        window.clearInterval(audioTimerRef.current);
+      }
+
+      setIsRecordingAudio(false);
+      setAudioSeconds(0);
+      mediaRecorderRef.current = null;
+      audioChunksRef.current = [];
+    };
+
+    recorder.start();
+    setIsRecordingAudio(true);
+    setAudioSeconds(0);
+
+    audioTimerRef.current = window.setInterval(() => {
+      setAudioSeconds((prev) => prev + 1);
+    }, 1000);
+  } catch (error) {
+    toast({
+      title: "Microfone bloqueado",
+      description: "Permita o acesso ao microfone para gravar áudio.",
+      variant: "destructive",
+    });
+  }
+};
+
+const stopAudioRecording = () => {
+  if (mediaRecorderRef.current?.state === "recording") {
+    mediaRecorderRef.current.stop();
+  }
+};
+
+useEffect(() => {
+  return () => {
+    if (audioTimerRef.current) {
+      window.clearInterval(audioTimerRef.current);
+    }
+
+    mediaRecorderRef.current?.stream
+      ?.getTracks()
+      ?.forEach((track) => track.stop());
+  };
+}, []);
 
 const sendMessage = async () => {
  if (
@@ -1308,7 +1538,9 @@ const uploadImageToCloudinary = async (file: File) => {
   return {
     imageUrl: data.secure_url,
     publicId: data.public_id,
-    resourceType: data.resource_type || "image",
+    resourceType: file.type.startsWith("audio/")
+  ? "audio"
+  : data.resource_type || "image",
   };
 };
 
@@ -1853,30 +2085,39 @@ const renderMessages = () => {
         key={item.id}
         className="overflow-hidden rounded-xl border border-gray-200"
       >
-        {item.resourceType === "video" ? (
+        {item.resourceType === "audio" ? (
+          <div className="rounded-xl bg-gray-50 p-2">
+            <audio
+              src={item.mediaUrl}
+              controls
+              preload="metadata"
+              className="w-full"
+            />
+          </div>
+        ) : item.resourceType === "video" ? (
           <video
-  src={item.mediaUrl}
-  controls
-  className="max-h-64 w-full object-cover bg-black"
-/>
+            src={item.mediaUrl}
+            controls
+            className="max-h-64 w-full object-cover bg-black"
+          />
         ) : (
           <img
-  src={item.mediaUrl.replace(
-    "/upload/",
-    "/upload/w_600,q_auto,f_auto/"
-  )}
-  alt="Mídia da mensagem"
-  className="max-h-64 w-full cursor-pointer object-cover"
-  onClick={() =>
-  setExpandedMedia({
-  items: chatMedia.map((media) => ({
-    mediaUrl: media.mediaUrl,
-    resourceType: media.resourceType,
-  })),
-  index,
-})
-}
-/>
+            src={item.mediaUrl.replace(
+              "/upload/",
+              "/upload/w_600,q_auto,f_auto/"
+            )}
+            alt="Mídia da mensagem"
+            className="max-h-64 w-full cursor-pointer object-cover"
+            onClick={() =>
+              setExpandedMedia({
+                items: (msg.media || []).map((media) => ({
+                  mediaUrl: media.mediaUrl,
+                  resourceType: media.resourceType,
+                })),
+                index,
+              })
+            }
+          />
         )}
       </div>
     ))}
@@ -3112,12 +3353,26 @@ if (oversizedFile) {
     {selectedReport.participants?.length ? (
       selectedReport.participants.map((participant) => (
         <span
-          key={participant.id}
-          className="inline-flex items-center rounded-full border border-border bg-muted/40 px-3 py-1 text-xs text-muted-foreground"
-        >
-          {participant.employee.name}
-          {participant.role === "OWNER" ? " • Criador" : ""}
-        </span>
+  key={participant.id}
+  className="inline-flex items-center gap-2 rounded-full border border-border bg-muted/40 px-3 py-1 text-xs text-muted-foreground"
+>
+  <span>
+    {participant.employee.name}
+    {participant.role === "OWNER" ? " • Criador" : ""}
+  </span>
+
+  {selectedReport.employee?.id === employee.id &&
+    participant.role !== "OWNER" && (
+      <button
+        type="button"
+        onClick={() => removeParticipant(participant.id)}
+        className="text-red-600 hover:text-red-700"
+        title="Remover participante"
+      >
+        <X className="w-3 h-3" />
+      </button>
+    )}
+</span>
       ))
     ) : (
       <p className="text-xs text-muted-foreground">
@@ -3501,7 +3756,7 @@ if (oversizedFile) {
           <input
   ref={chatFileInputRef}
   type="file"
-  accept="image/*,video/*"
+  accept="image/*,video/*,audio/*"
   multiple
   className="hidden"
   onChange={(e) => {
@@ -3553,8 +3808,24 @@ if (oversizedFile) {
   size="icon"
   onClick={() => chatFileInputRef.current?.click()}
   className={chatFiles.length > 0 ? "border-secondary text-secondary" : ""}
+  title="Anexar mídia"
 >
   <Camera className="w-4 h-4" />
+</Button>
+
+<Button
+  type="button"
+  variant="outline"
+  size="icon"
+  onClick={isRecordingAudio ? stopAudioRecording : startAudioRecording}
+  className={isRecordingAudio ? "border-red-500 text-red-600 animate-pulse" : ""}
+  title={isRecordingAudio ? "Parar gravação" : "Gravar áudio"}
+>
+  {isRecordingAudio ? (
+    <Square className="w-4 h-4" />
+  ) : (
+    <Mic className="w-4 h-4" />
+  )}
 </Button>
           <Input
             value={newMessage}
@@ -3567,7 +3838,12 @@ if (oversizedFile) {
   if (e.key === "Enter") {
     e.preventDefault();
 
-    if (e.repeat || sendingMessageRef.current || sendingMessage) {
+    if (
+      e.repeat ||
+      sendingMessageRef.current ||
+      sendingMessage ||
+      isRecordingAudio
+    ) {
       return;
     }
 
@@ -3579,7 +3855,11 @@ if (oversizedFile) {
           <Button
             type="button"
             onClick={sendMessage}
-            disabled={sendingMessage || (!newMessage.trim() && chatFiles.length === 0)}
+            disabled={
+              sendingMessage ||
+              isRecordingAudio ||
+              (!newMessage.trim() && chatFiles.length === 0)
+            }
           >
             Enviar
           </Button>
@@ -3673,18 +3953,32 @@ touch-manipulation
         </>
       )}
 
-      {expandedMedia.items[expandedMedia.index]?.resourceType === "video" ? (
+      {expandedMedia.items[expandedMedia.index]?.resourceType === "audio" ? (
+        <div
+          className="w-full max-w-md rounded-2xl bg-white p-4"
+          onClick={(e) => e.stopPropagation()}
+        >
+          <audio
+            src={expandedMedia.items[expandedMedia.index]?.mediaUrl}
+            controls
+            autoPlay
+            className="w-full"
+          />
+        </div>
+      ) : expandedMedia.items[expandedMedia.index]?.resourceType === "video" ? (
         <video
           src={expandedMedia.items[expandedMedia.index]?.mediaUrl}
           controls
           autoPlay
           className="max-h-[85vh] max-w-full rounded-xl bg-black"
+          onClick={(e) => e.stopPropagation()}
         />
       ) : (
         <img
           src={expandedMedia.items[expandedMedia.index]?.mediaUrl}
           alt="Mídia ampliada"
           className="max-h-[85vh] max-w-full rounded-xl object-contain"
+          onClick={(e) => e.stopPropagation()}
         />
       )}
     </motion.div>
@@ -3732,21 +4026,43 @@ touch-manipulation
           ) : (
             <div className="grid grid-cols-2 sm:grid-cols-3 gap-3">
               {chatMedia.map((item, index) => (
-                <button
+                <div
                   key={`${item.messageId}-${item.id}`}
-                  type="button"
+                  role="button"
+                  tabIndex={0}
                   onClick={() =>
                     setExpandedMedia({
-  items: chatMedia.map((media) => ({
-    mediaUrl: media.mediaUrl,
-    resourceType: media.resourceType,
-  })),
-  index,
-})
+                      items: chatMedia.map((media) => ({
+                        mediaUrl: media.mediaUrl,
+                        resourceType: media.resourceType,
+                      })),
+                      index,
+                    })
                   }
-                  className="overflow-hidden rounded-xl border border-border bg-muted text-left"
+                  onKeyDown={(e) => {
+                    if (e.key === "Enter") {
+                      setExpandedMedia({
+                        items: chatMedia.map((media) => ({
+                          mediaUrl: media.mediaUrl,
+                          resourceType: media.resourceType,
+                        })),
+                        index,
+                      });
+                    }
+                  }}
+                  className="cursor-pointer overflow-hidden rounded-xl border border-border bg-muted text-left"
                 >
-                  {item.resourceType === "video" ? (
+                  {item.resourceType === "audio" ? (
+                    <div className="flex h-32 w-full items-center justify-center bg-muted px-2">
+                      <audio
+                        src={item.mediaUrl}
+                        controls
+                        preload="metadata"
+                        className="w-full"
+                        onClick={(e) => e.stopPropagation()}
+                      />
+                    </div>
+                  ) : item.resourceType === "video" ? (
                     <video
                       src={item.mediaUrl}
                       className="h-32 w-full object-cover bg-black"
@@ -3770,7 +4086,7 @@ touch-manipulation
                       {new Date(item.createdAt).toLocaleString("pt-BR")}
                     </p>
                   </div>
-                </button>
+                </div>
               ))}
             </div>
           )}
@@ -3802,6 +4118,12 @@ touch-manipulation
           Tem certeza que deseja sair do sistema?
         </p>
       </div>
+
+      {isRecordingAudio && (
+  <div className="mb-2 rounded-lg border border-red-200 bg-red-50 px-3 py-2 text-xs text-red-600">
+    Gravando áudio... {audioSeconds}s
+  </div>
+)}
 
       {chatFiles.length > 0 && (
   <div className="mb-2 rounded-lg border border-border bg-muted/40 px-3 py-2 text-xs">
