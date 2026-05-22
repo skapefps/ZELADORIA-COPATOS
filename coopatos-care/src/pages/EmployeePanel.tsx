@@ -199,6 +199,58 @@ const getDepartmentStyle = (department?: string | null) => {
   );
 };
 
+const AudioMessage = ({ url, apiUrl }: { url: string; apiUrl: string }) => {
+  const [audioSrc, setAudioSrc] = useState("");
+  const [loading, setLoading] = useState(true);
+
+  useEffect(() => {
+    let objectUrl = "";
+
+    const loadAudio = async () => {
+      try {
+        setLoading(true);
+
+        const response = await fetch(
+          `${apiUrl}/media-proxy?url=${encodeURIComponent(url)}`
+        );
+
+        const blob = await response.blob();
+        objectUrl = URL.createObjectURL(blob);
+
+        setAudioSrc(objectUrl);
+      } catch (error) {
+        console.error("Erro ao carregar áudio:", error);
+      } finally {
+        setLoading(false);
+      }
+    };
+
+    loadAudio();
+
+    return () => {
+      if (objectUrl) {
+        URL.revokeObjectURL(objectUrl);
+      }
+    };
+  }, [url, apiUrl]);
+
+  if (loading) {
+    return (
+      <div className="rounded-xl bg-muted px-3 py-3 text-xs text-muted-foreground">
+        Carregando áudio...
+      </div>
+    );
+  }
+
+  return (
+    <audio
+      src={audioSrc}
+      controls
+      preload="metadata"
+      className="w-full"
+    />
+  );
+};
 
 
 const EmployeePanel = () => {
@@ -2100,15 +2152,7 @@ const renderMessages = () => {
       >
         {item.resourceType === "audio" ? (
           <div className="rounded-xl bg-gray-50 p-2">
-            <audio
-  src={item.mediaUrl}
-  controls
-  preload="auto"
-  className="w-full"
-  onCanPlay={(e) => {
-    e.currentTarget.load();
-  }}
-/>
+            <AudioMessage url={item.mediaUrl} apiUrl={API_URL} />
           </div>
         ) : item.resourceType === "video" ? (
           <video
@@ -4070,13 +4114,7 @@ touch-manipulation
                 >
                   {item.resourceType === "audio" ? (
                     <div className="flex h-32 w-full items-center justify-center bg-muted px-2">
-                      <audio
-                        src={item.mediaUrl}
-                        controls
-                        preload="metadata"
-                        className="w-full"
-                        onClick={(e) => e.stopPropagation()}
-                      />
+                      <AudioMessage url={item.mediaUrl} apiUrl={API_URL} />
                     </div>
                   ) : item.resourceType === "video" ? (
                     <video

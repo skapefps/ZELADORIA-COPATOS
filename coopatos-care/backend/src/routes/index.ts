@@ -552,6 +552,37 @@ router.patch("/reports/:id/status", async (req, res) => {
   return res.json(report);
 });
 
+router.get("/media-proxy", async (req, res) => {
+  try {
+    const url = String(req.query.url || "");
+
+    if (!url || !url.startsWith("https://res.cloudinary.com/")) {
+      return res.status(400).json({ error: "URL inválida." });
+    }
+
+    const response = await fetch(url);
+
+    if (!response.ok) {
+      return res.status(502).json({ error: "Erro ao carregar mídia." });
+    }
+
+    const contentType =
+      response.headers.get("content-type") || "application/octet-stream";
+
+    const arrayBuffer = await response.arrayBuffer();
+    const buffer = Buffer.from(arrayBuffer);
+
+    res.setHeader("Content-Type", contentType);
+    res.setHeader("Content-Length", buffer.length);
+    res.setHeader("Cache-Control", "public, max-age=31536000");
+
+    return res.send(buffer);
+  } catch (error) {
+    console.error(error);
+    return res.status(500).json({ error: "Erro no proxy da mídia." });
+  }
+});
+
 router.get("/reports/:id/messages", async (req, res) => {
   const reportId = Number(req.params.id);
 
@@ -715,8 +746,8 @@ router.delete("/reports/:reportId/messages/:messageId", async (req, res) => {
 for (const media of medias) {
   if (media.publicId) {
     await cloudinary.uploader.destroy(media.publicId, {
-      resource_type: media.resourceType || "image",
-    });
+  resource_type: media.resourceType === "audio" ? "video" : media.resourceType || "image",
+});
   }
 }
 
