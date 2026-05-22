@@ -2420,32 +2420,36 @@ const renderNewTab = () => (
 </Button>
 
                 <Input
-                  placeholder="Ponto de referência (ex: Galpão B)"
-                  value={referencePoint}
-                  onChange={(e) => setReferencePoint(e.target.value)}
-                />
+  placeholder="Ponto de referência (ex: Galpão B)"
+  value={referencePoint}
+  onChange={(e) => setReferencePoint(e.target.value)}
+  className="text-base"
+/>
               </div>
               {address && (
   <Input
-    placeholder="Endereço"
-    value={address}
-    onChange={(e) => setAddress(e.target.value)}
-  />
+  placeholder="Endereço"
+  value={address}
+  onChange={(e) => setAddress(e.target.value)}
+  className="text-base"
+/>
 )}
 
 <Input
   placeholder="Nome do chamado *"
   value={title}
   onChange={(e) => setTitle(e.target.value)}
+  className="text-base"
 />
 
               {/* Description */}
               <Textarea
-                placeholder="Descrição breve (opcional)"
-                value={description}
-                onChange={(e) => setDescription(e.target.value)}
-                rows={3}
-              />
+  placeholder="Descrição breve (opcional)"
+  value={description}
+  onChange={(e) => setDescription(e.target.value)}
+  rows={3}
+  className="text-base"
+/>
 
               {/* Submit */}
               <Button
