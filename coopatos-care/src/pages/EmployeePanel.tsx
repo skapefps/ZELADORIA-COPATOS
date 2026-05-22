@@ -1154,11 +1154,13 @@ const startAudioRecording = async () => {
       audio: true,
     });
 
-    const mimeType = MediaRecorder.isTypeSupported("audio/webm")
-      ? "audio/webm"
-      : MediaRecorder.isTypeSupported("audio/mp4")
-      ? "audio/mp4;codecs=mp4a.40.2"
-      : "";
+    const mimeType = MediaRecorder.isTypeSupported("audio/mp4;codecs=mp4a.40.2")
+  ? "audio/mp4;codecs=mp4a.40.2"
+  : MediaRecorder.isTypeSupported("audio/webm;codecs=opus")
+  ? "audio/webm;codecs=opus"
+  : MediaRecorder.isTypeSupported("audio/webm")
+  ? "audio/webm"
+  : "";
 
     const recorder = new MediaRecorder(
       stream,
@@ -1285,7 +1287,14 @@ const mediaItems = chatFiles.length
 
     setMessages((prev) => {
   if (prev.some((msg) => msg.id === data.id)) return prev;
-  return [...prev, data];
+
+  return [
+    ...prev,
+    {
+      ...data,
+      media: data.media || [],
+    },
+  ];
 });
 
 lastMessageIdRef.current = data.id;
@@ -1327,9 +1336,13 @@ setAllReports((prev) =>
     setNewMessage("");
     setChatFiles([]);
 
+
 if (chatFileInputRef.current) {
   chatFileInputRef.current.value = "";
 }
+
+await loadMessages(selectedReport.id);
+
     markMessagesAsRead(selectedReport.id);
   } catch (error) {
     console.error(error);
@@ -2088,11 +2101,14 @@ const renderMessages = () => {
         {item.resourceType === "audio" ? (
           <div className="rounded-xl bg-gray-50 p-2">
             <audio
-              src={item.mediaUrl}
-              controls
-              preload="metadata"
-              className="w-full"
-            />
+  src={item.mediaUrl}
+  controls
+  preload="auto"
+  className="w-full"
+  onCanPlay={(e) => {
+    e.currentTarget.load();
+  }}
+/>
           </div>
         ) : item.resourceType === "video" ? (
           <video
