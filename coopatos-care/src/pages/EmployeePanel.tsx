@@ -357,6 +357,8 @@ const [isMobileTabs, setIsMobileTabs] = useState(false);
   const [editingPrivateMessageText, setEditingPrivateMessageText] = useState("");
   const [replyingToPrivateMessage, setReplyingToPrivateMessage] = useState<PrivateMessage | null>(null);
   const privateChatFileInputRef = useRef<HTMLInputElement>(null);
+  const privateMessagesContainerRef = useRef<HTMLDivElement | null>(null);
+  const privateMessagesEndRef = useRef<HTMLDivElement | null>(null);  
   const [showPrivateEmojiPicker, setShowPrivateEmojiPicker] = useState(false);
   const [isRecordingPrivateAudio, setIsRecordingPrivateAudio] = useState(false);
   const [privateAudioSeconds, setPrivateAudioSeconds] = useState(0);
@@ -599,6 +601,10 @@ const handlePrivateMessage = (message: PrivateMessage) => {
 
     return prev;
   });
+
+  setTimeout(() => {
+    scrollPrivateMessagesToBottom();
+  }, 100);
 };
 
 socket.on("private-message", handlePrivateMessage);
@@ -608,6 +614,7 @@ const handlePrivateMessageUpdated = (message: PrivateMessage) => {
     prev.map((msg) => (msg.id === message.id ? message : msg))
   );
 };
+
 
 const handlePrivateMessageDeleted = (data: { messageId: number }) => {
   setPrivateMessages((prev) =>
@@ -926,6 +933,17 @@ const scrollMessagesToBottom = () => {
         block: "end",
       });
     }, 300);
+  });
+};
+
+const scrollPrivateMessagesToBottom = () => {
+  requestAnimationFrame(() => {
+    setTimeout(() => {
+      privateMessagesEndRef.current?.scrollIntoView({
+        behavior: "smooth",
+        block: "end",
+      });
+    }, 80);
   });
 };
 
@@ -1272,6 +1290,10 @@ const openPrivateConversation = async (otherEmployeeId: number) => {
 
     await loadPrivateMessages(data.id);
 
+    setTimeout(() => {
+  scrollPrivateMessagesToBottom();
+}, 150);
+
     socketRef.current?.emit("join-private-conversation", data.id);
   } catch (error) {
     console.error(error);
@@ -1416,6 +1438,9 @@ replyToMessageId: replyingToPrivateMessage?.id || null,
     setPrivateMessageText("");
     setReplyingToPrivateMessage(null);
     setPrivateChatFiles([]);
+    setTimeout(() => {
+  scrollPrivateMessagesToBottom();
+}, 100);
 
 if (privateChatFileInputRef.current) {
   privateChatFileInputRef.current.value = "";
@@ -5229,7 +5254,7 @@ touch-manipulation
         animate={{ opacity: 1, y: 0, scale: 1 }}
         exit={{ opacity: 0, y: 40, scale: 0.98 }}
         onClick={(e) => e.stopPropagation()}
-        className="w-full sm:max-w-lg h-[85vh] sm:h-[75vh] rounded-t-3xl sm:rounded-3xl bg-card shadow-2xl border border-border flex flex-col overflow-hidden"
+        className="w-full sm:max-w-lg h-[100dvh] sm:h-[75vh] max-h-[100dvh] rounded-none sm:rounded-3xl bg-card shadow-2xl border border-border flex flex-col overflow-hidden"
       >
         <div className="flex items-center justify-between border-b border-border p-4">
   <div>
@@ -5318,7 +5343,10 @@ touch-manipulation
   </div>
 )}
 
-        <div className="flex-1 overflow-y-auto bg-muted/30 p-3 space-y-2">
+        <div
+  ref={privateMessagesContainerRef}
+  className="min-h-0 flex-1 overflow-y-auto overscroll-contain bg-muted/30 p-3 space-y-2 touch-pan-y"
+>
           {loadingPrivateMessages ? (
             <p className="py-10 text-center text-sm text-muted-foreground">
               Carregando conversa...
@@ -5329,6 +5357,7 @@ touch-manipulation
             </p>
           ) : (
            privateMessages.map((msg) => {
+            
   const isMine = msg.senderId === employee.id;
   const isEditingThisMessage = editingPrivateMessageId === msg.id;
 
@@ -5530,10 +5559,14 @@ touch-manipulation
     </div>
   );
 })
+
           )}
+
+
+<div ref={privateMessagesEndRef} />
         </div>
 
-       <div className="border-t border-border bg-card p-3">
+       <div className="shrink-0 border-t border-border bg-card p-3 pb-[calc(0.75rem+env(safe-area-inset-bottom))]">
 
         <input
   ref={privateChatFileInputRef}
