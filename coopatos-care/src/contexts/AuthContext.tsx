@@ -6,6 +6,10 @@ import React, {
   ReactNode,
 } from "react";
 
+const API_URL =
+  import.meta.env.VITE_API_URL ||
+  "http://localhost:3333";
+
 interface AuthState {
   isAuthenticated: boolean;
   role: "employee" | "admin" | null;
@@ -14,7 +18,11 @@ interface AuthState {
 
 interface AuthContextType extends AuthState {
   loginEmployee: (matricula: string) => void;
-  loginAdmin: (user: string, pass: string) => boolean;
+  loginAdmin: (
+    email: string,
+    password: string
+  ) => Promise<boolean>;
+
   logout: (reason?: "manual" | "timeout") => void;
 }
 
@@ -56,29 +64,81 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
     setAuth(newAuth);
   };
 
-  const loginAdmin = (user: string, pass: string) => {
-    if (user === "admin" && pass === "admin123") {
+  const loginAdmin = async (
+    email: string,
+    password: string
+  ): Promise<boolean> => {
+    try {
+      const response = await fetch(
+        `${API_URL}/admin-login`,
+        {
+          method: "POST",
+          headers: {
+            "Content-Type": "application/json",
+          },
+          body: JSON.stringify({
+            email,
+            password,
+          }),
+        }
+      );
+
+      if (!response.ok) {
+        return false;
+      }
+
+      const data = await response.json();
+
       const newAuth: AuthState = {
         isAuthenticated: true,
         role: "admin",
         matricula: null,
       };
 
-      localStorage.setItem("auth", JSON.stringify(newAuth));
-      localStorage.setItem("lastActivity", String(Date.now()));
+      localStorage.setItem(
+        "auth",
+        JSON.stringify(newAuth)
+      );
+
+
+      localStorage.setItem(
+        "admin",
+        JSON.stringify(data.admin)
+      );
+
+      localStorage.setItem(
+        "adminSessionToken",
+        data.adminSessionToken
+      );
+
+      localStorage.setItem(
+        "adminWelcomeShown",
+        "false"
+      );
+
+      localStorage.setItem(
+        "lastActivity",
+        String(Date.now())
+      );
 
       setAuth(newAuth);
-      return true;
-    }
 
-    return false;
+      return true;
+    } catch (error) {
+      console.error(error);
+      return false;
+    }
   };
 
   const logout = (reason?: "manual" | "timeout") => {
     localStorage.removeItem("auth");
     localStorage.removeItem("employee");
+    localStorage.removeItem("admin");
+    localStorage.removeItem("employeeSessionToken");
+    localStorage.removeItem("adminSessionToken");
     localStorage.removeItem("lastActivity");
-    sessionStorage.removeItem("welcomeShown");
+    localStorage.removeItem("welcomeShown");
+    localStorage.removeItem("adminWelcomeShown");
 
     if (reason === "timeout") {
       sessionStorage.setItem("sessionExpired", "true");
@@ -111,13 +171,13 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
     };
 
     const events = [
-  "click",
-  "keydown",
-  "mousemove",
-  "touchstart",
-  "scroll",
-  "visibilitychange",
-];
+      "click",
+      "keydown",
+      "mousemove",
+      "touchstart",
+      "scroll",
+      "visibilitychange",
+    ];
 
     events.forEach((event) => {
       window.addEventListener(event, updateActivity);

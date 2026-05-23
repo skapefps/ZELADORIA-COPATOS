@@ -10,15 +10,34 @@ const AdminLogin = () => {
   const [user, setUser] = useState("");
   const [pass, setPass] = useState("");
   const [error, setError] = useState("");
+  const [loading, setLoading] = useState(false);
   const { loginAdmin } = useAuth();
   const navigate = useNavigate();
 
-  const handleSubmit = (e: React.FormEvent) => {
+  const handleSubmit = async (
+    e: React.FormEvent
+  ) => {
     e.preventDefault();
-    if (loginAdmin(user, pass)) {
-      navigate("/dashboard");
-    } else {
+
+    setError("");
+    setLoading(true);
+
+    try {
+      const success = await loginAdmin(
+        user,
+        pass
+      );
+
+      if (success) {
+        navigate("/dashboard");
+        return;
+      }
+
       setError("Credenciais inválidas");
+    } catch {
+      setError("Erro ao realizar login.");
+    } finally {
+      setLoading(false);
     }
   };
 
@@ -34,16 +53,19 @@ const AdminLogin = () => {
           <div className="inline-flex items-center justify-center w-64 h-64 rounded-2xl mb-0 p-0">
             <img src="/logo-coopatos.png" alt="Logo Coopatos" className="mb-0 p-0" />
           </div>
-          <h1 className="text-2xl font-bold text-primary-foreground mt-0">Painel de Manutenção</h1>
+          <h1 className="text-2xl font-bold text-primary-foreground mt-0">Painel Administrativo</h1>
           <p className="text-primary-foreground/70 text-sm mt-1">Acesso restrito</p>
         </div>
 
         <div className="bg-card rounded-xl p-6 shadow-xl">
           <form onSubmit={handleSubmit} className="space-y-4">
             <Input
-              placeholder="Usuário"
+              placeholder="E-mail ou matrícula"
               value={user}
-              onChange={(e) => { setUser(e.target.value); setError(""); }}
+              onChange={(e) => {
+                setUser(e.target.value);
+                setError("");
+              }}
             />
             <Input
               type="password"
@@ -52,12 +74,18 @@ const AdminLogin = () => {
               onChange={(e) => { setPass(e.target.value); setError(""); }}
             />
             {error && <p className="text-destructive text-xs">{error}</p>}
-            <Button type="submit" className="w-full bg-secondary hover:bg-secondary/90 text-secondary-foreground font-semibold">
-              Entrar
+            <Button
+              type="submit"
+              disabled={loading}
+              className="w-full bg-secondary hover:bg-secondary/90 text-secondary-foreground font-semibold"
+            >
+              {loading
+                ? "Entrando..."
+                : "Entrar"}
             </Button>
           </form>
           <p className="text-xs text-muted-foreground text-center mt-4">
-          
+
           </p>
           <button
             onClick={() => navigate("/")}

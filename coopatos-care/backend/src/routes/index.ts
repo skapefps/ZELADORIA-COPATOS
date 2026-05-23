@@ -3,6 +3,7 @@ import { io } from "../server.js";
 import { prisma } from "../prisma/client.js";
 import crypto from "crypto";
 import nodemailer from "nodemailer";
+import bcrypt from "bcryptjs";
 import { v2 as cloudinary } from "cloudinary";
 
 const router = Router();
@@ -451,16 +452,16 @@ router.post("/reports/:id/participants", async (req, res) => {
   });
 
   await createNotification({
-  recipientId: participant.employeeId,
-  actorId: null,
-  type: "PARTICIPANT_ADDED",
-  title: "Você foi adicionado a um chamado",
-  body: `Você foi adicionado ao chamado #${reportId}.`,
-  reportId,
-});
+    recipientId: participant.employeeId,
+    actorId: null,
+    type: "PARTICIPANT_ADDED",
+    title: "Você foi adicionado a um chamado",
+    body: `Você foi adicionado ao chamado #${reportId}.`,
+    reportId,
+  });
 
-   io.emit("participant-added");
-io.emit("reports-updated");
+  io.emit("participant-added");
+  io.emit("reports-updated");
 
   return res.status(201).json(participant);
 });
@@ -506,16 +507,16 @@ router.delete("/reports/:id/participants/:participantId", async (req, res) => {
     });
 
     await createNotification({
-  recipientId: participant.employeeId,
-  actorId: employeeId ? Number(employeeId) : null,
-  type: "PARTICIPANT_REMOVED",
-  title: "Você foi removido de um chamado",
-  body: `Você foi removido do chamado #${reportId}.`,
-  reportId,
-});
+      recipientId: participant.employeeId,
+      actorId: employeeId ? Number(employeeId) : null,
+      type: "PARTICIPANT_REMOVED",
+      title: "Você foi removido de um chamado",
+      body: `Você foi removido do chamado #${reportId}.`,
+      reportId,
+    });
 
-io.emit("participant-removed");
-io.emit("reports-updated");
+    io.emit("participant-removed");
+    io.emit("reports-updated");
 
     return res.json({
       message: "Participante removido com sucesso.",
@@ -577,12 +578,12 @@ router.post("/reports", async (req, res) => {
 
       images: mediaItems?.length
         ? {
-            create: mediaItems.map((item: any) => ({
-              imageUrl: item.imageUrl,
-              publicId: item.publicId,
-              resourceType: item.resourceType || "image",
-            })),
-          }
+          create: mediaItems.map((item: any) => ({
+            imageUrl: item.imageUrl,
+            publicId: item.publicId,
+            resourceType: item.resourceType || "image",
+          })),
+        }
         : undefined,
     },
     include: reportInclude,
@@ -683,6 +684,76 @@ router.post("/reports/:id/images", async (req, res) => {
   return res.status(201).json(report);
 });
 
+router.post("/admin-login", async (req, res) => {
+  try {
+    const { email, password } = req.body;
+
+    if (!email || !password) {
+      return res.status(400).json({
+        error: "E-mail e senha são obrigatórios.",
+      });
+    }
+
+    const login = String(email).trim().toLowerCase();
+
+    const user = await prisma.user.findFirst({
+      where: {
+        deletedAt: null,
+        role: "ADMIN",
+        OR: [
+          {
+            email: login,
+          },
+          {
+            employee: {
+              registrationNumber: login,
+            },
+          },
+        ],
+      },
+      include: {
+        employee: true,
+      },
+    });
+
+    if (!user) {
+      return res.status(401).json({
+        error: "Credenciais inválidas.",
+      });
+    }
+
+    const passwordIsValid = await bcrypt.compare(
+      String(password),
+      user.passwordHash
+    );
+
+    if (!passwordIsValid) {
+      return res.status(401).json({
+        error: "Credenciais inválidas.",
+      });
+    }
+
+    const adminSessionToken = crypto.randomUUID();
+
+    return res.json({
+      message: "Login administrativo realizado com sucesso.",
+      admin: {
+        id: user.id,
+        email: user.email,
+        role: user.role,
+        employee: user.employee,
+      },
+      adminSessionToken,
+    });
+  } catch (error) {
+    console.error(error);
+
+    return res.status(500).json({
+      error: "Erro ao fazer login administrativo.",
+    });
+  }
+});
+
 router.post("/employee-login", async (req, res) => {
   const { registrationNumber, cpf } = req.body;
 
@@ -712,25 +783,25 @@ router.post("/employee-login", async (req, res) => {
 
   const sessionToken = crypto.randomUUID();
 
-const updatedEmployee = await prisma.employee.update({
-  where: {
-    id: employee.id,
-  },
-  data: {
-    activeSessionToken: sessionToken,
-  },
-});
+  const updatedEmployee = await prisma.employee.update({
+    where: {
+      id: employee.id,
+    },
+    data: {
+      activeSessionToken: sessionToken,
+    },
+  });
 
-io.to(`employee-${employee.id}`).emit("force-logout", {
-  reason: "Sua conta foi acessada em outro dispositivo ou guia.",
-  sessionToken,
-});
+  io.to(`employee-${employee.id}`).emit("force-logout", {
+    reason: "Sua conta foi acessada em outro dispositivo ou guia.",
+    sessionToken,
+  });
 
-return res.json({
-  message: "Login realizado com sucesso.",
-  employee: updatedEmployee,
-  sessionToken,
-});
+  return res.json({
+    message: "Login realizado com sucesso.",
+    employee: updatedEmployee,
+    sessionToken,
+  });
 
 });
 
@@ -766,18 +837,18 @@ router.patch("/reports/:id/status", async (req, res) => {
 
   const participants = report.participants || [];
 
-for (const participant of participants) {
-  if (participant.employeeId === Number(actorId)) continue;
+  for (const participant of participants) {
+    if (participant.employeeId === Number(actorId)) continue;
 
-  await createNotification({
-    recipientId: participant.employeeId,
-    actorId: actorId ? Number(actorId) : null,
-    type: "REPORT_STATUS_CHANGED",
-    title: "Status do chamado alterado",
-    body: `O chamado #${report.id} mudou para ${report.status.name}.`,
-    reportId: report.id,
-  });
-}
+    await createNotification({
+      recipientId: participant.employeeId,
+      actorId: actorId ? Number(actorId) : null,
+      type: "REPORT_STATUS_CHANGED",
+      title: "Status do chamado alterado",
+      body: `O chamado #${report.id} mudou para ${report.status.name}.`,
+      reportId: report.id,
+    });
+  }
 
   io.emit("report-updated");
   io.emit("reports-updated");
@@ -982,27 +1053,27 @@ router.get("/private-conversations/:conversationId/messages", async (req, res) =
         conversationId,
       },
       include: {
-  sender: {
-    select: {
-      id: true,
-      name: true,
-      department: true,
-    },
-  },
-  media: true,
-  replyToMessage: {
-  select: {
-    id: true,
-    message: true,
-    sender: {
-      select: {
-        id: true,
-        name: true,
+        sender: {
+          select: {
+            id: true,
+            name: true,
+            department: true,
+          },
+        },
+        media: true,
+        replyToMessage: {
+          select: {
+            id: true,
+            message: true,
+            sender: {
+              select: {
+                id: true,
+                name: true,
+              },
+            },
+          },
+        },
       },
-    },
-  },
-},
-},
       orderBy: {
         createdAt: "asc",
       },
@@ -1029,10 +1100,10 @@ router.post("/private-conversations/:conversationId/messages", async (req, res) 
     }
 
     if ((!message || !message.trim()) && (!mediaItems || mediaItems.length === 0)) {
-  return res.status(400).json({
-    error: "Mensagem ou mídia é obrigatória.",
-  });
-}
+      return res.status(400).json({
+        error: "Mensagem ou mídia é obrigatória.",
+      });
+    }
 
     const conversation = await prisma.privateConversation.findUnique({
       where: {
@@ -1060,43 +1131,43 @@ router.post("/private-conversations/:conversationId/messages", async (req, res) 
     }
 
     const newMessage = await prisma.privateMessage.create({
-  data: {
-    conversationId,
-    senderId: Number(senderId),
-    message: message?.trim() || "",
-    replyToMessageId: replyToMessageId ? Number(replyToMessageId) : null,
-    media: mediaItems?.length
-      ? {
-          create: mediaItems.map((item: any) => ({
-            mediaUrl: item.imageUrl,
-            publicId: item.publicId,
-            resourceType: item.resourceType || "image",
-          })),
-        }
-      : undefined,
-  },
-      include: {
-  sender: {
-    select: {
-      id: true,
-      name: true,
-      department: true,
-    },
-  },
-  media: true,
-  replyToMessage: {
-  select: {
-    id: true,
-    message: true,
-    sender: {
-      select: {
-        id: true,
-        name: true,
+      data: {
+        conversationId,
+        senderId: Number(senderId),
+        message: message?.trim() || "",
+        replyToMessageId: replyToMessageId ? Number(replyToMessageId) : null,
+        media: mediaItems?.length
+          ? {
+            create: mediaItems.map((item: any) => ({
+              mediaUrl: item.imageUrl,
+              publicId: item.publicId,
+              resourceType: item.resourceType || "image",
+            })),
+          }
+          : undefined,
       },
-    },
-  },
-},
-},
+      include: {
+        sender: {
+          select: {
+            id: true,
+            name: true,
+            department: true,
+          },
+        },
+        media: true,
+        replyToMessage: {
+          select: {
+            id: true,
+            message: true,
+            sender: {
+              select: {
+                id: true,
+                name: true,
+              },
+            },
+          },
+        },
+      },
     });
 
     await prisma.privateConversation.update({
@@ -1284,87 +1355,87 @@ router.post("/reports/:id/messages", async (req, res) => {
   const reportId = Number(req.params.id);
 
   const {
-  senderId,
-  senderName,
-  senderRole,
-  message,
-  replyToMessageId,
-  mediaItems,
-  mentionedEmployeeIds,
-} = req.body;
+    senderId,
+    senderName,
+    senderRole,
+    message,
+    replyToMessageId,
+    mediaItems,
+    mentionedEmployeeIds,
+  } = req.body;
 
   if ((!message || !message.trim()) && (!mediaItems || mediaItems.length === 0)) {
-  return res.status(400).json({
-    error: "Mensagem ou mídia é obrigatória.",
-  });
-}
+    return res.status(400).json({
+      error: "Mensagem ou mídia é obrigatória.",
+    });
+  }
 
   const newMessage = await prisma.reportMessage.create({
     data: {
-  reportId,
-  senderId: senderId ? Number(senderId) : undefined,
-  senderName,
-  senderRole,
-  message: message?.trim() || "",
-  replyToMessageId: replyToMessageId ? Number(replyToMessageId) : null,
+      reportId,
+      senderId: senderId ? Number(senderId) : undefined,
+      senderName,
+      senderRole,
+      message: message?.trim() || "",
+      replyToMessageId: replyToMessageId ? Number(replyToMessageId) : null,
 
-  media: mediaItems?.length
-    ? {
-        create: mediaItems.map((item: any) => ({
-          mediaUrl: item.imageUrl,
-          publicId: item.publicId,
-          resourceType: item.resourceType || "image",
-        })),
-      }
-    : undefined,
-},
+      media: mediaItems?.length
+        ? {
+          create: mediaItems.map((item: any) => ({
+            mediaUrl: item.imageUrl,
+            publicId: item.publicId,
+            resourceType: item.resourceType || "image",
+          })),
+        }
+        : undefined,
+    },
     include: messageInclude,
   });
 
   const report = await prisma.report.findUnique({
-  where: {
-    id: reportId,
-  },
-  include: {
-    participants: true,
-  },
-});
+    where: {
+      id: reportId,
+    },
+    include: {
+      participants: true,
+    },
+  });
 
-const mentionedIds = Array.isArray(mentionedEmployeeIds)
-  ? mentionedEmployeeIds.map((id) => Number(id))
-  : [];
+  const mentionedIds = Array.isArray(mentionedEmployeeIds)
+    ? mentionedEmployeeIds.map((id) => Number(id))
+    : [];
 
-if (mentionedIds.length > 0) {
-  await prisma.reportMessageMention.createMany({
-    data: mentionedIds.map((employeeId) => ({
+  if (mentionedIds.length > 0) {
+    await prisma.reportMessageMention.createMany({
+      data: mentionedIds.map((employeeId) => ({
+        messageId: newMessage.id,
+        employeeId,
+      })),
+      skipDuplicates: true,
+    });
+  }
+
+  const participants = report?.participants || [];
+
+  for (const participant of participants) {
+    if (participant.employeeId === Number(senderId)) continue;
+
+    const wasMentioned = mentionedIds.includes(participant.employeeId);
+
+    await createNotification({
+      recipientId: participant.employeeId,
+      actorId: senderId ? Number(senderId) : null,
+      type: wasMentioned ? "MENTION" : "REPORT_MESSAGE",
+      title: wasMentioned
+        ? "Você foi mencionado em uma conversa"
+        : "Nova mensagem em um chamado",
+      body: wasMentioned
+        ? `${senderName} mencionou você no chamado #${reportId}.`
+        : `${senderName} enviou uma mensagem no chamado #${reportId}.`,
+      reportId,
       messageId: newMessage.id,
-      employeeId,
-    })),
-    skipDuplicates: true,
-  });
-}
-
-const participants = report?.participants || [];
-
-for (const participant of participants) {
-  if (participant.employeeId === Number(senderId)) continue;
-
-  const wasMentioned = mentionedIds.includes(participant.employeeId);
-
-  await createNotification({
-    recipientId: participant.employeeId,
-    actorId: senderId ? Number(senderId) : null,
-    type: wasMentioned ? "MENTION" : "REPORT_MESSAGE",
-    title: wasMentioned
-      ? "Você foi mencionado em uma conversa"
-      : "Nova mensagem em um chamado",
-    body: wasMentioned
-      ? `${senderName} mencionou você no chamado #${reportId}.`
-      : `${senderName} enviou uma mensagem no chamado #${reportId}.`,
-    reportId,
-    messageId: newMessage.id,
-  });
-}
+    });
+  }
 
   io.to(`report-${reportId}`).emit("new-message", newMessage);
   return res.status(201).json(newMessage);
@@ -1429,7 +1500,7 @@ router.delete("/reports/:reportId/messages/:messageId", async (req, res) => {
       error: "Funcionário é obrigatório.",
     });
   }
-  
+
 
   const message = await prisma.reportMessage.findFirst({
     where: {
@@ -1451,30 +1522,30 @@ router.delete("/reports/:reportId/messages/:messageId", async (req, res) => {
   }
 
   const medias = await prisma.reportMessageMedia.findMany({
-  where: {
-    messageId,
-  },
-});
+    where: {
+      messageId,
+    },
+  });
 
-for (const media of medias) {
-  if (media.publicId) {
-    await cloudinary.uploader.destroy(media.publicId, {
-  resource_type: media.resourceType === "audio" ? "video" : media.resourceType || "image",
-});
+  for (const media of medias) {
+    if (media.publicId) {
+      await cloudinary.uploader.destroy(media.publicId, {
+        resource_type: media.resourceType === "audio" ? "video" : media.resourceType || "image",
+      });
+    }
   }
-}
 
-await prisma.reportMessageMedia.deleteMany({
-  where: {
-    messageId,
-  },
-});
+  await prisma.reportMessageMedia.deleteMany({
+    where: {
+      messageId,
+    },
+  });
 
-await prisma.reportMessage.delete({
-  where: {
-    id: messageId,
-  },
-});
+  await prisma.reportMessage.delete({
+    where: {
+      id: messageId,
+    },
+  });
 
   return res.json({
     message: "Mensagem apagada com sucesso.",
@@ -1502,10 +1573,10 @@ router.get("/reports/:id/unread-count/:employeeId", async (req, res) => {
       },
       ...(read?.lastReadMessageId
         ? {
-            id: {
-              gt: read.lastReadMessageId,
-            },
-          }
+          id: {
+            gt: read.lastReadMessageId,
+          },
+        }
         : {}),
     },
   });
@@ -1551,10 +1622,10 @@ router.post("/reports/:id/mark-read", async (req, res) => {
     },
   });
   io.to(`report-${reportId}`).emit("messages-read", {
-  reportId,
-  employeeId: Number(employeeId),
-  lastReadMessageId: lastMessage?.id || null,
-});
+    reportId,
+    employeeId: Number(employeeId),
+    lastReadMessageId: lastMessage?.id || null,
+  });
   return res.json({
     message: "Conversa marcada como lida.",
   });

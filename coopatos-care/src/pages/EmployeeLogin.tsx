@@ -9,13 +9,13 @@ import { Input } from "@/components/ui/input";
 
 const API_URL =
   window.location.hostname === "localhost" ||
-  window.location.hostname === "127.0.0.1"
+    window.location.hostname === "127.0.0.1"
     ? "http://localhost:3333"
     : import.meta.env.VITE_API_URL ||
-      "https://zeladoria-coopatos-api.onrender.com";
+    "https://zeladoria-coopatos-api.onrender.com";
 
 const EmployeeLogin = () => {
-  
+
   const [matricula, setMatricula] = useState("");
   const [showTimeoutModal, setShowTimeoutModal] = useState(false);
   const [error, setError] = useState("");
@@ -24,7 +24,7 @@ const EmployeeLogin = () => {
   const [showCpf, setShowCpf] = useState(false);
   const [showRecovery, setShowRecovery] = useState(false);
   const [recoveryEmail, setRecoveryEmail] = useState("");
-  const [recoveryCpf, setRecoveryCpf] = useState(""); 
+  const [recoveryCpf, setRecoveryCpf] = useState("");
   const [sendingRecovery, setSendingRecovery] = useState(false);
 
   const { loginEmployee } = useAuth();
@@ -32,89 +32,89 @@ const EmployeeLogin = () => {
   const { toast } = useToast();
 
   useEffect(() => {
-  const employee = localStorage.getItem("employee");
+    const employee = localStorage.getItem("employee");
 
-  if (employee) {
-    navigate("/funcionario", { replace: true });
-  }
-}, [navigate]);
+    if (employee) {
+      navigate("/funcionario", { replace: true });
+    }
+  }, [navigate]);
 
   const sendRecoveryRequest = async () => {
-  if (!recoveryEmail.trim() || !recoveryCpf.trim()) {
-    toast({
-      title: "Preencha e-mail e CPF",
-      variant: "destructive",
-    });
-    return;
-  }
-
-  setSendingRecovery(true);
-
-  try {
-    const response = await fetch(`${API_URL}/employee/recover-registration`, {
-      method: "POST",
-      headers: {
-        "Content-Type": "application/json",
-      },
-      body: JSON.stringify({
-        email: recoveryEmail.trim().toLowerCase(),
-        cpf: recoveryCpf.replace(/\D/g, ""),
-      }),
-    });
-
-    const data = await response.json();
-
-    if (!response.ok) {
+    if (!recoveryEmail.trim() || !recoveryCpf.trim()) {
       toast({
-        title: "Não foi possível recuperar",
-        description: data.error || "Confira os dados informados.",
+        title: "Preencha e-mail e CPF",
         variant: "destructive",
       });
       return;
     }
 
-    
+    setSendingRecovery(true);
 
-    toast({
-      title: "E-mail enviado!",
-      description: "Enviamos sua matrícula para o e-mail cadastrado.",
-    });
+    try {
+      const response = await fetch(`${API_URL}/employee/recover-registration`, {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify({
+          email: recoveryEmail.trim().toLowerCase(),
+          cpf: recoveryCpf.replace(/\D/g, ""),
+        }),
+      });
 
-    setRecoveryEmail("");
-    setRecoveryCpf("");
-    setShowRecovery(false);
-  } catch (error) {
-    toast({
-      title: "Erro ao conectar com o servidor",
-      variant: "destructive",
-    });
-  } finally {
-    setSendingRecovery(false);
-  }
-};
+      const data = await response.json();
+
+      if (!response.ok) {
+        toast({
+          title: "Não foi possível recuperar",
+          description: data.error || "Confira os dados informados.",
+          variant: "destructive",
+        });
+        return;
+      }
+
+
+
+      toast({
+        title: "E-mail enviado!",
+        description: "Enviamos sua matrícula para o e-mail cadastrado.",
+      });
+
+      setRecoveryEmail("");
+      setRecoveryCpf("");
+      setShowRecovery(false);
+    } catch (error) {
+      toast({
+        title: "Erro ao conectar com o servidor",
+        variant: "destructive",
+      });
+    } finally {
+      setSendingRecovery(false);
+    }
+  };
 
 
   useEffect(() => {
-  const sessionExpired = sessionStorage.getItem("sessionExpired");
+    const sessionExpired = sessionStorage.getItem("sessionExpired");
 
-  if (sessionExpired === "true") {
-    setShowTimeoutModal(true);
-    sessionStorage.removeItem("sessionExpired");
-  }
-}, []);
+    if (sessionExpired === "true") {
+      setShowTimeoutModal(true);
+      sessionStorage.removeItem("sessionExpired");
+    }
+  }, []);
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
 
-   if (!matricula.trim() || matricula.trim().length < 3) {
-  setError("Insira uma matrícula válida (mín. 3 dígitos)");
-  return;
-}
+    if (!matricula.trim() || matricula.trim().length < 3) {
+      setError("Insira uma matrícula válida (mín. 3 dígitos)");
+      return;
+    }
 
-if (!cpf.trim() || cpf.trim().length < 11) {
-  setError("Insira um CPF válido");
-  return;
-}
+    if (!cpf.trim() || cpf.trim().length < 11) {
+      setError("Insira um CPF válido");
+      return;
+    }
 
     setError("");
     setLoading(true);
@@ -126,9 +126,9 @@ if (!cpf.trim() || cpf.trim().length < 11) {
           "Content-Type": "application/json",
         },
         body: JSON.stringify({
-  registrationNumber: matricula.trim(),
-  cpf: cpf.replace(/\D/g, ""),
-}),
+          registrationNumber: matricula.trim(),
+          cpf: cpf.replace(/\D/g, ""),
+        }),
       });
 
       const data = await response.json();
@@ -140,14 +140,14 @@ if (!cpf.trim() || cpf.trim().length < 11) {
 
       localStorage.setItem("employee", JSON.stringify(data.employee));
 
-localStorage.setItem(
-  "employeeSessionToken",
-  data.sessionToken || ""
-);
+      localStorage.setItem(
+        "employeeSessionToken",
+        data.sessionToken || ""
+      );
 
-loginEmployee(matricula.trim());
+      loginEmployee(matricula.trim());
 
-navigate("/funcionario", { replace: true });
+      navigate("/funcionario", { replace: true });
     } catch (error) {
       console.error("Erro no login:", error);
       setError("Erro ao conectar com o servidor");
@@ -192,7 +192,7 @@ navigate("/funcionario", { replace: true });
           <p className="text-sm text-muted-foreground mb-6">
             Insira sua matrícula para continuar
           </p>
-          
+
 
           <form onSubmit={handleSubmit} className="space-y-4">
             <div>
@@ -216,32 +216,32 @@ navigate("/funcionario", { replace: true });
               )}
             </div>
             <div className="relative">
-  <Input
-    disabled={loading}
-    type={showCpf ? "text" : "password"}
-    placeholder="Digite seu CPF"
-    value={cpf}
-    onChange={(e) => {
-      const value = e.target.value
-        .replace(/\D/g, "")
-        .slice(0, 11);
+              <Input
+                disabled={loading}
+                type={showCpf ? "text" : "password"}
+                placeholder="Digite seu CPF"
+                value={cpf}
+                onChange={(e) => {
+                  const value = e.target.value
+                    .replace(/\D/g, "")
+                    .slice(0, 11);
 
-      const formatted = value
-        .replace(/(\d{3})(\d)/, "$1.$2")
-        .replace(/(\d{3})(\d)/, "$1.$2")
-        .replace(/(\d{3})(\d{1,2})$/, "$1-$2");
+                  const formatted = value
+                    .replace(/(\d{3})(\d)/, "$1.$2")
+                    .replace(/(\d{3})(\d)/, "$1.$2")
+                    .replace(/(\d{3})(\d{1,2})$/, "$1-$2");
 
-      setCpf(formatted);
-      setError("");
-    }}
-    className="text-center text-lg tracking-widest pr-10"
-    inputMode="numeric"
-  />
+                  setCpf(formatted);
+                  setError("");
+                }}
+                className="text-center text-lg tracking-widest pr-10"
+                inputMode="numeric"
+              />
 
-  <button
-  type="button"
-  onClick={() => setShowCpf((prev) => !prev)}
-  className="
+              <button
+                type="button"
+                onClick={() => setShowCpf((prev) => !prev)}
+                className="
     absolute
     right-3
     top-1/2
@@ -250,40 +250,40 @@ navigate("/funcionario", { replace: true });
     hover:text-foreground
     transition-colors
   "
->
-  {showCpf ? (
-    <EyeOff className="w-5 h-5" />
-  ) : (
-    <Eye className="w-5 h-5" />
-  )}
-</button>
-</div>
+              >
+                {showCpf ? (
+                  <EyeOff className="w-5 h-5" />
+                ) : (
+                  <Eye className="w-5 h-5" />
+                )}
+              </button>
+            </div>
 
             <Button
-  type="submit"
-  disabled={loading}
-  className="w-full bg-secondary hover:bg-secondary/90 text-secondary-foreground font-semibold"
->
-  {loading ? (
-    <span className="flex items-center justify-center gap-2">
-      <span className="w-4 h-4 border-2 border-white/30 border-t-white rounded-full animate-spin" />
-      Entrando...
-    </span>
-  ) : (
-    "Entrar"
-  )}
-</Button>
-</form>
+              type="submit"
+              disabled={loading}
+              className="w-full bg-secondary hover:bg-secondary/90 text-secondary-foreground font-semibold"
+            >
+              {loading ? (
+                <span className="flex items-center justify-center gap-2">
+                  <span className="w-4 h-4 border-2 border-white/30 border-t-white rounded-full animate-spin" />
+                  Entrando...
+                </span>
+              ) : (
+                "Entrar"
+              )}
+            </Button>
+          </form>
 
-<button
-  type="button"
-  onClick={() => setShowRecovery(true)}
-  className="w-full mt-3 text-sm text-secondary hover:underline"
->
-  Esqueci meu CPF ou matrícula
-</button>
+          <button
+            type="button"
+            onClick={() => setShowRecovery(true)}
+            className="w-full mt-3 text-sm text-secondary hover:underline"
+          >
+            Esqueci meu CPF ou matrícula
+          </button>
 
-   
+
 
           {/* Acesso administrativo */}
           <button
@@ -292,7 +292,7 @@ navigate("/funcionario", { replace: true });
             className="w-full mt-4 flex items-center justify-center gap-2 text-xs text-muted-foreground hover:text-foreground transition-colors"
           >
             <Shield className="w-3 h-3" />
-            Acesso Manutenção
+            Acesso Administrativo
           </button>
         </div>
       </motion.div>
@@ -324,36 +324,36 @@ navigate("/funcionario", { replace: true });
       )}
 
       <AnimatePresence>
-  {showRecovery && (
-    <>
-      <motion.div
-        initial={{ opacity: 0 }}
-        animate={{ opacity: 1 }}
-        exit={{ opacity: 0 }}
-        className="fixed inset-0 z-[9998] bg-black/50"
-        onClick={() => setShowRecovery(false)}
-      />
+        {showRecovery && (
+          <>
+            <motion.div
+              initial={{ opacity: 0 }}
+              animate={{ opacity: 1 }}
+              exit={{ opacity: 0 }}
+              className="fixed inset-0 z-[9998] bg-black/50"
+              onClick={() => setShowRecovery(false)}
+            />
 
-      <motion.div
-        initial={{
-          opacity: 0,
-          scale: 0.9,
-          y: 20,
-        }}
-        animate={{
-          opacity: 1,
-          scale: 1,
-          y: 0,
-        }}
-        exit={{
-          opacity: 0,
-          scale: 0.9,
-          y: 20,
-        }}
-        transition={{
-          duration: 0.2,
-        }}
-        className="
+            <motion.div
+              initial={{
+                opacity: 0,
+                scale: 0.9,
+                y: 20,
+              }}
+              animate={{
+                opacity: 1,
+                scale: 1,
+                y: 0,
+              }}
+              exit={{
+                opacity: 0,
+                scale: 0.9,
+                y: 20,
+              }}
+              transition={{
+                duration: 0.2,
+              }}
+              className="
           fixed
           inset-0
           z-[9999]
@@ -362,9 +362,9 @@ navigate("/funcionario", { replace: true });
           justify-center
           p-4
         "
-      >
-        <div
-          className="
+            >
+              <div
+                className="
             w-full
             max-w-md
             rounded-3xl
@@ -374,67 +374,67 @@ navigate("/funcionario", { replace: true });
             shadow-2xl
             p-6
           "
-          onClick={(e) => e.stopPropagation()}
-        >
-          <h3 className="text-lg font-semibold">
-            Recuperar acesso
-          </h3>
+                onClick={(e) => e.stopPropagation()}
+              >
+                <h3 className="text-lg font-semibold">
+                  Recuperar acesso
+                </h3>
 
-          <p className="text-sm text-muted-foreground mt-1 mb-5">
-            Informe seus dados para que o administrativo entre em contato.
-          </p>
+                <p className="text-sm text-muted-foreground mt-1 mb-5">
+                  Informe seus dados para que o administrativo entre em contato.
+                </p>
 
-          <div className="space-y-3">
-            <Input
-  placeholder="E-mail vinculado à matrícula"
-  value={recoveryEmail}
-  onChange={(e) => setRecoveryEmail(e.target.value)}
-  inputMode="email"
-/>
+                <div className="space-y-3">
+                  <Input
+                    placeholder="E-mail vinculado à matrícula"
+                    value={recoveryEmail}
+                    onChange={(e) => setRecoveryEmail(e.target.value)}
+                    inputMode="email"
+                  />
 
-<Input
-  placeholder="CPF"
-  value={recoveryCpf}
-  onChange={(e) => {
-    const value = e.target.value.replace(/\D/g, "").slice(0, 11);
+                  <Input
+                    placeholder="CPF"
+                    value={recoveryCpf}
+                    onChange={(e) => {
+                      const value = e.target.value.replace(/\D/g, "").slice(0, 11);
 
-    const formatted = value
-      .replace(/(\d{3})(\d)/, "$1.$2")
-      .replace(/(\d{3})(\d)/, "$1.$2")
-      .replace(/(\d{3})(\d{1,2})$/, "$1-$2");
+                      const formatted = value
+                        .replace(/(\d{3})(\d)/, "$1.$2")
+                        .replace(/(\d{3})(\d)/, "$1.$2")
+                        .replace(/(\d{3})(\d{1,2})$/, "$1-$2");
 
-    setRecoveryCpf(formatted);
-  }}
-  inputMode="numeric"
-/>
-          </div>
+                      setRecoveryCpf(formatted);
+                    }}
+                    inputMode="numeric"
+                  />
+                </div>
 
-          <div className="mt-5 flex gap-2">
-            <Button
-              variant="outline"
-              className="flex-1"
-              onClick={() =>
-                setShowRecovery(false)
-              }
-            >
-              Cancelar
-            </Button>
+                <div className="mt-5 flex gap-2">
+                  <Button
+                    variant="outline"
+                    className="flex-1"
+                    onClick={() =>
+                      setShowRecovery(false)
+                    }
+                  >
+                    Cancelar
+                  </Button>
 
-            <Button
-              className="flex-1"
-              disabled={sendingRecovery}
-              onClick={sendRecoveryRequest}
-            >
-              {sendingRecovery
-                ? "Enviando..."
-                : "Enviar"}
-            </Button>
-          </div>
-        </div>
-      </motion.div>
-    </>
-  )}
-</AnimatePresence>
+                  <Button
+                    className="flex-1"
+                    disabled={sendingRecovery}
+                    onClick={sendRecoveryRequest}
+                  >
+                    {sendingRecovery
+                      ? "Enviando..."
+                      : "Enviar"}
+                  </Button>
+                </div>
+              </div>
+            </motion.div>
+          </>
+        )}
+      </AnimatePresence>
 
     </div>
   );

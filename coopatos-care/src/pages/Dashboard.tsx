@@ -1,229 +1,592 @@
-import React, { useState, useMemo } from "react";
+import React, { useEffect, useMemo, useState } from "react";
 import { useAuth } from "@/contexts/AuthContext";
-import { useReports } from "@/contexts/ReportsContext";
 import { useNavigate } from "react-router-dom";
-import { CATEGORIES, STATUSES, CATEGORY_WEIGHTS, Category, Status, Report, getSortedReports } from "@/data/mockData";
 import { motion, AnimatePresence } from "framer-motion";
 import {
-  LogOut, Filter, MapPin, List, BarChart3, Droplets, Zap, Mountain, Shield,
-  TreePine, HelpCircle, ChevronDown, X, Map as MapIcon
+  LogOut,
+  MapPin,
+  List,
+  Droplets,
+  Zap,
+  Mountain,
+  Shield,
+  TreePine,
+  HelpCircle,
+  Map as MapIcon,
+  X,
+  Users,
+  UserCog,
+  Building2,
+  Settings,
+  ClipboardList,
 } from "lucide-react";
+
 import { Button } from "@/components/ui/button";
-import { Badge } from "@/components/ui/badge";
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
+import { useToast } from "@/hooks/use-toast";
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select";
 import { Input } from "@/components/ui/input";
-import ReportDetail from "@/components/ReportDetail";
-import DashboardMaps from "@/components/DashboardMaps";
 
-const categoryIcons: Record<Category, React.ReactNode> = {
-  "Hídrico": <Droplets className="w-4 h-4" />,
-  "Elétrico": <Zap className="w-4 h-4" />,
-  "Erosão": <Mountain className="w-4 h-4" />,
-  "Segurança": <Shield className="w-4 h-4" />,
-  "Vegetação": <TreePine className="w-4 h-4" />,
-  "Outro": <HelpCircle className="w-4 h-4" />,
+type AdminSection =
+  | "reports"
+  | "employees"
+  | "users"
+  | "departments"
+  | "settings";
+
+type AdminReport = {
+  id: number;
+  title?: string | null;
+  description?: string | null;
+  referencePoint?: string | null;
+  address?: string | null;
+  createdAt: string;
+  category: {
+    id: number;
+    name: string;
+  };
+  status: {
+    id: number;
+    name: string;
+    color?: string | null;
+  };
+  employee: {
+    id: number;
+    name: string;
+  };
+  images?: {
+    id: number;
+    imageUrl: string;
+    resourceType?: string | null;
+  }[];
 };
 
-const statusColors: Record<Status, string> = {
-  "Aberto": "bg-destructive/10 text-destructive border-destructive/20",
-  "Em Andamento": "bg-warning/10 text-warning border-warning/20",
-  "Aguardando Peça": "bg-info/10 text-info border-info/20",
-  "Concluído": "bg-success/10 text-success border-success/20",
+const API_URL =
+  window.location.hostname === "localhost" ||
+    window.location.hostname === "127.0.0.1"
+    ? "http://localhost:3333"
+    : import.meta.env.VITE_API_URL ||
+    "https://zeladoria-coopatos-api.onrender.com";
+
+const categoryIcons: Record<string, React.ReactNode> = {
+  Hídrico: <Droplets className="w-4 h-4" />,
+  Elétrico: <Zap className="w-4 h-4" />,
+  Erosão: <Mountain className="w-4 h-4" />,
+  Segurança: <Shield className="w-4 h-4" />,
+  Vegetação: <TreePine className="w-4 h-4" />,
+  Outros: <HelpCircle className="w-4 h-4" />,
+  Outro: <HelpCircle className="w-4 h-4" />,
 };
 
-const priorityBarColor = (weight: number) => {
-  if (weight >= 5) return "bg-destructive";
-  if (weight >= 4) return "bg-warning";
-  if (weight >= 3) return "bg-warning/70";
-  if (weight >= 2) return "bg-info";
-  return "bg-success";
+const statusColors: Record<string, string> = {
+  ABERTO: "bg-red-100 text-red-700 border-red-200",
+  EM_ANALISE: "bg-yellow-100 text-yellow-700 border-yellow-200",
+  EM_ANDAMENTO: "bg-blue-100 text-blue-700 border-blue-200",
+  FINALIZADO: "bg-green-100 text-green-700 border-green-200",
+};
+
+const priorityBarColor = (report: AdminReport) => {
+  const category = report.category?.name;
+
+  if (category === "Segurança") return "bg-red-500";
+  if (category === "Elétrico") return "bg-yellow-500";
+  if (category === "Hídrico") return "bg-blue-500";
+  if (category === "Erosão") return "bg-amber-600";
+  return "bg-green-500";
 };
 
 const Dashboard = () => {
   const { logout } = useAuth();
-  const { reports } = useReports();
   const navigate = useNavigate();
+  const { toast } = useToast();
+
+  const [reports, setReports] = useState<AdminReport[]>([]);
+  const [loadingReports, setLoadingReports] = useState(false);
+  const [categories, setCategories] = useState<{ id: number; name: string }[]>([]);
+  const [statuses, setStatuses] = useState<{ id: number; name: string }[]>([]);
+
+  const [adminSection, setAdminSection] = useState<AdminSection>("reports");
 
   const [view, setView] = useState<"list" | "maps">("list");
-  const [filterCategory, setFilterCategory] = useState<string>("all");
-  const [filterStatus, setFilterStatus] = useState<string>("all");
+  const [filterCategory, setFilterCategory] = useState("all");
+  const [filterStatus, setFilterStatus] = useState("all");
   const [filterLocation, setFilterLocation] = useState("");
-  const [selectedReport, setSelectedReport] = useState<Report | null>(null);
+  const [selectedReport, setSelectedReport] = useState<AdminReport | null>(null);
+
+  const admin = JSON.parse(localStorage.getItem("admin") || "{}");
+
+  useEffect(() => {
+    const auth = JSON.parse(localStorage.getItem("auth") || "{}");
+    const adminWelcomeShown = localStorage.getItem("adminWelcomeShown");
+
+    if (!auth.isAuthenticated || auth.role !== "admin") {
+      navigate("/admin", { replace: true });
+      return;
+    }
+
+    if (admin?.email && adminWelcomeShown !== "true") {
+      toast({
+        title: `✓ Bem-vindo, ${admin.employee?.name || admin.email}!`,
+        description: "Acesso administrativo realizado com sucesso.",
+        className: "bg-secondary text-secondary-foreground border-secondary",
+      });
+
+      localStorage.setItem("adminWelcomeShown", "true");
+    }
+  }, [navigate, toast]);
+
+  useEffect(() => {
+    const loadAdminData = async () => {
+      setLoadingReports(true);
+
+      try {
+        const [reportsResponse, categoriesResponse, statusesResponse] =
+          await Promise.all([
+            fetch(`${API_URL}/reports`),
+            fetch(`${API_URL}/categories`),
+            fetch(`${API_URL}/statuses`),
+          ]);
+
+        setReports(await reportsResponse.json());
+        setCategories(await categoriesResponse.json());
+        setStatuses(await statusesResponse.json());
+      } catch (error) {
+        console.error(error);
+
+        toast({
+          title: "Erro ao carregar dados administrativos",
+          variant: "destructive",
+        });
+      } finally {
+        setLoadingReports(false);
+      }
+    };
+
+    loadAdminData();
+  }, [toast]);
 
   const filtered = useMemo(() => {
-    let result = reports;
-    if (filterCategory !== "all") result = result.filter((r) => r.category === filterCategory);
-    if (filterStatus !== "all") result = result.filter((r) => r.status === filterStatus);
-    if (filterLocation.trim()) result = result.filter((r) =>
-      r.referencePoint.toLowerCase().includes(filterLocation.toLowerCase())
+    let result = [...reports];
+
+    if (filterCategory !== "all") {
+      result = result.filter((r) => String(r.category.id) === filterCategory);
+    }
+
+    if (filterStatus !== "all") {
+      result = result.filter((r) => String(r.status.id) === filterStatus);
+    }
+
+    if (filterLocation.trim()) {
+      const search = filterLocation.toLowerCase();
+
+      result = result.filter(
+        (r) =>
+          r.referencePoint?.toLowerCase().includes(search) ||
+          r.address?.toLowerCase().includes(search) ||
+          r.description?.toLowerCase().includes(search) ||
+          r.title?.toLowerCase().includes(search) ||
+          r.employee?.name?.toLowerCase().includes(search) ||
+          String(r.id).includes(search)
+      );
+    }
+
+    return result.sort(
+      (a, b) =>
+        new Date(b.createdAt).getTime() -
+        new Date(a.createdAt).getTime()
     );
-    return getSortedReports(result);
   }, [reports, filterCategory, filterStatus, filterLocation]);
 
-  const stats = useMemo(() => ({
-    total: reports.length,
-    open: reports.filter((r) => r.status === "Aberto").length,
-    inProgress: reports.filter((r) => r.status === "Em Andamento").length,
-    done: reports.filter((r) => r.status === "Concluído").length,
-  }), [reports]);
+  const stats = useMemo(
+    () => ({
+      total: reports.length,
+      open: reports.filter((r) => r.status.name === "ABERTO").length,
+      inProgress: reports.filter((r) => r.status.name === "EM_ANDAMENTO")
+        .length,
+      done: reports.filter((r) => r.status.name === "FINALIZADO").length,
+    }),
+    [reports]
+  );
+
+  const adminMenu = [
+    { id: "reports", label: "Chamados", icon: ClipboardList },
+    { id: "employees", label: "Funcionários", icon: Users },
+    { id: "users", label: "Usuários", icon: UserCog },
+    { id: "departments", label: "Departamentos", icon: Building2 },
+    { id: "settings", label: "Configurações", icon: Settings },
+  ] as const;
+
+  const sectionTitle = {
+    reports: "Chamados",
+    employees: "Funcionários",
+    users: "Usuários",
+    departments: "Departamentos",
+    settings: "Configurações",
+  }[adminSection];
 
   return (
     <div className="min-h-screen bg-background">
-      {/* Sidebar / Header */}
-      <header className="gradient-primary px-6 py-4 flex items-center justify-between sticky top-0 z-20">
+      <header className="gradient-primary sticky top-0 z-20 flex items-center justify-between px-6 py-4">
         <div className="flex items-center gap-3">
-          <img src="/logo-coopatos.png" alt="Logo Coopatos" className="w-20 h-20 rounded-xl object-contain" />
+          <img
+            src="/logo-coopatos.png"
+            alt="Logo Coopatos"
+            className="h-20 w-20 rounded-xl object-contain"
+          />
+
           <div>
-            <h1 className="text-primary-foreground font-bold text-lg">Zeladoria Digital</h1>
-            <p className="text-primary-foreground/60 text-xs">Painel de Manutenção • Coopatos</p>
+            <h1 className="text-lg font-bold text-primary-foreground">
+              Zeladoria Digital
+            </h1>
+            <p className="text-xs text-primary-foreground/60">
+              Painel Administrativo • Coopatos
+            </p>
           </div>
         </div>
+
         <button
-          onClick={() => { logout(); navigate("/"); }}
-          className="text-primary-foreground/70 hover:text-primary-foreground flex items-center gap-1 text-sm"
+          onClick={() => {
+            logout();
+            navigate("/admin", { replace: true });
+          }}
+          className="flex items-center gap-1 text-sm text-primary-foreground/70 hover:text-primary-foreground"
         >
-          <LogOut className="w-4 h-4" /> Sair
+          <LogOut className="h-4 w-4" />
+          Sair
         </button>
       </header>
 
-      <div className="max-w-7xl mx-auto p-4 lg:p-6">
-        {/* Stats */}
-        <div className="grid grid-cols-2 lg:grid-cols-4 gap-3 mb-6">
-          {[
-            { label: "Total", value: stats.total, color: "bg-primary/10 text-primary" },
-            { label: "Abertos", value: stats.open, color: "bg-destructive/10 text-destructive" },
-            { label: "Em Andamento", value: stats.inProgress, color: "bg-warning/10 text-warning" },
-            { label: "Concluídos", value: stats.done, color: "bg-success/10 text-success" },
-          ].map((s) => (
-            <div key={s.label} className="bg-card rounded-xl border border-border p-4">
-              <p className="text-xs text-muted-foreground mb-1">{s.label}</p>
-              <p className={`text-2xl font-bold ${s.color.split(" ")[1]}`}>{s.value}</p>
-            </div>
-          ))}
-        </div>
+      <div className="sticky top-[112px] z-10 border-b border-border/60 bg-background/80 backdrop-blur-xl">
+        <div className="mx-auto max-w-7xl overflow-x-auto px-4 py-3">
+          <div className="flex min-w-max gap-2 rounded-2xl bg-muted/40 p-1">
+            {adminMenu.map((item) => {
+              const Icon = item.icon;
+              const active = adminSection === item.id;
 
-        {/* View Toggle + Filters */}
-        <div className="flex flex-col lg:flex-row gap-3 mb-4">
-          <div className="flex gap-2">
-            <Button
-              variant={view === "list" ? "default" : "outline"}
-              size="sm"
-              onClick={() => setView("list")}
-              className={view === "list" ? "bg-primary text-primary-foreground" : ""}
-            >
-              <List className="w-4 h-4 mr-1" /> Lista
-            </Button>
-            <Button
-              variant={view === "maps" ? "default" : "outline"}
-              size="sm"
-              onClick={() => setView("maps")}
-              className={view === "maps" ? "bg-primary text-primary-foreground" : ""}
-            >
-              <MapIcon className="w-4 h-4 mr-1" /> Mapas
-            </Button>
-          </div>
-
-          {view === "list" && (
-            <div className="flex flex-wrap gap-2 flex-1">
-              <Select value={filterCategory} onValueChange={setFilterCategory}>
-                <SelectTrigger className="w-[150px] h-9 text-sm">
-                  <SelectValue placeholder="Categoria" />
-                </SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="all">Todas categorias</SelectItem>
-                  {CATEGORIES.map((c) => (
-                    <SelectItem key={c} value={c}>
-                      <span className="flex items-center gap-2">
-                        {categoryIcons[c]}
-                        {c}
-                      </span>
-                    </SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
-              <Select value={filterStatus} onValueChange={setFilterStatus}>
-                <SelectTrigger className="w-[160px] h-9 text-sm">
-                  <SelectValue placeholder="Status" />
-                </SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="all">Todos status</SelectItem>
-                  {STATUSES.map((s) => <SelectItem key={s} value={s}>{s}</SelectItem>)}
-                </SelectContent>
-              </Select>
-              <Input
-                placeholder="Buscar local..."
-                value={filterLocation}
-                onChange={(e) => setFilterLocation(e.target.value)}
-                className="w-[200px] h-9 text-sm"
-              />
-            </div>
-          )}
-        </div>
-
-        {/* Content */}
-        {view === "list" ? (
-          <div className="space-y-2">
-            <p className="text-xs text-muted-foreground mb-2">
-              {filtered.length} ocorrências • Ordenadas por prioridade
-            </p>
-            {filtered.map((report, i) => (
-              <motion.div
-                key={report.id}
-                initial={{ opacity: 0, y: 8 }}
-                animate={{ opacity: 1, y: 0 }}
-                transition={{ delay: i * 0.03 }}
-                onClick={() => setSelectedReport(report)}
-                className="bg-card rounded-xl border border-border p-4 hover:shadow-md hover:border-secondary/40 transition-all cursor-pointer"
-              >
-                <div className="flex items-center gap-4">
-                  {/* Priority Bar */}
-                  <div className="flex flex-col items-center gap-1 w-8">
-                    <div className={`w-2 h-8 rounded-full ${priorityBarColor(CATEGORY_WEIGHTS[report.category])}`} />
-                    <span className="text-[10px] font-bold text-muted-foreground">P{CATEGORY_WEIGHTS[report.category]}</span>
-                  </div>
-
-                  {/* Image */}
-                  <img
-                    src={report.imageUrl}
-                    alt=""
-                    className="w-14 h-14 rounded-lg object-cover flex-shrink-0 hidden sm:block"
+              return (
+                <button
+                  key={item.id}
+                  type="button"
+                  onClick={() => setAdminSection(item.id)}
+                  className={`group relative flex shrink-0 items-center gap-2 rounded-xl px-4 py-2.5 text-sm font-medium transition-all duration-300 ${active
+                      ? "bg-card text-primary shadow-sm"
+                      : "text-muted-foreground hover:bg-card/70 hover:text-foreground"
+                    }`}
+                >
+                  <Icon
+                    className={`h-4 w-4 transition-transform duration-300 ${active ? "scale-110" : "group-hover:scale-110"
+                      }`}
                   />
 
-                  {/* Info */}
-                  <div className="flex-1 min-w-0">
-                    <div className="flex items-center gap-2 mb-1">
-                      <span className="text-primary">{categoryIcons[report.category]}</span>
-                      <span className="font-semibold text-sm">{report.category}</span>
-                      <span className="text-xs text-muted-foreground">{report.id}</span>
-                    </div>
-                    <p className="text-xs text-muted-foreground truncate">{report.description || report.referencePoint}</p>
-                    <div className="flex items-center gap-3 mt-1">
-                      <span className="text-[11px] text-muted-foreground flex items-center gap-1">
-                        <MapPin className="w-3 h-3" /> {report.referencePoint}
-                      </span>
-                      <span className="text-[11px] text-muted-foreground">
-                        {new Date(report.createdAt).toLocaleDateString("pt-BR")}
-                      </span>
-                    </div>
-                  </div>
+                  {item.label}
 
-                  {/* Status */}
-                  <span className={`text-xs px-3 py-1 rounded-full border whitespace-nowrap ${statusColors[report.status]}`}>
-                    {report.status}
-                  </span>
-                </div>
-              </motion.div>
-            ))}
+                  {active && (
+                    <motion.span
+                      layoutId="adminActiveLine"
+                      className="absolute inset-x-4 -bottom-1 h-0.5 rounded-full bg-primary"
+                    />
+                  )}
+                </button>
+              );
+            })}
           </div>
-        ) : (
-          <DashboardMaps reports={filtered} onSelectReport={setSelectedReport} />
-        )}
+        </div>
       </div>
 
-      {/* Report Detail Modal */}
+      <main className="mx-auto max-w-7xl p-4 lg:p-6">
+        {adminSection === "reports" ? (
+          <>
+            <div className="mb-6 grid grid-cols-2 gap-3 lg:grid-cols-4">
+              {[
+                { label: "Total", value: stats.total, color: "text-primary" },
+                {
+                  label: "Abertos",
+                  value: stats.open,
+                  color: "text-red-700",
+                },
+                {
+                  label: "Em andamento",
+                  value: stats.inProgress,
+                  color: "text-blue-700",
+                },
+                {
+                  label: "Finalizados",
+                  value: stats.done,
+                  color: "text-green-700",
+                },
+              ].map((s) => (
+                <div
+                  key={s.label}
+                  className="rounded-2xl border border-border bg-card p-4 shadow-sm transition-all hover:-translate-y-0.5 hover:shadow-md"
+                >
+                  <p className="mb-1 text-xs text-muted-foreground">
+                    {s.label}
+                  </p>
+                  <p className={`text-2xl font-bold ${s.color}`}>
+                    {s.value}
+                  </p>
+                </div>
+              ))}
+            </div>
+
+            <div className="mb-4 flex flex-col gap-3 lg:flex-row">
+              <div className="flex gap-2">
+                <Button
+                  variant={view === "list" ? "default" : "outline"}
+                  size="sm"
+                  onClick={() => setView("list")}
+                  className={
+                    view === "list" ? "bg-primary text-primary-foreground" : ""
+                  }
+                >
+                  <List className="mr-1 h-4 w-4" />
+                  Lista
+                </Button>
+
+                <Button
+                  variant={view === "maps" ? "default" : "outline"}
+                  size="sm"
+                  onClick={() => setView("maps")}
+                  className={
+                    view === "maps" ? "bg-primary text-primary-foreground" : ""
+                  }
+                >
+                  <MapIcon className="mr-1 h-4 w-4" />
+                  Mapas
+                </Button>
+              </div>
+
+              <div className="flex flex-1 flex-wrap gap-2">
+                <Select
+                  value={filterCategory}
+                  onValueChange={setFilterCategory}
+                >
+                  <SelectTrigger className="h-9 w-[170px] text-sm">
+                    <SelectValue placeholder="Categoria" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="all">Todas categorias</SelectItem>
+                    {categories.map((c) => (
+                      <SelectItem key={c.id} value={String(c.id)}>
+                        <span className="flex items-center gap-2">
+                          {categoryIcons[c.name] || (
+                            <HelpCircle className="h-4 w-4" />
+                          )}
+                          {c.name}
+                        </span>
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+
+                <Select value={filterStatus} onValueChange={setFilterStatus}>
+                  <SelectTrigger className="h-9 w-[170px] text-sm">
+                    <SelectValue placeholder="Status" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="all">Todos status</SelectItem>
+                    {statuses.map((s) => (
+                      <SelectItem key={s.id} value={String(s.id)}>
+                        {s.name}
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+
+                <Input
+                  placeholder="Buscar chamado, local ou funcionário..."
+                  value={filterLocation}
+                  onChange={(e) => setFilterLocation(e.target.value)}
+                  className="h-9 w-full text-sm lg:w-[280px]"
+                />
+              </div>
+            </div>
+
+            {loadingReports ? (
+              <div className="rounded-2xl border border-border bg-card p-6 text-sm text-muted-foreground">
+                Carregando chamados...
+              </div>
+            ) : view === "list" ? (
+              <div className="space-y-2">
+                <p className="mb-2 text-xs text-muted-foreground">
+                  {filtered.length} ocorrência(s) encontradas
+                </p>
+
+                {filtered.map((report, i) => (
+                  <motion.div
+                    key={report.id}
+                    initial={{ opacity: 0, y: 8 }}
+                    animate={{ opacity: 1, y: 0 }}
+                    transition={{ delay: i * 0.02 }}
+                    onClick={() => setSelectedReport(report)}
+                    className="group cursor-pointer rounded-2xl border border-border bg-card p-4 transition-all hover:-translate-y-0.5 hover:border-secondary/50 hover:shadow-lg"
+                  >
+                    <div className="flex items-center gap-4">
+                      <div className="flex w-8 flex-col items-center gap-1">
+                        <div
+                          className={`h-8 w-2 rounded-full ${priorityBarColor(
+                            report
+                          )}`}
+                        />
+                        <span className="text-[10px] font-bold text-muted-foreground">
+                          #{report.id}
+                        </span>
+                      </div>
+
+                      <img
+                        src={
+                          report.images?.[0]?.imageUrl || "/placeholder.svg"
+                        }
+                        alt=""
+                        className="hidden h-14 w-14 flex-shrink-0 rounded-xl object-cover sm:block"
+                      />
+
+                      <div className="min-w-0 flex-1">
+                        <div className="mb-1 flex items-center gap-2">
+                          <span className="text-primary">
+                            {categoryIcons[report.category.name] || (
+                              <HelpCircle className="h-4 w-4" />
+                            )}
+                          </span>
+
+                          <span className="truncate text-sm font-semibold">
+                            {report.title || report.category.name}
+                          </span>
+
+                          <span className="text-xs text-muted-foreground">
+                            #{report.id}
+                          </span>
+                        </div>
+
+                        <p className="truncate text-xs text-muted-foreground">
+                          {report.description ||
+                            report.referencePoint ||
+                            report.address ||
+                            "Sem descrição"}
+                        </p>
+
+                        <div className="mt-1 flex flex-wrap items-center gap-3">
+                          <span className="flex items-center gap-1 text-[11px] text-muted-foreground">
+                            <MapPin className="h-3 w-3" />
+                            {report.referencePoint ||
+                              report.address ||
+                              "Local não informado"}
+                          </span>
+
+                          <span className="text-[11px] text-muted-foreground">
+                            Aberto por{" "}
+                            {report.employee?.name || "Funcionário"}
+                          </span>
+
+                          <span className="text-[11px] text-muted-foreground">
+                            {new Date(report.createdAt).toLocaleDateString(
+                              "pt-BR"
+                            )}
+                          </span>
+                        </div>
+                      </div>
+
+                      <span
+                        className={`whitespace-nowrap rounded-full border px-3 py-1 text-xs ${statusColors[report.status.name] ||
+                          "border-border bg-muted text-muted-foreground"
+                          }`}
+                      >
+                        {report.status.name}
+                      </span>
+                    </div>
+                  </motion.div>
+                ))}
+              </div>
+            ) : (
+              <div className="rounded-2xl border border-border bg-card p-6">
+                <p className="mb-1 text-sm font-semibold">
+                  Mapa administrativo
+                </p>
+                <p className="text-sm text-muted-foreground">
+                  Vamos reconectar o mapa aos chamados reais no próximo passo.
+                </p>
+              </div>
+            )}
+          </>
+        ) : (
+          <div className="rounded-2xl border border-border bg-card p-6 shadow-sm">
+            <p className="text-lg font-semibold">{sectionTitle}</p>
+            <p className="mt-1 text-sm text-muted-foreground">
+              Essa área será conectada ao banco nos próximos passos.
+            </p>
+          </div>
+        )}
+      </main>
+
       <AnimatePresence>
         {selectedReport && (
-          <ReportDetail report={selectedReport} onClose={() => setSelectedReport(null)} />
+          <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 p-4">
+            <motion.div
+              initial={{ opacity: 0, scale: 0.96 }}
+              animate={{ opacity: 1, scale: 1 }}
+              exit={{ opacity: 0, scale: 0.96 }}
+              className="max-h-[85vh] w-full max-w-2xl overflow-y-auto rounded-2xl border border-border bg-card shadow-2xl"
+            >
+              <div className="flex items-center justify-between border-b border-border p-4">
+                <div>
+                  <h2 className="text-lg font-bold">
+                    {selectedReport.title || `Chamado #${selectedReport.id}`}
+                  </h2>
+                  <p className="text-xs text-muted-foreground">
+                    Aberto por {selectedReport.employee?.name}
+                  </p>
+                </div>
+
+                <button
+                  onClick={() => setSelectedReport(null)}
+                  className="flex h-9 w-9 items-center justify-center rounded-full bg-muted"
+                >
+                  <X className="h-4 w-4" />
+                </button>
+              </div>
+
+              <div className="space-y-4 p-4">
+                {selectedReport.images && selectedReport.images.length > 0 && (
+                  <img
+                    src={selectedReport.images[0].imageUrl}
+                    alt=""
+                    className="max-h-80 w-full rounded-xl border object-cover"
+                  />
+                )}
+
+                <div>
+                  <p className="text-xs text-muted-foreground">Categoria</p>
+                  <p className="font-medium">{selectedReport.category.name}</p>
+                </div>
+
+                <div>
+                  <p className="text-xs text-muted-foreground">Status</p>
+                  <p className="font-medium">{selectedReport.status.name}</p>
+                </div>
+
+                <div>
+                  <p className="text-xs text-muted-foreground">Descrição</p>
+                  <p className="text-sm">
+                    {selectedReport.description || "Sem descrição."}
+                  </p>
+                </div>
+
+                <div>
+                  <p className="text-xs text-muted-foreground">Local</p>
+                  <p className="text-sm">
+                    {selectedReport.referencePoint ||
+                      selectedReport.address ||
+                      "Não informado"}
+                  </p>
+                </div>
+              </div>
+            </motion.div>
+          </div>
         )}
       </AnimatePresence>
     </div>
