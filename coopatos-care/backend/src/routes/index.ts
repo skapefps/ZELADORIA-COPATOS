@@ -630,31 +630,48 @@ router.patch("/reports/:id", async (req, res) => {
 });
 
 router.delete("/report-images/:id", async (req, res) => {
-  const id = Number(req.params.id);
+  try {
+    const id = Number(req.params.id);
 
-  const image = await prisma.reportImage.findUnique({
-    where: { id },
-  });
+    const image = await prisma.reportImage.findUnique({
+      where: { id },
+    });
 
-  if (!image) {
-    return res.status(404).json({
-      error: "Imagem não encontrada.",
+    if (!image) {
+      return res.status(404).json({
+        error: "Imagem não encontrada.",
+      });
+    }
+
+    if (image.publicId) {
+      try {
+        await cloudinary.uploader.destroy(image.publicId, {
+          resource_type:
+            image.resourceType === "video" || image.resourceType === "audio"
+              ? "video"
+              : "image",
+        });
+      } catch (cloudinaryError) {
+        console.error("Erro ao remover mídia do Cloudinary:", cloudinaryError);
+      }
+    }
+
+    await prisma.reportImage.delete({
+      where: { id },
+    });
+
+    io.emit("reports-updated");
+
+    return res.json({
+      message: "Imagem removida com sucesso.",
+    });
+  } catch (error) {
+    console.error("Erro ao remover imagem:", error);
+
+    return res.status(500).json({
+      error: "Erro ao remover imagem.",
     });
   }
-
-  if (image.publicId) {
-    await cloudinary.uploader.destroy(image.publicId, {
-      resource_type: image.resourceType || "image",
-    });
-  }
-
-  await prisma.reportImage.delete({
-    where: { id },
-  });
-
-  return res.json({
-    message: "Imagem removida com sucesso.",
-  });
 });
 
 router.post("/reports/:id/images", async (req, res) => {

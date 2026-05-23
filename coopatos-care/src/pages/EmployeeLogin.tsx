@@ -16,6 +16,10 @@ const API_URL =
 
 const EmployeeLogin = () => {
 
+  const isPublicDomain =
+    window.location.hostname === "zeladoriacoopatos.com.br" ||
+    window.location.hostname === "www.zeladoriacoopatos.com.br";
+
   const [matricula, setMatricula] = useState("");
   const [showTimeoutModal, setShowTimeoutModal] = useState(false);
   const [error, setError] = useState("");
@@ -30,6 +34,7 @@ const EmployeeLogin = () => {
   const { loginEmployee } = useAuth();
   const navigate = useNavigate();
   const { toast } = useToast();
+
 
   useEffect(() => {
     const employee = localStorage.getItem("employee");
@@ -155,6 +160,28 @@ const EmployeeLogin = () => {
       setLoading(false);
     }
   };
+
+  if (isPublicDomain) {
+    return (
+      <div className="min-h-screen flex items-center justify-center px-6">
+        <div className="max-w-xl text-center bg-card p-8 rounded-2xl shadow-lg">
+          <h1 className="text-3xl font-bold mb-4">
+            Projeto Acadêmico
+          </h1>
+
+          <p className="text-muted-foreground">
+            Este sistema foi desenvolvido para fins acadêmicos e encontra-se
+            temporariamente indisponível ao público enquanto aguardamos
+            autorização institucional para utilização da identidade visual e do nome.
+          </p>
+
+          <p className="text-sm text-muted-foreground mt-4">
+            Para mais informações, entre em contato com os responsáveis pelo projeto.
+          </p>
+        </div>
+      </div>
+    );
+  }
 
   return (
     <div className="min-h-screen flex flex-col items-center justify-center gradient-hero px-4">
