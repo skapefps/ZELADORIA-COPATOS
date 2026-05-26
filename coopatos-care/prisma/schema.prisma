@@ -131,6 +131,7 @@ model ReportNote {
 
   report    Report   @relation(fields: [reportId], references: [id])
   author    Employee @relation(fields: [authorId], references: [id])
+  media      ReportNoteMedia[]
 
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
@@ -138,6 +139,22 @@ model ReportNote {
   @@index([reportId])
   @@index([authorId])
   @@index([createdAt])
+}
+
+model ReportNoteMedia {
+  id           Int      @id @default(autoincrement())
+
+  noteId       Int
+  mediaUrl     String
+  publicId     String?
+  resourceType String?  @default("image")
+
+  note         ReportNote @relation(fields: [noteId], references: [id])
+
+  createdAt    DateTime @default(now())
+
+  @@index([noteId])
+  @@index([publicId])
 }
 
 model ReportImage {

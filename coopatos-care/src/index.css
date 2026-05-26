@@ -98,12 +98,12 @@
 
 @layer utilities {
   .gradient-primary {
-    background: linear-gradient(135deg, hsl(213 56% 24%), hsl(213 56% 32%));
+    background: linear-gradient(135deg, hsl(var(--primary)), hsl(var(--primary) / 0.88));
   }
   .gradient-secondary {
-    background: linear-gradient(135deg, hsl(73 75% 43%), hsl(73 75% 50%));
+    background: linear-gradient(135deg, hsl(var(--secondary)), hsl(var(--secondary) / 0.88));
   }
   .gradient-hero {
-    background: linear-gradient(135deg, hsl(213 56% 20%), hsl(213 56% 28%), hsl(213 56% 24%));
+    background: linear-gradient(135deg, hsl(var(--primary)), hsl(var(--primary) / 0.92), hsl(var(--primary)));
   }
 }

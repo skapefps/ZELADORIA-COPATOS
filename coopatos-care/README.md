@@ -24,6 +24,9 @@ Categorias citadas no contexto do projeto incluem manutenção hídrica, elétri
 
 ## Estrutura Principal
 
+- `src/config/brand.ts`: preset whitelabel do frontend com nome, slogan, logo, favicon e cores.
+- `src/components/BrandLogo.tsx`: componente único para renderizar a logo configurada no preset.
+- `backend/src/config/brand.ts`: preset whitelabel usado pelo backend em e-mails e textos server-side.
 - `src/pages/EmployeeLogin.tsx`: login do funcionário, recuperação de matrícula e bloqueio do domínio público.
 - `src/pages/EmployeePanel.tsx`: painel principal do funcionário, chamados, chat, notificações e interações em tempo real.
 - `src/pages/AdminLogin.tsx`: login administrativo.
@@ -33,6 +36,17 @@ Categorias citadas no contexto do projeto incluem manutenção hídrica, elétri
 - `backend/src/routes/index.ts`: rotas principais da API.
 - `prisma/schema.prisma`: modelos do banco.
 - `vercel.json`: rewrite do frontend para SPA.
+
+## Whitelabel
+
+O projeto pode ser usado como modelo para outras empresas. Para trocar identidade visual, edite:
+
+- `src/config/brand.ts`: altera nome do app, nome curto, organização, slogan, logo, favicon e cores do frontend.
+- `backend/src/config/brand.ts`: altera nome, logo pública e cores usadas em e-mails enviados pela API.
+
+As cores do frontend são aplicadas como CSS variables no carregamento da aplicação. Elementos que usam `primary`, `secondary`, `gradient-primary`, `gradient-secondary` e `gradient-hero` acompanham o preset automaticamente.
+
+Ao trocar a logo, coloque o arquivo em `public/` e atualize `logoSrc`/`faviconSrc`. Para e-mails, use uma URL pública em `logoUrl`, porque clientes de e-mail não acessam arquivos locais do projeto.
 
 ## Funcionalidades Já Presentes
 
@@ -54,6 +68,8 @@ Categorias citadas no contexto do projeto incluem manutenção hídrica, elétri
 - Indicador de digitação.
 - Busca/filtros em telas do funcionário.
 - Recuperação de matrícula por e-mail e CPF.
+- Preset whitelabel para trocar nome, logo, favicon e cores principais.
+- Admin: início do CRUD de funcionários com listagem, busca, criação, edição, desativação e restauração.
 
 ## Ambiente
 
@@ -197,7 +213,7 @@ Antes de mexer nesses itens, verificar se já foram implementados no código atu
 
 Roadmap sugerido:
 
-1. CRUD de funcionários: listar, criar, editar, desativar, resetar senha e trocar departamento.
+1. CRUD de funcionários: listar, buscar, criar, editar, desativar e restaurar já iniciado. Próximos passos: resetar acesso, validação visual de CPF/matrícula e histórico administrativo.
 2. CRUD de admins e permissões.
 3. Perfis: Master, Supervisor, Analista e Somente leitura.
 4. Departamentos: responsáveis, cores, edição e exclusão.

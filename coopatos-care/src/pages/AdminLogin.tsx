@@ -5,6 +5,8 @@ import { motion } from "framer-motion";
 import { Shield } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
+import { BrandLogo } from "@/components/BrandLogo";
+import { brandPreset } from "@/config/brand";
 
 const AdminLogin = () => {
   const [user, setUser] = useState("");
@@ -50,10 +52,13 @@ const AdminLogin = () => {
         className="w-full max-w-sm"
       >
         <div className="text-center mb-4">
-          <div className="inline-flex items-center justify-center w-64 h-64 rounded-2xl mb-0 p-0">
-            <img src="/logo-coopatos.png" alt="Logo Coopatos" className="mb-0 p-0" />
-          </div>
-          <h1 className="text-2xl font-bold text-primary-foreground mt-0">Painel Administrativo</h1>
+          <BrandLogo
+            className="inline-flex items-center justify-center w-64 h-64 rounded-2xl mb-0 p-0"
+            imageClassName="mb-0 p-0"
+          />
+          <h1 className="text-2xl font-bold text-primary-foreground mt-0">
+            {brandPreset.adminTitle}
+          </h1>
           <p className="text-primary-foreground/70 text-sm mt-1">Acesso restrito</p>
         </div>
 

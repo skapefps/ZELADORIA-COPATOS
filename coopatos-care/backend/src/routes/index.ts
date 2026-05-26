@@ -5,6 +5,7 @@ import crypto from "crypto";
 import nodemailer from "nodemailer";
 import bcrypt from "bcryptjs";
 import { v2 as cloudinary } from "cloudinary";
+import { brandPreset } from "../config/brand.js";
 
 const router = Router();
 
@@ -188,14 +189,14 @@ router.post("/employee/recover-registration", async (req, res) => {
     await mailTransporter.sendMail({
       from: process.env.MAIL_FROM,
       to: employee.email!,
-      subject: "Recuperação de matrícula - Zeladoria Coopatos",
+      subject: `Recuperação de matrícula - ${brandPreset.appName}`,
       html: `
-        <div style="font-family: Arial, sans-serif; background:#f3f4f6; padding:28px;">
+        <div style="font-family: Arial, sans-serif; background:${brandPreset.colors.emailBackground}; padding:28px;">
           <div style="max-width:620px; margin:0 auto; background:#ffffff; border-radius:18px; overflow:hidden; border:1px solid #e5e7eb;">
             
-            <div style="background:#0f5132; padding:24px; text-align:center;">
+            <div style="background:${brandPreset.colors.primary}; padding:24px; text-align:center;">
               <h1 style="color:#ffffff; margin:0; font-size:22px;">
-                Zeladoria Coopatos
+                ${brandPreset.appName}
               </h1>
               <p style="color:#d1fae5; margin:6px 0 0; font-size:14px;">
                 Recuperação de acesso
@@ -208,7 +209,7 @@ router.post("/employee/recover-registration", async (req, res) => {
               </h2>
 
               <p style="font-size:15px; color:#374151; line-height:1.6;">
-                Recebemos uma solicitação para recuperar sua matrícula de acesso ao sistema de Zeladoria Coopatos.
+                Recebemos uma solicitação para recuperar sua matrícula de acesso ao sistema ${brandPreset.appName}.
               </p>
 
               <p style="font-size:15px; color:#374151; line-height:1.6;">
@@ -222,7 +223,7 @@ router.post("/employee/recover-registration", async (req, res) => {
 
                 <p style="margin:6px 0; font-size:15px;">
                   <strong>Matrícula:</strong> 
-                  <span style="font-size:18px; color:#0f5132; font-weight:700;">
+                  <span style="font-size:18px; color:${brandPreset.colors.primary}; font-weight:700;">
                     ${employee.registrationNumber}
                   </span>
                 </p>
@@ -243,13 +244,13 @@ router.post("/employee/recover-registration", async (req, res) => {
 
             <div style="border-top:1px solid #e5e7eb; padding:20px; text-align:center;">
               <img
-                src="https://zeladoria-coopatos.vercel.app/logo-coopatos.png"
-                alt="Coopatos"
+                src="${brandPreset.logoUrl}"
+                alt="${brandPreset.organizationName}"
                 style="max-width:130px; margin-bottom:8px;"
               />
 
               <p style="font-size:12px; color:#6b7280; margin:0;">
-                Coopatos - Sempre presente!
+                ${brandPreset.organizationName} - ${brandPreset.tagline}
               </p>
             </div>
           </div>
@@ -398,6 +399,27 @@ router.post("/notifications/:employeeId/read-all", async (req, res) => {
   }
 });
 
+router.delete("/notifications/:id", async (req, res) => {
+  try {
+    const id = Number(req.params.id);
+
+    await prisma.notification.delete({
+      where: {
+        id,
+      },
+    });
+
+    return res.json({
+      message: "Notificação excluída.",
+    });
+  } catch (error) {
+    console.error(error);
+    return res.status(500).json({
+      error: "Erro ao excluir notificação.",
+    });
+  }
+});
+
 router.get("/employees/team", async (req, res) => {
   try {
     const employees = await prisma.employee.findMany({
@@ -443,6 +465,209 @@ router.get("/employees", async (req, res) => {
   return res.json(employees);
 });
 
+router.get("/admin/employees", async (_req, res) => {
+  try {
+    const employees = await prisma.employee.findMany({
+      orderBy: {
+        name: "asc",
+      },
+      select: {
+        id: true,
+        registrationNumber: true,
+        name: true,
+        email: true,
+        cpf: true,
+        phone: true,
+        department: true,
+        deletedAt: true,
+        createdAt: true,
+        updatedAt: true,
+        _count: {
+          select: {
+            reports: true,
+            participations: true,
+          },
+        },
+      },
+    });
+
+    return res.json(employees);
+  } catch (error) {
+    console.error("Erro ao listar funcionários:", error);
+    return res.status(500).json({
+      error: "Erro ao listar funcionários.",
+    });
+  }
+});
+
+router.post("/admin/employees", async (req, res) => {
+  try {
+    const {
+      registrationNumber,
+      name,
+      email,
+      cpf,
+      phone,
+      department,
+    } = req.body;
+
+    if (!registrationNumber || !name || !cpf) {
+      return res.status(400).json({
+        error: "Matrícula, nome e CPF são obrigatórios.",
+      });
+    }
+
+    const employee = await prisma.employee.create({
+      data: {
+        registrationNumber: String(registrationNumber).trim(),
+        name: String(name).trim(),
+        email: email ? String(email).trim().toLowerCase() : null,
+        cpf: String(cpf).replace(/\D/g, ""),
+        phone: phone ? String(phone).trim() : null,
+        department: department ? String(department).trim() : null,
+      },
+      select: {
+        id: true,
+        registrationNumber: true,
+        name: true,
+        email: true,
+        cpf: true,
+        phone: true,
+        department: true,
+        deletedAt: true,
+        createdAt: true,
+        updatedAt: true,
+        _count: {
+          select: {
+            reports: true,
+            participations: true,
+          },
+        },
+      },
+    });
+
+    return res.status(201).json(employee);
+  } catch (error: any) {
+    console.error("Erro ao criar funcionário:", error);
+    return res.status(500).json({
+      error:
+        error?.code === "P2002"
+          ? "Matrícula ou CPF já cadastrado."
+          : "Erro ao criar funcionário.",
+    });
+  }
+});
+
+router.patch("/admin/employees/:id", async (req, res) => {
+  try {
+    const id = Number(req.params.id);
+    const {
+      registrationNumber,
+      name,
+      email,
+      cpf,
+      phone,
+      department,
+    } = req.body;
+
+    if (!registrationNumber || !name || !cpf) {
+      return res.status(400).json({
+        error: "Matrícula, nome e CPF são obrigatórios.",
+      });
+    }
+
+    const employee = await prisma.employee.update({
+      where: {
+        id,
+      },
+      data: {
+        registrationNumber: String(registrationNumber).trim(),
+        name: String(name).trim(),
+        email: email ? String(email).trim().toLowerCase() : null,
+        cpf: String(cpf).replace(/\D/g, ""),
+        phone: phone ? String(phone).trim() : null,
+        department: department ? String(department).trim() : null,
+      },
+      select: {
+        id: true,
+        registrationNumber: true,
+        name: true,
+        email: true,
+        cpf: true,
+        phone: true,
+        department: true,
+        deletedAt: true,
+        createdAt: true,
+        updatedAt: true,
+        _count: {
+          select: {
+            reports: true,
+            participations: true,
+          },
+        },
+      },
+    });
+
+    return res.json(employee);
+  } catch (error: any) {
+    console.error("Erro ao atualizar funcionário:", error);
+    return res.status(500).json({
+      error:
+        error?.code === "P2002"
+          ? "Matrícula ou CPF já cadastrado."
+          : "Erro ao atualizar funcionário.",
+    });
+  }
+});
+
+router.patch("/admin/employees/:id/status", async (req, res) => {
+  try {
+    const id = Number(req.params.id);
+    const { active } = req.body;
+
+    const employee = await prisma.employee.update({
+      where: {
+        id,
+      },
+      data: {
+        deletedAt: active ? null : new Date(),
+        activeSessionToken: active ? undefined : null,
+      },
+      select: {
+        id: true,
+        registrationNumber: true,
+        name: true,
+        email: true,
+        cpf: true,
+        phone: true,
+        department: true,
+        deletedAt: true,
+        createdAt: true,
+        updatedAt: true,
+        _count: {
+          select: {
+            reports: true,
+            participations: true,
+          },
+        },
+      },
+    });
+
+    if (!active) {
+      io.to(`employee-${id}`).emit("force-logout", {
+        reason: "Seu cadastro foi desativado pelo administrador.",
+      });
+    }
+
+    return res.json(employee);
+  } catch (error) {
+    console.error("Erro ao alterar status do funcionário:", error);
+    return res.status(500).json({
+      error: "Erro ao alterar status do funcionário.",
+    });
+  }
+});
+
 router.get("/reports/:id/notes", async (req, res) => {
   try {
     const reportId = Number(req.params.id);
@@ -459,6 +684,7 @@ router.get("/reports/:id/notes", async (req, res) => {
             department: true,
           },
         },
+        media: true,
       },
       orderBy: {
         createdAt: "desc",
@@ -467,19 +693,55 @@ router.get("/reports/:id/notes", async (req, res) => {
 
     return res.json(notes);
   } catch (error) {
-    console.error(error);
-    return res.status(500).json({
-      error: "Erro ao carregar anotações.",
-    });
+    console.error("Erro ao carregar anotações com mídia:", error);
+
+    try {
+      const reportId = Number(req.params.id);
+
+      const notes = await prisma.reportNote.findMany({
+        where: {
+          reportId,
+        },
+        include: {
+          author: {
+            select: {
+              id: true,
+              name: true,
+              department: true,
+            },
+          },
+        },
+        orderBy: {
+          createdAt: "desc",
+        },
+      });
+
+      return res.json(notes.map((note) => ({ ...note, media: [] })));
+    } catch (fallbackError) {
+      console.error("Erro ao carregar anotações sem mídia:", fallbackError);
+
+      return res.status(500).json({
+        error: "Erro ao carregar anotações.",
+        detail:
+          fallbackError instanceof Error
+            ? fallbackError.message
+            : "Erro desconhecido.",
+      });
+    }
   }
 });
 
 router.post("/reports/:id/notes", async (req, res) => {
   try {
     const reportId = Number(req.params.id);
-    const { authorId, content } = req.body;
+    const { authorId, content, mediaItems } = req.body;
 
-    if (!authorId || !content?.trim()) {
+    const normalizedMediaItems = Array.isArray(mediaItems)
+      ? mediaItems.filter((item: any) => item?.imageUrl)
+      : [];
+    const normalizedContent = String(content || "").trim();
+
+    if (!authorId || (!normalizedContent && normalizedMediaItems.length === 0)) {
       return res.status(400).json({
         error: "Autor e anotação são obrigatórios.",
       });
@@ -489,7 +751,16 @@ router.post("/reports/:id/notes", async (req, res) => {
       data: {
         reportId,
         authorId: Number(authorId),
-        content: String(content).trim(),
+        content: normalizedContent,
+        media: normalizedMediaItems.length
+          ? {
+            create: normalizedMediaItems.map((item: any) => ({
+              mediaUrl: item.imageUrl,
+              publicId: item.publicId,
+              resourceType: item.resourceType || "image",
+            })),
+          }
+          : undefined,
       },
       include: {
         author: {
@@ -499,6 +770,7 @@ router.post("/reports/:id/notes", async (req, res) => {
             department: true,
           },
         },
+        media: true,
       },
     });
 
@@ -506,9 +778,84 @@ router.post("/reports/:id/notes", async (req, res) => {
 
     return res.status(201).json(note);
   } catch (error) {
-    console.error(error);
+    console.error("Erro ao salvar anotação:", error);
     return res.status(500).json({
       error: "Erro ao salvar anotação.",
+      detail:
+        error instanceof Error
+          ? error.message
+          : "Erro desconhecido.",
+    });
+  }
+});
+
+router.delete("/reports/:reportId/notes/:noteId", async (req, res) => {
+  try {
+    const reportId = Number(req.params.reportId);
+    const noteId = Number(req.params.noteId);
+    const { authorId } = req.body;
+
+    if (!authorId) {
+      return res.status(400).json({
+        error: "Autor é obrigatório.",
+      });
+    }
+
+    const note = await prisma.reportNote.findFirst({
+      where: {
+        id: noteId,
+        reportId,
+      },
+      include: {
+        media: true,
+      },
+    });
+
+    if (!note) {
+      return res.status(404).json({
+        error: "Anotação não encontrada.",
+      });
+    }
+
+    if (note.authorId !== Number(authorId)) {
+      return res.status(403).json({
+        error: "Você só pode excluir suas próprias anotações.",
+      });
+    }
+
+    for (const media of note.media) {
+      if (media.publicId) {
+        await cloudinary.uploader.destroy(media.publicId, {
+          resource_type: media.resourceType === "video" ? "video" : "image",
+        });
+      }
+    }
+
+    await prisma.reportNoteMedia.deleteMany({
+      where: {
+        noteId,
+      },
+    });
+
+    await prisma.reportNote.delete({
+      where: {
+        id: noteId,
+      },
+    });
+
+    io.emit("reports-updated");
+
+    return res.json({
+      message: "Anotação excluída.",
+    });
+  } catch (error) {
+    console.error("Erro ao excluir anotação:", error);
+    return res.status(500).json({
+      error: "Erro ao excluir anotação.",
+      detail:
+        error instanceof Error
+          ? error.message
+          : "Erro desconhecido.",
     });
   }
 });

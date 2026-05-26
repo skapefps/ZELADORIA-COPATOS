@@ -40,6 +40,8 @@ import {
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
+import { BrandLogo } from "@/components/BrandLogo";
+import { brandPreset } from "@/config/brand";
 import {
   Select,
   SelectContent,
@@ -104,6 +106,7 @@ type Report = {
     employee: {
       id: number;
       name: string;
+      registrationNumber?: string;
       department?: string | null;
     };
   }[];
@@ -143,7 +146,7 @@ type ReportMessage = {
 type EmployeeOption = {
   id: number;
   name: string;
-  registrationNumber: string;
+  registrationNumber?: string;
   department?: string | null;
 };
 
@@ -165,6 +168,27 @@ type AppNotification = {
     name: string;
     department?: string | null;
   } | null;
+  report?: {
+    id: number;
+    title?: string | null;
+    description?: string | null;
+    category?: {
+      id: number;
+      name: string;
+    } | null;
+    status?: {
+      id: number;
+      name: string;
+    } | null;
+  } | null;
+  message?: {
+    id: number;
+    message: string;
+  } | null;
+  privateMessage?: {
+    id: number;
+    message: string;
+  } | null;
   privateConversation?: {
     id: number;
     participants: {
@@ -172,7 +196,7 @@ type AppNotification = {
       employee: {
         id: number;
         name: string;
-        registrationNumber: string;
+        registrationNumber?: string;
         department?: string | null;
       };
     }[];
@@ -191,6 +215,12 @@ type ReportNote = {
     name: string;
     department?: string | null;
   };
+  media?: {
+    id: number;
+    mediaUrl: string;
+    publicId?: string | null;
+    resourceType?: string | null;
+  }[];
 };
 
 type PrivateConversation = {
@@ -201,6 +231,7 @@ type PrivateConversation = {
     employee: {
       id: number;
       name: string;
+      registrationNumber?: string;
       department?: string | null;
     };
   }[];
@@ -360,6 +391,7 @@ const EmployeePanel = () => {
   const sendingPrivateMessageRef = useRef(false);
   const [newMessagesCount, setNewMessagesCount] = useState(0);
   const [isNearBottom, setIsNearBottom] = useState(true);
+  const [isPrivateNearBottom, setIsPrivateNearBottom] = useState(true);
   const [editCoords, setEditCoords] = useState<{ lat: number; lng: number } | null>(null);
   const [imagePreviews, setImagePreviews] = useState<string[]>([]);
   const [messageMenuId, setMessageMenuId] = useState<number | null>(null);
@@ -390,6 +422,7 @@ const EmployeePanel = () => {
   const [editingPrivateMessageText, setEditingPrivateMessageText] = useState("");
   const [replyingToPrivateMessage, setReplyingToPrivateMessage] = useState<PrivateMessage | null>(null);
   const privateChatFileInputRef = useRef<HTMLInputElement>(null);
+  const reportNoteFileInputRef = useRef<HTMLInputElement | null>(null);
   const privateMessageInputRef = useRef<HTMLTextAreaElement | null>(null);
   const privateMessagesContainerRef = useRef<HTMLDivElement | null>(null);
   const privateMessagesEndRef = useRef<HTMLDivElement | null>(null);
@@ -414,6 +447,7 @@ const EmployeePanel = () => {
   const [notifications, setNotifications] = useState<AppNotification[]>([]);
   const [reportNotes, setReportNotes] = useState<ReportNote[]>([]);
   const [newReportNote, setNewReportNote] = useState("");
+  const [reportNoteFiles, setReportNoteFiles] = useState<File[]>([]);
   const [savingReportNote, setSavingReportNote] = useState(false);
   const [employees, setEmployees] = useState<EmployeeOption[]>([]);
   const [employeeSearch, setEmployeeSearch] = useState("");
@@ -425,6 +459,7 @@ const EmployeePanel = () => {
   const privateEmojiPickerRef = useRef<HTMLDivElement | null>(null);
   const messageRefs = useRef<Record<number, HTMLDivElement | null>>({});
   const isNearBottomRef = useRef(true);
+  const isPrivateNearBottomRef = useRef(true);
   const lastMessageIdRef = useRef<number | null>(null);
   const hasOpenedChatRef = useRef(false);
   const messageMenuRef = useRef<HTMLDivElement | null>(null);
@@ -1001,7 +1036,7 @@ const EmployeePanel = () => {
       .map((participant) => ({
         id: participant.employee.id,
         name: participant.employee.name,
-        registrationNumber: participant.employee.registrationNumber,
+        registrationNumber: participant.employee.registrationNumber || "",
         department: participant.employee.department,
       }))
       .filter((candidate) => candidate.id !== employee.id)
@@ -1016,6 +1051,68 @@ const EmployeePanel = () => {
           candidate.name.toLowerCase().includes(privateMentionQuery)
         )
         .slice(0, 5);
+
+  const messageMentionsCurrentEmployee = (text: string) =>
+    employee.name
+      ? text.toLowerCase().includes(`@${employee.name.toLowerCase()}`)
+      : false;
+
+  const renderTextWithMentions = (
+    text: string,
+    candidates: EmployeeOption[]
+  ) => {
+    if (!text) return null;
+
+    const mentionNames = candidates.map((candidate) => candidate.name);
+    const allMentionNames = employee.name
+      ? [...mentionNames, employee.name]
+      : mentionNames;
+
+    if (allMentionNames.length === 0) return text;
+
+    const escapedNames = allMentionNames
+      .map((name) => name.replace(/[.*+?^${}()|[\]\\]/g, "\\$&"))
+      .join("|");
+
+    const regex = new RegExp(`@(${escapedNames})`, "gi");
+    const parts = text.split(regex);
+
+    return parts.map((part, index) => {
+      const isMention = allMentionNames.some(
+        (name) => part.toLowerCase() === name.toLowerCase()
+      );
+
+      if (!isMention) return part;
+
+      return (
+        <span
+          key={`${part}-${index}`}
+          className="rounded-md bg-secondary/15 px-1 font-semibold text-secondary"
+        >
+          @{part}
+        </span>
+      );
+    });
+  };
+
+  const getNotificationContext = (notification: AppNotification) => {
+    if (notification.reportId) {
+      const categoryName = notification.report?.category?.name || "Outros";
+      return {
+        icon: categoryIcons[categoryName] || categoryIcons["Outros"],
+        label: `Chamado #${notification.reportId}`,
+        detail: categoryName,
+        preview: notification.message?.message || notification.report?.title || notification.report?.description || notification.body,
+      };
+    }
+
+    return {
+      icon: <MessageCircle className="h-4 w-4 text-secondary" />,
+      label: "Conversa privada",
+      detail: notification.actor?.name || "Mensagem recebida",
+      preview: notification.privateMessage?.message || notification.body,
+    };
+  };
 
   const scrollToPrivateMessage = (messageId: number) => {
     const element = privateMessageRefs.current[messageId];
@@ -1871,6 +1968,15 @@ const EmployeePanel = () => {
 
       if (report) {
         openReportDetails(report);
+        setShowMessagesModal(true);
+        setNewMessagesCount(0);
+        setIsNearBottom(true);
+        isNearBottomRef.current = true;
+        lastMessageIdRef.current = null;
+        hasOpenedChatRef.current = true;
+
+        await loadMessages(report.id);
+        markMessagesAsRead(report.id);
 
         setShowNotificationsPanel(false);
         setShowQuickMenu(false);
@@ -1925,11 +2031,17 @@ const EmployeePanel = () => {
   };
 
   const createReportNote = async () => {
-    if (!selectedReport || !newReportNote.trim()) return;
+    if (!selectedReport || (!newReportNote.trim() && reportNoteFiles.length === 0)) return;
 
     setSavingReportNote(true);
 
     try {
+      const mediaItems = reportNoteFiles.length
+        ? await Promise.all(
+          reportNoteFiles.map((file) => uploadImageToCloudinary(file))
+        )
+        : [];
+
       const response = await fetch(`${API_URL}/reports/${selectedReport.id}/notes`, {
         method: "POST",
         headers: {
@@ -1938,6 +2050,7 @@ const EmployeePanel = () => {
         body: JSON.stringify({
           authorId: employee.id,
           content: newReportNote.trim(),
+          mediaItems,
         }),
       });
 
@@ -1946,7 +2059,7 @@ const EmployeePanel = () => {
       if (!response.ok) {
         toast({
           title: "Erro ao salvar anotação",
-          description: data.error || "Tente novamente.",
+          description: data.detail || data.error || "Tente novamente.",
           variant: "destructive",
         });
         return;
@@ -1954,6 +2067,11 @@ const EmployeePanel = () => {
 
       setReportNotes((prev) => [data, ...prev]);
       setNewReportNote("");
+      setReportNoteFiles([]);
+
+      if (reportNoteFileInputRef.current) {
+        reportNoteFileInputRef.current.value = "";
+      }
 
       toast({
         title: "Anotação registrada",
@@ -1967,6 +2085,48 @@ const EmployeePanel = () => {
       });
     } finally {
       setSavingReportNote(false);
+    }
+  };
+
+  const deleteReportNote = async (noteId: number) => {
+    if (!selectedReport) return;
+
+    try {
+      const response = await fetch(
+        `${API_URL}/reports/${selectedReport.id}/notes/${noteId}`,
+        {
+          method: "DELETE",
+          headers: {
+            "Content-Type": "application/json",
+          },
+          body: JSON.stringify({
+            authorId: employee.id,
+          }),
+        }
+      );
+
+      const data = await response.json();
+
+      if (!response.ok) {
+        toast({
+          title: "Erro ao excluir anotação",
+          description: data.detail || data.error || "Tente novamente.",
+          variant: "destructive",
+        });
+        return;
+      }
+
+      setReportNotes((prev) => prev.filter((note) => note.id !== noteId));
+
+      toast({
+        title: "Anotação excluída",
+      });
+    } catch (error) {
+      console.error(error);
+      toast({
+        title: "Erro ao conectar com o servidor",
+        variant: "destructive",
+      });
     }
   };
 
@@ -4009,14 +4169,12 @@ const EmployeePanel = () => {
       {/* Header */}
       <header className="sticky top-0 z-[600] gradient-primary px-4 py-3 flex items-center justify-between">
         <div className="flex items-center gap-2">
-          <img
-            src="/logo-coopatos.png"
-            alt="Logo Coopatos"
-            className="w-20 h-20 rounded-xl"
+          <BrandLogo
+            imageClassName="w-20 h-20 rounded-xl object-contain"
           />
           <div>
             <h1 className="text-primary-foreground font-bold text-lg">
-              Zeladoria Coopatos
+              {brandPreset.appName}
             </h1>
             <p className="text-primary-foreground/60 text-xs">
               {employeeName}
@@ -4103,13 +4261,14 @@ const EmployeePanel = () => {
       {/* Content */}
       <div
         ref={tabsContainerRef}
-        className="flex-1 overflow-hidden overscroll-y-contain"
+        className="min-h-[calc(100vh-152px)] overflow-visible overscroll-y-contain"
       >
         {isMobileTabs ? (
           <motion.div
             className="flex w-full touch-pan-y overscroll-y-contain"
             style={{ x: tabX }}
             drag="x"
+            dragDirectionLock
             dragElastic={0.05}
             dragMomentum={false}
             dragConstraints={{
@@ -4118,20 +4277,20 @@ const EmployeePanel = () => {
             }}
             onDragEnd={handleTabDragEnd}
           >
-            <div className="w-full min-w-full shrink-0 p-4 overscroll-y-contain">
+            <div className="w-full min-w-full shrink-0 p-4 pb-28 overscroll-y-contain">
               {renderNewTab()}
             </div>
 
-            <div className="w-full min-w-full shrink-0 p-4 overscroll-y-contain">
+            <div className="w-full min-w-full shrink-0 p-4 pb-28 overscroll-y-contain">
               {renderHistoryTab()}
             </div>
 
-            <div className="w-full min-w-full shrink-0 p-4 overscroll-y-contain">
+            <div className="w-full min-w-full shrink-0 p-4 pb-28 overscroll-y-contain">
               {renderReportsTab()}
             </div>
           </motion.div>
         ) : (
-          <div className="p-4 lg:py-8">
+          <div className="p-4 pb-28 lg:py-8">
             <AnimatePresence mode="wait" initial={false}>
               {tab === "new"
                 ? renderNewTab()
@@ -4594,6 +4753,32 @@ const EmployeePanel = () => {
                   </div>
 
                   <div className="rounded-2xl border border-border bg-muted/20 p-3">
+                    <input
+                      ref={reportNoteFileInputRef}
+                      type="file"
+                      accept="image/*,video/*"
+                      multiple
+                      className="hidden"
+                      onChange={(event) => {
+                        const files = Array.from(event.target.files || []);
+                        const oversizedFile = files.find(
+                          (file) => file.size > MAX_FILE_SIZE
+                        );
+
+                        if (oversizedFile) {
+                          toast({
+                            title: "Arquivo muito grande",
+                            description: "Cada arquivo deve ter no máximo 100 MB.",
+                            variant: "destructive",
+                          });
+                          event.target.value = "";
+                          return;
+                        }
+
+                        setReportNoteFiles(files);
+                      }}
+                    />
+
                     <Textarea
                       value={newReportNote}
                       onChange={(e) => setNewReportNote(e.target.value)}
@@ -4601,14 +4786,59 @@ const EmployeePanel = () => {
                       className="min-h-[92px] resize-none bg-card text-base"
                     />
 
-                    <div className="mt-3 flex justify-end">
+                    {reportNoteFiles.length > 0 && (
+                      <div className="mt-3 flex flex-wrap gap-2">
+                        {reportNoteFiles.map((file, index) => (
+                          <span
+                            key={`${file.name}-${index}`}
+                            className="inline-flex max-w-full items-center gap-2 rounded-full bg-card px-3 py-1 text-xs shadow-sm"
+                          >
+                            <span className="max-w-[220px] truncate">
+                              {file.name}
+                            </span>
+
+                            <button
+                              type="button"
+                              onClick={() =>
+                                setReportNoteFiles((prev) =>
+                                  prev.filter((_, fileIndex) => fileIndex !== index)
+                                )
+                              }
+                              className="text-red-600 hover:text-red-700"
+                              title="Remover anexo"
+                            >
+                              <X className="h-3 w-3" />
+                            </button>
+                          </span>
+                        ))}
+                      </div>
+                    )}
+
+                    <div className="mt-3 flex flex-wrap justify-end gap-2">
                       <Button
                         type="button"
-                        disabled={savingReportNote || !newReportNote.trim()}
+                        variant="outline"
+                        className="gap-2"
+                        onClick={() => reportNoteFileInputRef.current?.click()}
+                      >
+                        <Camera className="h-4 w-4" />
+                        Foto
+                      </Button>
+
+                      <Button
+                        type="button"
+                        disabled={
+                          savingReportNote ||
+                          (!newReportNote.trim() && reportNoteFiles.length === 0)
+                        }
                         onClick={createReportNote}
                         className="gap-2"
                       >
-                        <Plus className="h-4 w-4" />
+                        {savingReportNote ? (
+                          <span className="h-4 w-4 rounded-full border-2 border-current/30 border-t-current animate-spin" />
+                        ) : (
+                          <Plus className="h-4 w-4" />
+                        )}
                         {savingReportNote ? "Salvando..." : "Adicionar anotação"}
                       </Button>
                     </div>
@@ -4626,16 +4856,69 @@ const EmployeePanel = () => {
                           className="rounded-2xl border border-border bg-card p-3 shadow-sm"
                         >
                           <div className="mb-2 flex items-center justify-between gap-3">
-                            <p className="text-sm font-semibold">
-                              {note.author?.name || "Funcionário"}
-                            </p>
-                            <span className="text-[11px] text-muted-foreground">
-                              {new Date(note.createdAt).toLocaleString("pt-BR")}
-                            </span>
+                            <div className="min-w-0">
+                              <p className="truncate text-sm font-semibold">
+                                {note.author?.name || "Funcionário"}
+                              </p>
+                              <span className="text-[11px] text-muted-foreground">
+                                {new Date(note.createdAt).toLocaleString("pt-BR")}
+                              </span>
+                            </div>
+
+                            {note.authorId === employee.id && (
+                              <button
+                                type="button"
+                                onClick={() => deleteReportNote(note.id)}
+                                className="flex h-8 w-8 shrink-0 items-center justify-center rounded-full text-muted-foreground transition hover:bg-red-50 hover:text-red-600"
+                                title="Excluir anotação"
+                              >
+                                <Trash2 className="h-4 w-4" />
+                              </button>
+                            )}
                           </div>
-                          <p className="whitespace-pre-wrap text-sm text-muted-foreground">
-                            {note.content}
-                          </p>
+
+                          {note.media && note.media.length > 0 && (
+                            <div className="mb-3 grid grid-cols-2 gap-2 sm:grid-cols-3">
+                              {note.media.map((media, mediaIndex) => (
+                                <button
+                                  key={media.id}
+                                  type="button"
+                                  onClick={() =>
+                                    setExpandedMedia({
+                                      items: (note.media || []).map((item) => ({
+                                        mediaUrl: item.mediaUrl,
+                                        resourceType: item.resourceType,
+                                      })),
+                                      index: mediaIndex,
+                                    })
+                                  }
+                                  className="overflow-hidden rounded-xl border border-border bg-muted"
+                                >
+                                  {media.resourceType === "video" ? (
+                                    <video
+                                      src={media.mediaUrl}
+                                      className="h-28 w-full bg-black object-cover"
+                                    />
+                                  ) : (
+                                    <img
+                                      src={media.mediaUrl.replace(
+                                        "/upload/",
+                                        "/upload/w_400,q_auto,f_auto/"
+                                      )}
+                                      alt="Mídia da anotação"
+                                      className="h-28 w-full object-cover"
+                                    />
+                                  )}
+                                </button>
+                              ))}
+                            </div>
+                          )}
+
+                          {note.content && (
+                            <p className="whitespace-pre-wrap text-sm text-muted-foreground">
+                              {note.content}
+                            </p>
+                          )}
                         </div>
                       ))
                     )}
@@ -4800,7 +5083,7 @@ const EmployeePanel = () => {
                 animate={{ opacity: 1, scale: 1, y: 0 }}
                 exit={{ opacity: 0, scale: 0.75, y: 40 }}
                 transition={{ duration: 0.18, ease: "easeInOut" }}
-                className="bg-card rounded-3xl shadow-2xl border border-border w-full max-w-3xl h-[85vh] flex flex-col overflow-hidden"
+                className="relative bg-card rounded-3xl shadow-2xl border border-border w-full max-w-3xl h-[85vh] flex flex-col overflow-hidden"
               >
                 {/* Header */}
                 {/* Header */}
@@ -5445,12 +5728,15 @@ touch-manipulation
             onClick={() => setShowQuickMenu((prev) => !prev)}
             whileHover={{ scale: 1.06 }}
             whileTap={{ scale: 0.92 }}
-            className="relative flex h-14 w-14 items-center justify-center rounded-full bg-secondary text-white shadow-2xl"
+            className="relative flex h-14 w-14 items-center justify-center overflow-visible rounded-full bg-secondary text-white shadow-2xl"
           >
-            <Plus
-              className={`h-7 w-7 transition-transform ${showQuickMenu ? "rotate-45" : ""
-                }`}
-            />
+            <motion.span
+              animate={{ rotate: showQuickMenu ? 135 : 0 }}
+              transition={{ type: "spring", stiffness: 260, damping: 20 }}
+              className="flex h-9 w-9 items-center justify-center overflow-visible"
+            >
+              <Plus className="h-6 w-6" strokeWidth={2.6} />
+            </motion.span>
 
             {unreadNotificationsCount > 0 && (
               <span className="absolute -right-1 -top-1 flex h-6 min-w-6 items-center justify-center rounded-full bg-red-500 px-1 text-xs font-bold text-white">
@@ -5513,44 +5799,73 @@ touch-manipulation
                     </p>
                   ) : (
                     <div className="space-y-2">
-                      {notifications.map((notification) => (
-                        <button
-                          key={notification.id}
-                          type="button"
-                          onClick={() => openNotification(notification)}
-                          className={`w-full rounded-2xl border p-3 text-left transition ${notification.readAt
-                              ? "border-border bg-muted/30"
-                              : "border-secondary/40 bg-secondary/10"
-                            }`}
-                        >
-                          <div className="flex items-start gap-3">
-                            <div
-                              className={`mt-1 h-2.5 w-2.5 rounded-full ${notification.readAt
-                                  ? "bg-muted-foreground/40"
-                                  : "bg-red-500"
-                                }`}
-                            />
+                      {notifications.map((notification) => {
+                        const context = getNotificationContext(notification);
 
-                            <div className="min-w-0 flex-1">
-                              <p className="text-sm font-semibold">
-                                {notification.title}
-                              </p>
+                        return (
+                          <button
+                            key={notification.id}
+                            type="button"
+                            onClick={() => openNotification(notification)}
+                            className={`group w-full rounded-2xl border p-3 text-left transition hover:-translate-y-0.5 hover:shadow-md ${notification.readAt
+                                ? "border-border bg-muted/30"
+                                : "border-secondary/40 bg-secondary/10"
+                              }`}
+                          >
+                            <div className="flex items-start gap-3">
+                              <div className={`flex h-10 w-10 shrink-0 items-center justify-center rounded-2xl border ${notification.readAt
+                                  ? "border-border bg-card"
+                                  : "border-secondary/30 bg-card"
+                                }`}>
+                                {context.icon}
+                              </div>
 
-                              {notification.body && (
-                                <p className="mt-1 text-xs text-muted-foreground">
-                                  {notification.body}
-                                </p>
-                              )}
+                              <div className="min-w-0 flex-1">
+                                <div className="flex items-start justify-between gap-2">
+                                  <div className="min-w-0">
+                                    <p className="truncate text-sm font-semibold">
+                                      {notification.title}
+                                    </p>
+                                    <p className="mt-0.5 text-[11px] font-medium text-secondary">
+                                      {context.label} • {context.detail}
+                                    </p>
+                                  </div>
 
-                              <p className="mt-2 text-[11px] text-muted-foreground">
-                                {new Date(notification.createdAt).toLocaleString(
-                                  "pt-BR"
+                                  <button
+                                    type="button"
+                                    onClick={(event) => {
+                                      event.stopPropagation();
+                                      deleteNotification(notification.id);
+                                    }}
+                                    className="flex h-8 w-8 shrink-0 items-center justify-center rounded-full text-muted-foreground opacity-80 transition hover:bg-red-50 hover:text-red-600 sm:opacity-0 sm:group-hover:opacity-100"
+                                    title="Excluir notificação"
+                                  >
+                                    <Trash2 className="h-4 w-4" />
+                                  </button>
+                                </div>
+
+                                {context.preview && (
+                                  <p className="mt-1 line-clamp-2 text-xs text-muted-foreground">
+                                    {context.preview}
+                                  </p>
                                 )}
-                              </p>
+
+                                <div className="mt-2 flex items-center justify-between gap-2">
+                                  <p className="text-[11px] text-muted-foreground">
+                                    {new Date(notification.createdAt).toLocaleString(
+                                      "pt-BR"
+                                    )}
+                                  </p>
+
+                                  {!notification.readAt && (
+                                    <span className="h-2.5 w-2.5 rounded-full bg-red-500" />
+                                  )}
+                                </div>
+                              </div>
                             </div>
-                          </div>
-                        </button>
-                      ))}
+                          </button>
+                        );
+                      })}
                     </div>
                   )}
                 </div>
@@ -5690,7 +6005,7 @@ touch-manipulation
                 animate={{ opacity: 1, y: 0, scale: 1 }}
                 exit={{ opacity: 0, y: 40, scale: 0.98 }}
                 onClick={(e) => e.stopPropagation()}
-                className="w-full sm:max-w-lg h-[100dvh] sm:h-[75vh] max-h-[100dvh] rounded-none sm:rounded-3xl bg-card shadow-2xl border border-border flex flex-col overflow-hidden"
+                className="relative w-full sm:max-w-lg h-[100dvh] sm:h-[75vh] max-h-[100dvh] rounded-none sm:rounded-3xl bg-card shadow-2xl border border-border flex flex-col overflow-hidden"
               >
                 <div className="flex items-center justify-between border-b border-border p-4">
                   <div>

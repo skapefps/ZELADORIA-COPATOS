@@ -19,6 +19,11 @@ import {
   Building2,
   Settings,
   ClipboardList,
+  Pencil,
+  RotateCcw,
+  Search,
+  Trash2,
+  UserPlus,
 } from "lucide-react";
 
 import { Button } from "@/components/ui/button";
@@ -31,6 +36,8 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import { Input } from "@/components/ui/input";
+import { BrandLogo } from "@/components/BrandLogo";
+import { brandPreset } from "@/config/brand";
 
 type AdminSection =
   | "reports"
@@ -64,6 +71,41 @@ type AdminReport = {
     imageUrl: string;
     resourceType?: string | null;
   }[];
+};
+
+type AdminEmployee = {
+  id: number;
+  registrationNumber: string;
+  name: string;
+  email?: string | null;
+  cpf: string;
+  phone?: string | null;
+  department?: string | null;
+  deletedAt?: string | null;
+  createdAt: string;
+  updatedAt: string;
+  _count?: {
+    reports: number;
+    participations: number;
+  };
+};
+
+type EmployeeForm = {
+  registrationNumber: string;
+  name: string;
+  email: string;
+  cpf: string;
+  phone: string;
+  department: string;
+};
+
+const emptyEmployeeForm: EmployeeForm = {
+  registrationNumber: "",
+  name: "",
+  email: "",
+  cpf: "",
+  phone: "",
+  department: "",
 };
 
 const API_URL =
@@ -107,6 +149,13 @@ const Dashboard = () => {
 
   const [reports, setReports] = useState<AdminReport[]>([]);
   const [loadingReports, setLoadingReports] = useState(false);
+  const [employees, setEmployees] = useState<AdminEmployee[]>([]);
+  const [loadingEmployees, setLoadingEmployees] = useState(false);
+  const [employeeSearch, setEmployeeSearch] = useState("");
+  const [employeeForm, setEmployeeForm] =
+    useState<EmployeeForm>(emptyEmployeeForm);
+  const [editingEmployeeId, setEditingEmployeeId] = useState<number | null>(null);
+  const [savingEmployee, setSavingEmployee] = useState(false);
   const [categories, setCategories] = useState<{ id: number; name: string }[]>([]);
   const [statuses, setStatuses] = useState<{ id: number; name: string }[]>([]);
 
@@ -145,16 +194,23 @@ const Dashboard = () => {
       setLoadingReports(true);
 
       try {
-        const [reportsResponse, categoriesResponse, statusesResponse] =
+        const [
+          reportsResponse,
+          categoriesResponse,
+          statusesResponse,
+          employeesResponse,
+        ] =
           await Promise.all([
             fetch(`${API_URL}/reports`),
             fetch(`${API_URL}/categories`),
             fetch(`${API_URL}/statuses`),
+            fetch(`${API_URL}/admin/employees`),
           ]);
 
         setReports(await reportsResponse.json());
         setCategories(await categoriesResponse.json());
         setStatuses(await statusesResponse.json());
+        setEmployees(await employeesResponse.json());
       } catch (error) {
         console.error(error);
 
@@ -213,6 +269,177 @@ const Dashboard = () => {
     [reports]
   );
 
+  const filteredEmployees = useMemo(() => {
+    const search = employeeSearch.toLowerCase().trim();
+
+    return employees.filter((employee) => {
+      if (!search) return true;
+
+      return (
+        employee.name.toLowerCase().includes(search) ||
+        employee.registrationNumber.toLowerCase().includes(search) ||
+        employee.cpf.includes(search.replace(/\D/g, "")) ||
+        employee.email?.toLowerCase().includes(search) ||
+        employee.department?.toLowerCase().includes(search)
+      );
+    });
+  }, [employees, employeeSearch]);
+
+  const employeeStats = useMemo(
+    () => ({
+      total: employees.length,
+      active: employees.filter((employee) => !employee.deletedAt).length,
+      inactive: employees.filter((employee) => employee.deletedAt).length,
+      departments: new Set(
+        employees
+          .map((employee) => employee.department)
+          .filter(Boolean)
+      ).size,
+    }),
+    [employees]
+  );
+
+  const loadEmployees = async () => {
+    setLoadingEmployees(true);
+
+    try {
+      const response = await fetch(`${API_URL}/admin/employees`);
+      const data = await response.json();
+
+      if (!response.ok) {
+        toast({
+          title: "Erro ao carregar funcionários",
+          description: data.error || "Tente novamente.",
+          variant: "destructive",
+        });
+        return;
+      }
+
+      setEmployees(data);
+    } catch (error) {
+      console.error(error);
+      toast({
+        title: "Erro ao carregar funcionários",
+        variant: "destructive",
+      });
+    } finally {
+      setLoadingEmployees(false);
+    }
+  };
+
+  const startEditingEmployee = (employee: AdminEmployee) => {
+    setEditingEmployeeId(employee.id);
+    setEmployeeForm({
+      registrationNumber: employee.registrationNumber,
+      name: employee.name,
+      email: employee.email || "",
+      cpf: employee.cpf,
+      phone: employee.phone || "",
+      department: employee.department || "",
+    });
+  };
+
+  const resetEmployeeForm = () => {
+    setEditingEmployeeId(null);
+    setEmployeeForm(emptyEmployeeForm);
+  };
+
+  const saveEmployee = async () => {
+    setSavingEmployee(true);
+
+    try {
+      const response = await fetch(
+        editingEmployeeId
+          ? `${API_URL}/admin/employees/${editingEmployeeId}`
+          : `${API_URL}/admin/employees`,
+        {
+          method: editingEmployeeId ? "PATCH" : "POST",
+          headers: {
+            "Content-Type": "application/json",
+          },
+          body: JSON.stringify(employeeForm),
+        }
+      );
+
+      const data = await response.json();
+
+      if (!response.ok) {
+        toast({
+          title: "Erro ao salvar funcionário",
+          description: data.error || "Tente novamente.",
+          variant: "destructive",
+        });
+        return;
+      }
+
+      setEmployees((prev) =>
+        editingEmployeeId
+          ? prev.map((employee) =>
+            employee.id === editingEmployeeId ? data : employee
+          )
+          : [...prev, data].sort((a, b) => a.name.localeCompare(b.name))
+      );
+
+      resetEmployeeForm();
+
+      toast({
+        title: editingEmployeeId
+          ? "Funcionário atualizado"
+          : "Funcionário criado",
+      });
+    } catch (error) {
+      console.error(error);
+      toast({
+        title: "Erro ao conectar com o servidor",
+        variant: "destructive",
+      });
+    } finally {
+      setSavingEmployee(false);
+    }
+  };
+
+  const toggleEmployeeStatus = async (employee: AdminEmployee) => {
+    const active = Boolean(employee.deletedAt);
+
+    try {
+      const response = await fetch(
+        `${API_URL}/admin/employees/${employee.id}/status`,
+        {
+          method: "PATCH",
+          headers: {
+            "Content-Type": "application/json",
+          },
+          body: JSON.stringify({ active }),
+        }
+      );
+
+      const data = await response.json();
+
+      if (!response.ok) {
+        toast({
+          title: "Erro ao alterar status",
+          description: data.error || "Tente novamente.",
+          variant: "destructive",
+        });
+        return;
+      }
+
+      setEmployees((prev) =>
+        prev.map((item) => (item.id === employee.id ? data : item))
+      );
+
+      toast({
+        title: active ? "Funcionário restaurado" : "Funcionário desativado",
+      });
+    } catch (error) {
+      console.error(error);
+      toast({
+        title: "Erro ao conectar com o servidor",
+        variant: "destructive",
+      });
+    }
+  };
+
   const adminMenu = [
     { id: "reports", label: "Chamados", icon: ClipboardList },
     { id: "employees", label: "Funcionários", icon: Users },
@@ -233,18 +460,16 @@ const Dashboard = () => {
     <div className="min-h-screen bg-background">
       <header className="gradient-primary sticky top-0 z-20 flex items-center justify-between px-6 py-4">
         <div className="flex items-center gap-3">
-          <img
-            src="/logo-coopatos.png"
-            alt="Logo Coopatos"
-            className="h-20 w-20 rounded-xl object-contain"
+          <BrandLogo
+            imageClassName="h-20 w-20 rounded-xl object-contain"
           />
 
           <div>
             <h1 className="text-lg font-bold text-primary-foreground">
-              Zeladoria Digital
+              {brandPreset.shortName}
             </h1>
             <p className="text-xs text-primary-foreground/60">
-              Painel Administrativo • Coopatos
+              {brandPreset.adminTitle} • {brandPreset.organizationName}
             </p>
           </div>
         </div>
@@ -513,6 +738,238 @@ const Dashboard = () => {
               </div>
             )}
           </>
+        ) : adminSection === "employees" ? (
+          <div className="space-y-5">
+            <div className="grid grid-cols-2 gap-3 lg:grid-cols-4">
+              {[
+                { label: "Total", value: employeeStats.total },
+                { label: "Ativos", value: employeeStats.active },
+                { label: "Inativos", value: employeeStats.inactive },
+                { label: "Departamentos", value: employeeStats.departments },
+              ].map((item) => (
+                <div
+                  key={item.label}
+                  className="rounded-2xl border border-border bg-card p-4 shadow-sm"
+                >
+                  <p className="mb-1 text-xs text-muted-foreground">
+                    {item.label}
+                  </p>
+                  <p className="text-2xl font-bold text-primary">
+                    {item.value}
+                  </p>
+                </div>
+              ))}
+            </div>
+
+            <div className="grid gap-4 lg:grid-cols-[360px_1fr]">
+              <div className="rounded-2xl border border-border bg-card p-4 shadow-sm">
+                <div className="mb-4 flex items-center gap-2">
+                  <div className="flex h-10 w-10 items-center justify-center rounded-xl bg-secondary/10 text-secondary">
+                    <UserPlus className="h-5 w-5" />
+                  </div>
+                  <div>
+                    <p className="text-sm font-semibold">
+                      {editingEmployeeId ? "Editar funcionário" : "Novo funcionário"}
+                    </p>
+                    <p className="text-xs text-muted-foreground">
+                      Cadastro usado no login por matrícula e CPF.
+                    </p>
+                  </div>
+                </div>
+
+                <div className="space-y-3">
+                  <Input
+                    value={employeeForm.name}
+                    onChange={(event) =>
+                      setEmployeeForm((prev) => ({
+                        ...prev,
+                        name: event.target.value,
+                      }))
+                    }
+                    placeholder="Nome completo"
+                  />
+                  <div className="grid grid-cols-2 gap-2">
+                    <Input
+                      value={employeeForm.registrationNumber}
+                      onChange={(event) =>
+                        setEmployeeForm((prev) => ({
+                          ...prev,
+                          registrationNumber: event.target.value,
+                        }))
+                      }
+                      placeholder="Matrícula"
+                    />
+                    <Input
+                      value={employeeForm.cpf}
+                      onChange={(event) =>
+                        setEmployeeForm((prev) => ({
+                          ...prev,
+                          cpf: event.target.value,
+                        }))
+                      }
+                      placeholder="CPF"
+                    />
+                  </div>
+                  <Input
+                    value={employeeForm.email}
+                    onChange={(event) =>
+                      setEmployeeForm((prev) => ({
+                        ...prev,
+                        email: event.target.value,
+                      }))
+                    }
+                    placeholder="E-mail"
+                  />
+                  <div className="grid grid-cols-2 gap-2">
+                    <Input
+                      value={employeeForm.phone}
+                      onChange={(event) =>
+                        setEmployeeForm((prev) => ({
+                          ...prev,
+                          phone: event.target.value,
+                        }))
+                      }
+                      placeholder="Telefone"
+                    />
+                    <Input
+                      value={employeeForm.department}
+                      onChange={(event) =>
+                        setEmployeeForm((prev) => ({
+                          ...prev,
+                          department: event.target.value,
+                        }))
+                      }
+                      placeholder="Departamento"
+                    />
+                  </div>
+
+                  <div className="flex gap-2">
+                    <Button
+                      type="button"
+                      disabled={savingEmployee}
+                      onClick={saveEmployee}
+                      className="flex-1 gap-2"
+                    >
+                      <UserPlus className="h-4 w-4" />
+                      {savingEmployee ? "Salvando..." : "Salvar"}
+                    </Button>
+
+                    {editingEmployeeId && (
+                      <Button
+                        type="button"
+                        variant="outline"
+                        onClick={resetEmployeeForm}
+                      >
+                        Cancelar
+                      </Button>
+                    )}
+                  </div>
+                </div>
+              </div>
+
+              <div className="rounded-2xl border border-border bg-card shadow-sm">
+                <div className="flex flex-col gap-3 border-b border-border p-4 lg:flex-row lg:items-center lg:justify-between">
+                  <div>
+                    <p className="text-sm font-semibold">Funcionários</p>
+                    <p className="text-xs text-muted-foreground">
+                      {filteredEmployees.length} registro(s) encontrados
+                    </p>
+                  </div>
+
+                  <div className="relative">
+                    <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
+                    <Input
+                      value={employeeSearch}
+                      onChange={(event) => setEmployeeSearch(event.target.value)}
+                      placeholder="Buscar nome, matrícula, CPF..."
+                      className="pl-9 lg:w-[320px]"
+                    />
+                  </div>
+                </div>
+
+                <div className="divide-y divide-border">
+                  {loadingEmployees ? (
+                    <p className="p-4 text-sm text-muted-foreground">
+                      Carregando funcionários...
+                    </p>
+                  ) : filteredEmployees.length === 0 ? (
+                    <p className="p-4 text-sm text-muted-foreground">
+                      Nenhum funcionário encontrado.
+                    </p>
+                  ) : (
+                    filteredEmployees.map((employee) => (
+                      <div
+                        key={employee.id}
+                        className="flex flex-col gap-3 p-4 transition hover:bg-muted/30 lg:flex-row lg:items-center"
+                      >
+                        <div className="min-w-0 flex-1">
+                          <div className="flex flex-wrap items-center gap-2">
+                            <p className="truncate text-sm font-semibold">
+                              {employee.name}
+                            </p>
+                            <span
+                              className={`rounded-full px-2 py-0.5 text-[11px] font-medium ${employee.deletedAt
+                                  ? "bg-red-50 text-red-700"
+                                  : "bg-green-50 text-green-700"
+                                }`}
+                            >
+                              {employee.deletedAt ? "Inativo" : "Ativo"}
+                            </span>
+                          </div>
+                          <p className="mt-1 text-xs text-muted-foreground">
+                            Matrícula {employee.registrationNumber} • CPF {employee.cpf}
+                          </p>
+                          <p className="mt-1 text-xs text-muted-foreground">
+                            {employee.email || "Sem e-mail"} •{" "}
+                            {employee.department || "Sem departamento"}
+                          </p>
+                        </div>
+
+                        <div className="flex flex-wrap items-center gap-2 text-xs text-muted-foreground">
+                          <span className="rounded-full bg-muted px-2.5 py-1">
+                            {employee._count?.reports || 0} chamados
+                          </span>
+                          <span className="rounded-full bg-muted px-2.5 py-1">
+                            {employee._count?.participations || 0} participações
+                          </span>
+                        </div>
+
+                        <div className="flex gap-2">
+                          <Button
+                            type="button"
+                            variant="outline"
+                            size="sm"
+                            onClick={() => startEditingEmployee(employee)}
+                            className="gap-1"
+                          >
+                            <Pencil className="h-3.5 w-3.5" />
+                            Editar
+                          </Button>
+                          <Button
+                            type="button"
+                            variant="outline"
+                            size="sm"
+                            onClick={() => toggleEmployeeStatus(employee)}
+                            className={`gap-1 ${employee.deletedAt
+                                ? "border-green-200 text-green-700 hover:bg-green-50"
+                                : "border-red-200 text-red-700 hover:bg-red-50"
+                              }`}
+                          >
+                            {employee.deletedAt ? (
+                              <RotateCcw className="h-3.5 w-3.5" />
+                            ) : (
+                              <Trash2 className="h-3.5 w-3.5" />
+                            )}
+                            {employee.deletedAt ? "Restaurar" : "Desativar"}
+                          </Button>
+                        </div>
+                      </div>
+                    ))
+                  )}
+                </div>
+              </div>
+            </div>
+          </div>
         ) : (
           <div className="rounded-2xl border border-border bg-card p-6 shadow-sm">
             <p className="text-lg font-semibold">{sectionTitle}</p>
