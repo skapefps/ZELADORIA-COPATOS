@@ -19,6 +19,7 @@ model Employee {
   activeSessionToken String?
 
   reports            Report[]
+  notes              ReportNote[]
   messages           ReportMessage[]
   participations     ReportParticipant[]
 
@@ -109,6 +110,7 @@ model Report {
   messages         ReportMessage[]
   participants     ReportParticipant[]
   notifications    Notification[]
+  notes            ReportNote[]
 
   createdAt        DateTime @default(now())
   updatedAt        DateTime @updatedAt
@@ -117,6 +119,24 @@ model Report {
   @@index([employeeId])
   @@index([categoryId])
   @@index([statusId])
+  @@index([createdAt])
+}
+
+model ReportNote {
+  id         Int      @id @default(autoincrement())
+
+  reportId  Int
+  authorId  Int
+  content   String
+
+  report    Report   @relation(fields: [reportId], references: [id])
+  author    Employee @relation(fields: [authorId], references: [id])
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@index([reportId])
+  @@index([authorId])
   @@index([createdAt])
 }
 

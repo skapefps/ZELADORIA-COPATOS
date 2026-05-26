@@ -156,6 +156,8 @@ type AppNotification = {
   body?: string | null;
   reportId?: number | null;
   messageId?: number | null;
+  privateConversationId?: number | null;
+  privateMessageId?: number | null;
   readAt?: string | null;
   createdAt: string;
   actor?: {
@@ -163,6 +165,32 @@ type AppNotification = {
     name: string;
     department?: string | null;
   } | null;
+  privateConversation?: {
+    id: number;
+    participants: {
+      employeeId: number;
+      employee: {
+        id: number;
+        name: string;
+        registrationNumber: string;
+        department?: string | null;
+      };
+    }[];
+  } | null;
+};
+
+type ReportNote = {
+  id: number;
+  reportId: number;
+  authorId: number;
+  content: string;
+  createdAt: string;
+  updatedAt: string;
+  author?: {
+    id: number;
+    name: string;
+    department?: string | null;
+  };
 };
 
 type PrivateConversation = {
@@ -325,7 +353,7 @@ const EmployeePanel = () => {
   const [unreadCounts, setUnreadCounts] = useState<Record<number, number>>({});
   const [address, setAddress] = useState("");
   const [editAddress, setEditAddress] = useState("");
-  const INACTIVITY_LIMIT = 1 * 60 * 1000; // 30 minutos de inatividade para logout automático
+  const INACTIVITY_LIMIT = 1 * 60 * 1000; // 1 minuto temporario para testar inatividade
   const messagesContainerRef = useRef<HTMLDivElement | null>(null);
   const previousMessagesLengthRef = useRef(0);
   const sendingMessageRef = useRef(false);
@@ -354,6 +382,10 @@ const EmployeePanel = () => {
   const [privateMessageText, setPrivateMessageText] = useState("");
   const [privateChatFiles, setPrivateChatFiles] = useState<File[]>([]);
   const [privateMessageMenuId, setPrivateMessageMenuId] = useState<number | null>(null);
+  const [privateMessageMenuPlacement, setPrivateMessageMenuPlacement] =
+    useState<"top" | "bottom">("bottom");
+  const [isSelectingPrivateMessages, setIsSelectingPrivateMessages] = useState(false);
+  const [selectedPrivateMessageIds, setSelectedPrivateMessageIds] = useState<number[]>([]);
   const [editingPrivateMessageId, setEditingPrivateMessageId] = useState<number | null>(null);
   const [editingPrivateMessageText, setEditingPrivateMessageText] = useState("");
   const [replyingToPrivateMessage, setReplyingToPrivateMessage] = useState<PrivateMessage | null>(null);
@@ -380,6 +412,9 @@ const EmployeePanel = () => {
   const [teamSearch, setTeamSearch] = useState("");
   const [teamDepartmentFilter, setTeamDepartmentFilter] = useState("all");
   const [notifications, setNotifications] = useState<AppNotification[]>([]);
+  const [reportNotes, setReportNotes] = useState<ReportNote[]>([]);
+  const [newReportNote, setNewReportNote] = useState("");
+  const [savingReportNote, setSavingReportNote] = useState(false);
   const [employees, setEmployees] = useState<EmployeeOption[]>([]);
   const [employeeSearch, setEmployeeSearch] = useState("");
   const [addingParticipant, setAddingParticipant] = useState(false);
@@ -387,6 +422,7 @@ const EmployeePanel = () => {
   const chatFileInputRef = useRef<HTMLInputElement>(null);
   const messageInputRef = useRef<HTMLInputElement | null>(null);
   const emojiPickerRef = useRef<HTMLDivElement | null>(null);
+  const privateEmojiPickerRef = useRef<HTMLDivElement | null>(null);
   const messageRefs = useRef<Record<number, HTMLDivElement | null>>({});
   const isNearBottomRef = useRef(true);
   const lastMessageIdRef = useRef<number | null>(null);
@@ -586,7 +622,10 @@ const EmployeePanel = () => {
     socket.on("presence-updated", handlePresenceUpdate);
 
     const handleNotificationCreated = (notification: AppNotification) => {
-      setNotifications((prev) => [notification, ...prev]);
+      setNotifications((prev) => {
+        const withoutCurrent = prev.filter((item) => item.id !== notification.id);
+        return [notification, ...withoutCurrent];
+      });
     };
 
     socket.on("notification-created", handleNotificationCreated);
@@ -730,6 +769,7 @@ const EmployeePanel = () => {
         description: "Login realizado com sucesso.",
         className:
           "bg-secondary text-secondary-foreground border-secondary",
+        duration: 1800,
       });
 
       localStorage.setItem("welcomeShown", "true");
@@ -903,6 +943,79 @@ const EmployeePanel = () => {
       ?.toLowerCase()
       .includes(privateMessageSearchTerm.toLowerCase())
   );
+
+  const getMentionQuery = (text: string) => {
+    const match = text.match(/(?:^|\s)@([\p{L}\p{N}._-]*)$/u);
+    return match ? match[1].toLowerCase() : null;
+  };
+
+  const insertMention = (
+    text: string,
+    name: string,
+    setter: (value: string) => void
+  ) => {
+    const mention = `@${name} `;
+    const nextText = text.match(/(?:^|\s)@([\p{L}\p{N}._-]*)$/u)
+      ? text.replace(/(?:^|\s)@([\p{L}\p{N}._-]*)$/u, (match) =>
+        match.startsWith(" ") ? ` ${mention}` : mention
+      )
+      : `${text}${text.endsWith(" ") || !text ? "" : " "}${mention}`;
+
+    setter(nextText);
+  };
+
+  const extractMentionedEmployeeIds = (
+    text: string,
+    candidates: EmployeeOption[]
+  ) => {
+    const normalizedText = text.toLowerCase();
+
+    return candidates
+      .filter((candidate) =>
+        normalizedText.includes(`@${candidate.name.toLowerCase()}`)
+      )
+      .map((candidate) => candidate.id);
+  };
+
+  const reportMentionCandidates = (selectedReport?.participants || [])
+    .map((participant) => ({
+      id: participant.employee.id,
+      name: participant.employee.name,
+      registrationNumber: "",
+      department: participant.employee.department,
+    }))
+    .filter((candidate) => candidate.id !== employee.id);
+
+  const reportMentionQuery = getMentionQuery(newMessage);
+  const filteredReportMentionCandidates =
+    reportMentionQuery === null
+      ? []
+      : reportMentionCandidates
+        .filter((candidate) =>
+          candidate.name.toLowerCase().includes(reportMentionQuery)
+        )
+        .slice(0, 5);
+
+  const privateMentionCandidates = privateConversation
+    ? privateConversation.participants
+      .map((participant) => ({
+        id: participant.employee.id,
+        name: participant.employee.name,
+        registrationNumber: participant.employee.registrationNumber,
+        department: participant.employee.department,
+      }))
+      .filter((candidate) => candidate.id !== employee.id)
+    : [];
+
+  const privateMentionQuery = getMentionQuery(privateMessageText);
+  const filteredPrivateMentionCandidates =
+    privateMentionQuery === null
+      ? []
+      : privateMentionCandidates
+        .filter((candidate) =>
+          candidate.name.toLowerCase().includes(privateMentionQuery)
+        )
+        .slice(0, 5);
 
   const scrollToPrivateMessage = (messageId: number) => {
     const element = privateMessageRefs.current[messageId];
@@ -1463,6 +1576,10 @@ const EmployeePanel = () => {
             message: privateMessageText.trim() || "",
             mediaItems,
             replyToMessageId: replyingToPrivateMessage?.id || null,
+            mentionedEmployeeIds: extractMentionedEmployeeIds(
+              privateMessageText,
+              privateMentionCandidates
+            ),
           }),
         }
       );
@@ -1587,6 +1704,75 @@ const EmployeePanel = () => {
     }
   };
 
+  const togglePrivateMessageSelection = (messageId: number) => {
+    setSelectedPrivateMessageIds((prev) =>
+      prev.includes(messageId)
+        ? prev.filter((id) => id !== messageId)
+        : [...prev, messageId]
+    );
+  };
+
+  const clearPrivateMessageSelection = () => {
+    setIsSelectingPrivateMessages(false);
+    setSelectedPrivateMessageIds([]);
+    setPrivateMessageMenuId(null);
+  };
+
+  const selectAllOwnPrivateMessages = () => {
+    setIsSelectingPrivateMessages(true);
+    setSelectedPrivateMessageIds(
+      privateMessages
+        .filter((msg) => msg.senderId === employee.id)
+        .map((msg) => msg.id)
+    );
+    setPrivateMessageMenuId(null);
+  };
+
+  const deleteSelectedPrivateMessages = async () => {
+    if (!privateConversation || selectedPrivateMessageIds.length === 0) return;
+
+    const idsToDelete = [...selectedPrivateMessageIds];
+
+    try {
+      for (const messageId of idsToDelete) {
+        const response = await fetch(
+          `${API_URL}/private-conversations/${privateConversation.id}/messages/${messageId}`,
+          {
+            method: "DELETE",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({
+              senderId: employee.id,
+            }),
+          }
+        );
+
+        if (!response.ok) {
+          const data = await response.json();
+          throw new Error(data.error || "Erro ao apagar mensagens.");
+        }
+      }
+
+      setPrivateMessages((prev) =>
+        prev.filter((msg) => !idsToDelete.includes(msg.id))
+      );
+
+      clearPrivateMessageSelection();
+
+      toast({
+        title: "Mensagens apagadas",
+        description: `${idsToDelete.length} mensagem${idsToDelete.length > 1 ? "s" : ""} removida${idsToDelete.length > 1 ? "s" : ""}.`,
+      });
+    } catch (error) {
+      console.error(error);
+      toast({
+        title: "Erro ao apagar mensagens",
+        description:
+          error instanceof Error ? error.message : "Tente novamente.",
+        variant: "destructive",
+      });
+    }
+  };
+
   const closePrivateChat = () => {
     if (privateConversation) {
       socketRef.current?.emit(
@@ -1596,6 +1782,7 @@ const EmployeePanel = () => {
     }
 
     setShowPrivateChatModal(false);
+    clearPrivateMessageSelection();
     setPrivateConversation(null);
     setPrivateMessages([]);
     setPrivateMessageText("");
@@ -1694,6 +1881,92 @@ const EmployeePanel = () => {
           }, 700);
         }
       }
+    }
+
+    if (notification.privateConversationId) {
+      const otherParticipant = notification.privateConversation?.participants.find(
+        (participant) => participant.employeeId !== employee.id
+      );
+
+      if (otherParticipant) {
+        setShowNotificationsPanel(false);
+        setShowQuickMenu(false);
+
+        await openPrivateConversation(otherParticipant.employeeId);
+
+        if (notification.privateMessageId) {
+          setTimeout(() => {
+            scrollToPrivateMessage(notification.privateMessageId!);
+          }, 700);
+        }
+      }
+    }
+  };
+
+  const loadReportNotes = async (reportId: number) => {
+    try {
+      const response = await fetch(`${API_URL}/reports/${reportId}/notes`);
+      const data = await response.json();
+
+      if (!response.ok || !Array.isArray(data)) {
+        setReportNotes([]);
+        return;
+      }
+
+      setReportNotes(data);
+    } catch (error) {
+      console.error(error);
+      setReportNotes([]);
+      toast({
+        title: "Erro ao carregar anotações",
+        variant: "destructive",
+      });
+    }
+  };
+
+  const createReportNote = async () => {
+    if (!selectedReport || !newReportNote.trim()) return;
+
+    setSavingReportNote(true);
+
+    try {
+      const response = await fetch(`${API_URL}/reports/${selectedReport.id}/notes`, {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify({
+          authorId: employee.id,
+          content: newReportNote.trim(),
+        }),
+      });
+
+      const data = await response.json();
+
+      if (!response.ok) {
+        toast({
+          title: "Erro ao salvar anotação",
+          description: data.error || "Tente novamente.",
+          variant: "destructive",
+        });
+        return;
+      }
+
+      setReportNotes((prev) => [data, ...prev]);
+      setNewReportNote("");
+
+      toast({
+        title: "Anotação registrada",
+        description: "A observação ficou salva no chamado.",
+      });
+    } catch (error) {
+      console.error(error);
+      toast({
+        title: "Erro ao conectar com o servidor",
+        variant: "destructive",
+      });
+    } finally {
+      setSavingReportNote(false);
     }
   };
 
@@ -2124,6 +2397,10 @@ const EmployeePanel = () => {
             senderRole: "EMPLOYEE",
             message: newMessage.trim(),
             replyToMessageId: replyingTo?.id || null,
+            mentionedEmployeeIds: extractMentionedEmployeeIds(
+              newMessage,
+              reportMentionCandidates
+            ),
           }),
         }
       );
@@ -2646,6 +2923,13 @@ const EmployeePanel = () => {
       ) {
         setShowEmojiPicker(false);
       }
+
+      if (
+        privateEmojiPickerRef.current &&
+        !privateEmojiPickerRef.current.contains(event.target as Node)
+      ) {
+        setShowPrivateEmojiPicker(false);
+      }
     };
 
     document.addEventListener("mousedown", handleClickOutsideEmoji);
@@ -2693,10 +2977,15 @@ const EmployeePanel = () => {
   useEffect(() => {
     const updateLastActivity = () => {
       localStorage.setItem("lastActivityAt", String(Date.now()));
+      localStorage.setItem("lastActivity", String(Date.now()));
     };
 
     const checkInactivity = () => {
-      const lastActivityAt = Number(localStorage.getItem("lastActivityAt") || 0);
+      const lastActivityAt = Number(
+        localStorage.getItem("lastActivityAt") ||
+        localStorage.getItem("lastActivity") ||
+        0
+      );
 
       if (!lastActivityAt) {
         updateLastActivity();
@@ -2709,7 +2998,7 @@ const EmployeePanel = () => {
         localStorage.removeItem("welcomeShown");
         localStorage.removeItem("employee");
         localStorage.removeItem("employeeSessionToken");
-        logout();
+        logout("timeout");
         navigate("/", { replace: true });
       }
     };
@@ -2726,11 +3015,15 @@ const EmployeePanel = () => {
     window.addEventListener("scroll", handleUserActivity);
 
     window.addEventListener("focus", checkInactivity);
-    document.addEventListener("visibilitychange", () => {
+    const handleVisibilityChange = () => {
       if (!document.hidden) {
         checkInactivity();
       }
-    });
+    };
+
+    document.addEventListener("visibilitychange", handleVisibilityChange);
+
+    const interval = window.setInterval(checkInactivity, 10 * 1000);
 
     return () => {
       window.removeEventListener("click", handleUserActivity);
@@ -2739,6 +3032,8 @@ const EmployeePanel = () => {
       window.removeEventListener("scroll", handleUserActivity);
 
       window.removeEventListener("focus", checkInactivity);
+      document.removeEventListener("visibilitychange", handleVisibilityChange);
+      window.clearInterval(interval);
     };
   }, [logout, navigate]);
 
@@ -2809,6 +3104,7 @@ const EmployeePanel = () => {
     setEditDescription(report.description || "");
     setEditReferencePoint(report.referencePoint || "");
     loadMessages(report.id);
+    loadReportNotes(report.id);
   };
 
   const handleUpdateReport = async () => {
@@ -2925,15 +3221,20 @@ const EmployeePanel = () => {
           <div
             className="relative max-w-[85%] rounded-2xl px-3 py-2 text-sm shadow-sm bg-white text-gray-900 border border-gray-200"
           >
-            <button
+            <motion.button
               type="button"
               onClick={() =>
                 setMessageMenuId(messageMenuId === msg.id ? null : msg.id)
               }
+              whileHover={{ scale: 1.06 }}
+              whileTap={{ scale: 0.92 }}
               className="flex absolute top-1 right-1 z-20 h-8 w-8 items-center justify-center rounded-full bg-white/90 text-gray-700 shadow-sm hover:bg-gray-100 hover:text-gray-900"
             >
-              <ChevronDown className="w-4 h-4 pointer-events-none" />
-            </button>
+              <ChevronDown
+                className={`w-4 h-4 pointer-events-none transition-transform duration-200 ${messageMenuId === msg.id ? "rotate-180" : ""
+                  }`}
+              />
+            </motion.button>
 
             <div className="mb-1 pr-6 flex flex-wrap items-center gap-1.5 text-[11px] opacity-80">
               <span className="font-semibold">{msg.senderName}</span>
@@ -3053,8 +3354,11 @@ const EmployeePanel = () => {
             )}
 
             {messageMenuId === msg.id && (
-              <div
+              <motion.div
                 ref={messageMenuRef}
+                initial={{ opacity: 0, y: -4, scale: 0.96 }}
+                animate={{ opacity: 1, y: 0, scale: 1 }}
+                transition={{ duration: 0.14, ease: "easeOut" }}
                 onPointerDown={(e) => e.stopPropagation()}
                 className={`absolute z-40 top-8 ${isMine ? "right-2" : "left-2"
                   } w-44 rounded-xl border border-border bg-card text-foreground shadow-xl overflow-hidden`}
@@ -3099,7 +3403,7 @@ const EmployeePanel = () => {
                     </button>
                   </>
                 )}
-              </div>
+              </motion.div>
             )}
           </div>
         </div>
@@ -3700,7 +4004,7 @@ const EmployeePanel = () => {
   );
 
   return (
-    <div className="min-h-screen bg-background">
+    <div className="min-h-screen overflow-x-hidden overscroll-y-contain bg-background">
       <div className="mx-auto w-full max-w-lg lg:max-w-6xl lg:px-8"></div>
       {/* Header */}
       <header className="sticky top-0 z-[600] gradient-primary px-4 py-3 flex items-center justify-between">
@@ -3799,11 +4103,11 @@ const EmployeePanel = () => {
       {/* Content */}
       <div
         ref={tabsContainerRef}
-        className="flex-1 overflow-hidden"
+        className="flex-1 overflow-hidden overscroll-y-contain"
       >
         {isMobileTabs ? (
           <motion.div
-            className="flex w-full touch-pan-y"
+            className="flex w-full touch-pan-y overscroll-y-contain"
             style={{ x: tabX }}
             drag="x"
             dragElastic={0.05}
@@ -3814,15 +4118,15 @@ const EmployeePanel = () => {
             }}
             onDragEnd={handleTabDragEnd}
           >
-            <div className="w-full min-w-full shrink-0 p-4">
+            <div className="w-full min-w-full shrink-0 p-4 overscroll-y-contain">
               {renderNewTab()}
             </div>
 
-            <div className="w-full min-w-full shrink-0 p-4">
+            <div className="w-full min-w-full shrink-0 p-4 overscroll-y-contain">
               {renderHistoryTab()}
             </div>
 
-            <div className="w-full min-w-full shrink-0 p-4">
+            <div className="w-full min-w-full shrink-0 p-4 overscroll-y-contain">
               {renderReportsTab()}
             </div>
           </motion.div>
@@ -4276,6 +4580,69 @@ const EmployeePanel = () => {
                 </div>
 
                 <div className="mt-6 border-t border-border pt-4">
+                  <div className="mb-3 flex items-center justify-between gap-3">
+                    <div>
+                      <h3 className="text-sm font-semibold">Anotações do chamado</h3>
+                      <p className="text-xs text-muted-foreground">
+                        Registre observações e o que está sendo feito.
+                      </p>
+                    </div>
+
+                    <span className="rounded-full bg-secondary/10 px-3 py-1 text-xs font-medium text-secondary">
+                      {reportNotes.length}
+                    </span>
+                  </div>
+
+                  <div className="rounded-2xl border border-border bg-muted/20 p-3">
+                    <Textarea
+                      value={newReportNote}
+                      onChange={(e) => setNewReportNote(e.target.value)}
+                      placeholder="Ex: equipe acionada, aguardando peça, manutenção prevista..."
+                      className="min-h-[92px] resize-none bg-card text-base"
+                    />
+
+                    <div className="mt-3 flex justify-end">
+                      <Button
+                        type="button"
+                        disabled={savingReportNote || !newReportNote.trim()}
+                        onClick={createReportNote}
+                        className="gap-2"
+                      >
+                        <Plus className="h-4 w-4" />
+                        {savingReportNote ? "Salvando..." : "Adicionar anotação"}
+                      </Button>
+                    </div>
+                  </div>
+
+                  <div className="mt-3 space-y-2">
+                    {reportNotes.length === 0 ? (
+                      <p className="rounded-2xl border border-dashed border-border p-4 text-center text-xs text-muted-foreground">
+                        Nenhuma anotação registrada ainda.
+                      </p>
+                    ) : (
+                      reportNotes.map((note) => (
+                        <div
+                          key={note.id}
+                          className="rounded-2xl border border-border bg-card p-3 shadow-sm"
+                        >
+                          <div className="mb-2 flex items-center justify-between gap-3">
+                            <p className="text-sm font-semibold">
+                              {note.author?.name || "Funcionário"}
+                            </p>
+                            <span className="text-[11px] text-muted-foreground">
+                              {new Date(note.createdAt).toLocaleString("pt-BR")}
+                            </span>
+                          </div>
+                          <p className="whitespace-pre-wrap text-sm text-muted-foreground">
+                            {note.content}
+                          </p>
+                        </div>
+                      ))
+                    )}
+                  </div>
+                </div>
+
+                <div className="mt-6 border-t border-border pt-4">
                   <button
                     type="button"
                     onClick={async () => {
@@ -4643,6 +5010,28 @@ const EmployeePanel = () => {
 
                 {/* Input */}
                 <div className="border-t border-border p-4">
+                  {filteredReportMentionCandidates.length > 0 && (
+                    <div className="mb-2 max-h-36 overflow-y-auto rounded-2xl border border-border bg-card p-2 shadow-lg">
+                      {filteredReportMentionCandidates.map((candidate) => (
+                        <button
+                          key={candidate.id}
+                          type="button"
+                          onClick={() =>
+                            insertMention(newMessage, candidate.name, setNewMessage)
+                          }
+                          className="flex w-full items-center justify-between rounded-xl px-3 py-2 text-left text-sm hover:bg-muted"
+                        >
+                          <span className="font-medium">{candidate.name}</span>
+                          {candidate.department && (
+                            <span className="text-xs text-muted-foreground">
+                              {candidate.department}
+                            </span>
+                          )}
+                        </button>
+                      ))}
+                    </div>
+                  )}
+
                   <div className="flex gap-2">
                     <input
                       ref={chatFileInputRef}
@@ -4938,10 +5327,12 @@ touch-manipulation
                   ) : (
                     <div className="grid grid-cols-2 sm:grid-cols-3 gap-3">
                       {chatMedia.map((item, index) => (
-                        <div
+                        <motion.div
                           key={`${item.messageId}-${item.id}`}
                           role="button"
                           tabIndex={0}
+                          whileHover={{ y: -2, scale: 1.01 }}
+                          whileTap={{ scale: 0.98 }}
                           onClick={() =>
                             setExpandedMedia({
                               items: chatMedia.map((media) => ({
@@ -4992,7 +5383,7 @@ touch-manipulation
                               {new Date(item.createdAt).toLocaleString("pt-BR")}
                             </p>
                           </div>
-                        </div>
+                        </motion.div>
                       ))}
                     </div>
                   )}
@@ -5011,12 +5402,14 @@ touch-manipulation
                 exit={{ opacity: 0, y: 12, scale: 0.95 }}
                 className="mb-3 space-y-2"
               >
-                <button
+                <motion.button
                   type="button"
                   onClick={() => {
                     setShowNotificationsPanel(true);
                     setShowQuickMenu(false);
                   }}
+                  whileHover={{ x: -3, scale: 1.02 }}
+                  whileTap={{ scale: 0.97 }}
                   className="relative flex w-48 items-center gap-3 rounded-2xl border border-border bg-card px-4 py-3 text-sm font-medium shadow-lg"
                 >
                   <Bell className="h-4 w-4" />
@@ -5027,27 +5420,31 @@ touch-manipulation
                       {unreadNotificationsCount}
                     </span>
                   )}
-                </button>
+                </motion.button>
 
-                <button
+                <motion.button
                   type="button"
                   onClick={() => {
                     setShowTeamPanel(true);
                     setShowQuickMenu(false);
                     loadTeamEmployees();
                   }}
+                  whileHover={{ x: -3, scale: 1.02 }}
+                  whileTap={{ scale: 0.97 }}
                   className="flex w-48 items-center gap-3 rounded-2xl border border-border bg-card px-4 py-3 text-sm font-medium shadow-lg"
                 >
                   <Users className="h-4 w-4" />
                   Equipe
-                </button>
+                </motion.button>
               </motion.div>
             )}
           </AnimatePresence>
 
-          <button
+          <motion.button
             type="button"
             onClick={() => setShowQuickMenu((prev) => !prev)}
+            whileHover={{ scale: 1.06 }}
+            whileTap={{ scale: 0.92 }}
             className="relative flex h-14 w-14 items-center justify-center rounded-full bg-secondary text-white shadow-2xl"
           >
             <Plus
@@ -5060,7 +5457,7 @@ touch-manipulation
                 {unreadNotificationsCount}
               </span>
             )}
-          </button>
+          </motion.button>
         </div>
 
         <AnimatePresence>
@@ -5326,6 +5723,50 @@ touch-manipulation
 
                 </div>
 
+                {isSelectingPrivateMessages && (
+                  <div className="flex items-center justify-between gap-3 border-b border-border bg-card px-4 py-3">
+                    <div>
+                      <p className="text-sm font-semibold">
+                        {selectedPrivateMessageIds.length} selecionada
+                        {selectedPrivateMessageIds.length !== 1 ? "s" : ""}
+                      </p>
+                      <p className="text-xs text-muted-foreground">
+                        Apenas mensagens enviadas por você podem ser apagadas.
+                      </p>
+                    </div>
+
+                    <div className="flex shrink-0 items-center gap-2">
+                      <Button
+                        type="button"
+                        size="sm"
+                        variant="outline"
+                        onClick={selectAllOwnPrivateMessages}
+                      >
+                        Todas
+                      </Button>
+
+                      <Button
+                        type="button"
+                        size="sm"
+                        variant="destructive"
+                        disabled={selectedPrivateMessageIds.length === 0}
+                        onClick={deleteSelectedPrivateMessages}
+                      >
+                        Excluir
+                      </Button>
+
+                      <Button
+                        type="button"
+                        size="icon"
+                        variant="ghost"
+                        onClick={clearPrivateMessageSelection}
+                      >
+                        <X className="h-4 w-4" />
+                      </Button>
+                    </div>
+                  </div>
+                )}
+
                 {showPrivateMessageSearch && (
                   <div className="border-b border-border bg-card p-3">
                     <div className="flex items-center gap-2">
@@ -5399,6 +5840,8 @@ touch-manipulation
 
                       const isMine = msg.senderId === employee.id;
                       const isEditingThisMessage = editingPrivateMessageId === msg.id;
+                      const isSelected = selectedPrivateMessageIds.includes(msg.id);
+                      const canSelectMessage = isMine;
 
                       return (
                         <div
@@ -5406,29 +5849,84 @@ touch-manipulation
                           ref={(el) => {
                             privateMessageRefs.current[msg.id] = el;
                           }}
-                          className={`flex ${isMine ? "justify-end" : "justify-start"}`}
+                          className={`flex items-center gap-2 ${isMine ? "justify-end" : "justify-start"}`}
                         >
-                          <div className="relative group max-w-[82%]">
+                          {isSelectingPrivateMessages && (
                             <button
                               type="button"
-                              onPointerDown={(e) => e.stopPropagation()}
-                              onClick={() => {
-                                setPrivateMessageMenuId(
-                                  privateMessageMenuId === msg.id ? null : msg.id
-                                );
-                              }}
-                              className={`absolute top-1 z-20 flex h-8 w-8 items-center justify-center rounded-full bg-white/90 text-gray-700 shadow-sm hover:bg-gray-100 ${isMine ? "right-1" : "right-1"
-                                }`}
+                              disabled={!canSelectMessage}
+                              onClick={() => togglePrivateMessageSelection(msg.id)}
+                              className={`flex h-7 w-7 shrink-0 items-center justify-center rounded-full border transition ${isSelected
+                                  ? "border-secondary bg-secondary text-white"
+                                  : "border-border bg-card text-transparent"
+                                } ${!canSelectMessage ? "opacity-30" : ""}`}
+                              title={
+                                canSelectMessage
+                                  ? "Selecionar mensagem"
+                                  : "Só é possível apagar suas mensagens"
+                              }
                             >
-                              <ChevronDown className="h-4 w-4" />
+                              <Check className="h-4 w-4" />
                             </button>
+                          )}
 
-                            {privateMessageMenuId === msg.id && (
-                              <div
+                          <motion.div
+                            drag={isSelectingPrivateMessages ? false : "x"}
+                            dragConstraints={{ left: -90, right: 90 }}
+                            dragElastic={0.18}
+                            dragSnapToOrigin
+                            onDragEnd={(_, info) => {
+                              if (Math.abs(info.offset.x) > 70) {
+                                setReplyingToPrivateMessage(msg);
+                              }
+                            }}
+                            className="relative group max-w-[82%] overflow-visible"
+                          >
+                            <div className="absolute right-1 top-1 z-30 overflow-visible">
+                              <motion.button
+                                type="button"
                                 onPointerDown={(e) => e.stopPropagation()}
-                                className={`absolute top-10 z-30 w-40 overflow-hidden rounded-xl border border-border bg-white shadow-xl ${isMine ? "right-0" : "right-0"
-                                  }`}
+                                onClick={(e) => {
+                                  const buttonRect =
+                                    e.currentTarget.getBoundingClientRect();
+                                  const menuHeight = 132;
+                                  const composerSpace = 96;
+                                  const hasSpaceBelow =
+                                    buttonRect.bottom + menuHeight + composerSpace <
+                                    window.innerHeight;
+
+                                  setPrivateMessageMenuPlacement(
+                                    hasSpaceBelow ? "bottom" : "top"
+                                  );
+                                  setPrivateMessageMenuId(
+                                    privateMessageMenuId === msg.id ? null : msg.id
+                                  );
+                                }}
+                                whileHover={{ scale: 1.06 }}
+                                whileTap={{ scale: 0.92 }}
+                                className="flex h-8 w-8 items-center justify-center rounded-full bg-white/90 text-gray-700 shadow-sm hover:bg-gray-100"
                               >
+                                <ChevronDown
+                                  className={`h-4 w-4 transition-transform duration-200 ${privateMessageMenuId === msg.id ? "rotate-180" : ""
+                                    }`}
+                                />
+                              </motion.button>
+
+                              {privateMessageMenuId === msg.id && (
+                                <motion.div
+                                  onPointerDown={(e) => e.stopPropagation()}
+                                  initial={{
+                                    opacity: 0,
+                                    y: privateMessageMenuPlacement === "top" ? 6 : -6,
+                                    scale: 0.96,
+                                  }}
+                                  animate={{ opacity: 1, y: 0, scale: 1 }}
+                                  transition={{ duration: 0.14, ease: "easeOut" }}
+                                  className={`absolute right-0 z-40 w-44 overflow-hidden rounded-xl border border-border bg-white shadow-xl ${privateMessageMenuPlacement === "top"
+                                      ? "bottom-10 origin-bottom-right"
+                                      : "top-10 origin-top-right"
+                                    }`}
+                                >
                                 <button
                                   type="button"
                                   onClick={(e) => {
@@ -5441,6 +5939,24 @@ touch-manipulation
                                   <Reply className="h-3.5 w-3.5" />
                                   Responder
                                 </button>
+
+                                {isMine && (
+                                  <button
+                                    type="button"
+                                    onClick={(e) => {
+                                      e.stopPropagation();
+                                      setIsSelectingPrivateMessages(true);
+                                      setSelectedPrivateMessageIds((prev) =>
+                                        prev.includes(msg.id) ? prev : [...prev, msg.id]
+                                      );
+                                      setPrivateMessageMenuId(null);
+                                    }}
+                                    className="flex w-full items-center gap-2 px-3 py-2 text-left text-xs hover:bg-muted"
+                                  >
+                                    <Check className="h-3.5 w-3.5" />
+                                    Selecionar
+                                  </button>
+                                )}
 
                                 {isMine && msg.message?.trim() && (
                                   <button
@@ -5467,8 +5983,9 @@ touch-manipulation
                                     Excluir
                                   </button>
                                 )}
-                              </div>
-                            )}
+                                </motion.div>
+                              )}
+                            </div>
 
                             <div
                               className={`min-w-[170px] rounded-2xl px-3 py-2 pr-10 text-sm shadow-sm border ${isMine
@@ -5590,7 +6107,7 @@ touch-manipulation
                                 })}
                               </p>
                             </div>
-                          </div>
+                          </motion.div>
                         </div>
                       );
                     })
@@ -5690,6 +6207,32 @@ touch-manipulation
                     </div>
                   )}
 
+                  {filteredPrivateMentionCandidates.length > 0 && (
+                    <div className="mb-2 max-h-36 overflow-y-auto rounded-2xl border border-border bg-card p-2 shadow-lg">
+                      {filteredPrivateMentionCandidates.map((candidate) => (
+                        <button
+                          key={candidate.id}
+                          type="button"
+                          onClick={() =>
+                            insertMention(
+                              privateMessageText,
+                              candidate.name,
+                              setPrivateMessageText
+                            )
+                          }
+                          className="flex w-full items-center justify-between rounded-xl px-3 py-2 text-left text-sm hover:bg-muted"
+                        >
+                          <span className="font-medium">{candidate.name}</span>
+                          {candidate.department && (
+                            <span className="text-xs text-muted-foreground">
+                              {candidate.department}
+                            </span>
+                          )}
+                        </button>
+                      ))}
+                    </div>
+                  )}
+
                   <div className="flex items-end gap-2">
                     <Button
                       type="button"
@@ -5722,7 +6265,7 @@ touch-manipulation
                       )}
                     </Button>
 
-                    <div className="relative">
+                    <div ref={privateEmojiPickerRef} className="relative">
                       <Button
                         type="button"
                         variant="outline"
@@ -5739,15 +6282,24 @@ touch-manipulation
                       </Button>
 
                       {showPrivateEmojiPicker && (
-                        <div className="absolute bottom-12 left-0 z-[9300]">
-                          <EmojiPicker
-                            theme={Theme.LIGHT}
-                            onEmojiClick={(emojiData) => {
-                              setPrivateMessageText((prev) => prev + emojiData.emoji);
-                              setShowPrivateEmojiPicker(false);
-                            }}
-                          />
-                        </div>
+                        <motion.div
+                          initial={{ opacity: 0, y: 10, scale: 0.96 }}
+                          animate={{ opacity: 1, y: 0, scale: 1 }}
+                          transition={{ duration: 0.16, ease: "easeOut" }}
+                          className="fixed inset-x-2 bottom-[calc(4.75rem+env(safe-area-inset-bottom))] z-[9300] mx-auto flex max-w-[350px] justify-center overflow-hidden rounded-2xl shadow-2xl sm:absolute sm:bottom-12 sm:left-auto sm:right-0 sm:inset-x-auto"
+                        >
+                          <div className="max-w-full overflow-hidden rounded-2xl">
+                            <EmojiPicker
+                              width="100%"
+                              height={360}
+                              theme={Theme.LIGHT}
+                              onEmojiClick={(emojiData) => {
+                                setPrivateMessageText((prev) => prev + emojiData.emoji);
+                                setShowPrivateEmojiPicker(false);
+                              }}
+                            />
+                          </div>
+                        </motion.div>
                       )}
                     </div>
 

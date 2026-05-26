@@ -28,7 +28,7 @@ interface AuthContextType extends AuthState {
 
 const AuthContext = createContext<AuthContextType | null>(null);
 
-const INACTIVITY_LIMIT = 15 * 60 * 1000; // settado agora tempo de inatiividade para 15 minutos
+const INACTIVITY_LIMIT = 1 * 60 * 1000; // 1 minuto temporario para testar inatividade
 
 export const useAuth = () => {
   const ctx = useContext(AuthContext);
@@ -178,6 +178,8 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
       "scroll",
       "visibilitychange",
     ];
+
+    updateActivity();
 
     events.forEach((event) => {
       window.addEventListener(event, updateActivity);

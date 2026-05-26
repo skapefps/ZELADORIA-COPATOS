@@ -70,23 +70,80 @@ const createNotification = async ({
   privateConversationId?: number | null;
   privateMessageId?: number | null;
 }) => {
-  const notification = await prisma.notification.create({
-    data: {
-      recipientId,
-      actorId: actorId || null,
-      type,
-      title,
-      body: body || null,
-      reportId: reportId || null,
-      messageId: messageId || null,
-      privateConversationId: privateConversationId || null,
-      privateMessageId: privateMessageId || null,
+  const shouldConsolidatePrivateMessage =
+    type === "PRIVATE_MESSAGE" && privateConversationId;
+
+  const existingNotification = shouldConsolidatePrivateMessage
+    ? await prisma.notification.findFirst({
+      where: {
+        recipientId,
+        actorId: actorId || null,
+        type,
+        privateConversationId,
+        readAt: null,
+      },
+      orderBy: {
+        createdAt: "desc",
+      },
+    })
+    : null;
+
+  const notification = existingNotification
+    ? await prisma.notification.update({
+      where: {
+        id: existingNotification.id,
+      },
+      data: {
+        title,
+        body: body || null,
+        privateMessageId: privateMessageId || null,
+        createdAt: new Date(),
+      },
+    })
+    : await prisma.notification.create({
+      data: {
+        recipientId,
+        actorId: actorId || null,
+        type,
+        title,
+        body: body || null,
+        reportId: reportId || null,
+        messageId: messageId || null,
+        privateConversationId: privateConversationId || null,
+        privateMessageId: privateMessageId || null,
+      },
+    });
+
+  const notificationWithContext = await prisma.notification.findUnique({
+    where: {
+      id: notification.id,
+    },
+    include: {
+      actor: {
+        select: {
+          id: true,
+          name: true,
+          department: true,
+        },
+      },
+      privateConversation: {
+        include: {
+          participants: {
+            include: {
+              employee: true,
+            },
+          },
+        },
+      },
     },
   });
 
-  io.to(`employee-${recipientId}`).emit("notification-created", notification);
+  io.to(`employee-${recipientId}`).emit(
+    "notification-created",
+    notificationWithContext || notification
+  );
 
-  return notification;
+  return notificationWithContext || notification;
 };
 
 const mailTransporter = nodemailer.createTransport({
@@ -272,6 +329,16 @@ router.get("/notifications/:employeeId", async (req, res) => {
           },
         },
         message: true,
+        privateMessage: true,
+        privateConversation: {
+          include: {
+            participants: {
+              include: {
+                employee: true,
+              },
+            },
+          },
+        },
       },
     });
 
@@ -374,6 +441,76 @@ router.get("/employees", async (req, res) => {
   });
 
   return res.json(employees);
+});
+
+router.get("/reports/:id/notes", async (req, res) => {
+  try {
+    const reportId = Number(req.params.id);
+
+    const notes = await prisma.reportNote.findMany({
+      where: {
+        reportId,
+      },
+      include: {
+        author: {
+          select: {
+            id: true,
+            name: true,
+            department: true,
+          },
+        },
+      },
+      orderBy: {
+        createdAt: "desc",
+      },
+    });
+
+    return res.json(notes);
+  } catch (error) {
+    console.error(error);
+    return res.status(500).json({
+      error: "Erro ao carregar anotações.",
+    });
+  }
+});
+
+router.post("/reports/:id/notes", async (req, res) => {
+  try {
+    const reportId = Number(req.params.id);
+    const { authorId, content } = req.body;
+
+    if (!authorId || !content?.trim()) {
+      return res.status(400).json({
+        error: "Autor e anotação são obrigatórios.",
+      });
+    }
+
+    const note = await prisma.reportNote.create({
+      data: {
+        reportId,
+        authorId: Number(authorId),
+        content: String(content).trim(),
+      },
+      include: {
+        author: {
+          select: {
+            id: true,
+            name: true,
+            department: true,
+          },
+        },
+      },
+    });
+
+    io.emit("reports-updated");
+
+    return res.status(201).json(note);
+  } catch (error) {
+    console.error(error);
+    return res.status(500).json({
+      error: "Erro ao salvar anotação.",
+    });
+  }
 });
 
 router.get("/categories", async (req, res) => {
@@ -1108,7 +1245,13 @@ router.get("/private-conversations/:conversationId/messages", async (req, res) =
 router.post("/private-conversations/:conversationId/messages", async (req, res) => {
   try {
     const conversationId = Number(req.params.conversationId);
-    const { senderId, message, mediaItems, replyToMessageId } = req.body;
+    const {
+      senderId,
+      message,
+      mediaItems,
+      replyToMessageId,
+      mentionedEmployeeIds,
+    } = req.body;
 
     if (!senderId) {
       return res.status(400).json({
@@ -1200,13 +1343,23 @@ router.post("/private-conversations/:conversationId/messages", async (req, res) 
       (participant) => participant.employeeId !== Number(senderId)
     );
 
+    const mentionedIds = Array.isArray(mentionedEmployeeIds)
+      ? mentionedEmployeeIds.map((id) => Number(id))
+      : [];
+
     for (const recipient of recipients) {
+      const wasMentioned = mentionedIds.includes(recipient.employeeId);
+
       await createNotification({
         recipientId: recipient.employeeId,
         actorId: Number(senderId),
-        type: "PRIVATE_MESSAGE",
-        title: "Nova mensagem privada",
-        body: `${newMessage.sender.name} enviou uma mensagem para você.`,
+        type: wasMentioned ? "PRIVATE_MENTION" : "PRIVATE_MESSAGE",
+        title: wasMentioned
+          ? "Você foi mencionado em uma conversa privada"
+          : "Nova mensagem privada",
+        body: wasMentioned
+          ? `${newMessage.sender.name} mencionou você em uma conversa privada.`
+          : `${newMessage.sender.name} enviou uma mensagem para você.`,
         privateConversationId: conversationId,
         privateMessageId: newMessage.id,
       });
