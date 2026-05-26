@@ -1,4 +1,5 @@
 import React, { useState } from "react";
+import { useEffect } from "react";
 import { useAuth } from "@/contexts/AuthContext";
 import { useNavigate } from "react-router-dom";
 import { motion } from "framer-motion";
@@ -15,6 +16,10 @@ const AdminLogin = () => {
   const [loading, setLoading] = useState(false);
   const { loginAdmin } = useAuth();
   const navigate = useNavigate();
+
+  useEffect(() => {
+    sessionStorage.removeItem("sessionExpired");
+  }, []);
 
   const handleSubmit = async (
     e: React.FormEvent

@@ -384,7 +384,7 @@ const EmployeePanel = () => {
   const [unreadCounts, setUnreadCounts] = useState<Record<number, number>>({});
   const [address, setAddress] = useState("");
   const [editAddress, setEditAddress] = useState("");
-  const INACTIVITY_LIMIT = 1 * 60 * 1000; // 1 minuto temporario para testar inatividade
+  const INACTIVITY_LIMIT = 15 * 60 * 1000; // 15 minutos temporario para testar inatividade
   const messagesContainerRef = useRef<HTMLDivElement | null>(null);
   const previousMessagesLengthRef = useRef(0);
   const sendingMessageRef = useRef(false);
@@ -1954,6 +1954,34 @@ const EmployeePanel = () => {
       );
     } catch (error) {
       console.error(error);
+    }
+  };
+
+  const deleteNotification = async (notificationId: number) => {
+    try {
+      const response = await fetch(`${API_URL}/notifications/${notificationId}`, {
+        method: "DELETE",
+      });
+
+      if (!response.ok) {
+        const data = await response.json();
+        toast({
+          title: "Erro ao excluir notificação",
+          description: data.error || "Tente novamente.",
+          variant: "destructive",
+        });
+        return;
+      }
+
+      setNotifications((prev) =>
+        prev.filter((notification) => notification.id !== notificationId)
+      );
+    } catch (error) {
+      console.error(error);
+      toast({
+        title: "Erro ao excluir notificação",
+        variant: "destructive",
+      });
     }
   };
 
@@ -3720,8 +3748,8 @@ const EmployeePanel = () => {
                 : "Capturar localização"
           }
           className={`shrink-0 transition-colors ${coords
-              ? "border-green-500 text-green-600 hover:bg-green-50"
-              : "border-red-300 text-red-500 hover:bg-red-50"
+            ? "border-green-500 text-green-600 hover:bg-green-50"
+            : "border-red-300 text-red-500 hover:bg-red-50"
             }`}
         >
           {gettingLocation ? (
@@ -4559,8 +4587,8 @@ const EmployeePanel = () => {
                                 : "Atualizar localização"
                           }
                           className={`shrink-0 transition-colors ${editCoords
-                              ? "border-green-500 text-green-600 hover:bg-green-50"
-                              : "border-red-300 text-red-500 hover:bg-red-50"
+                            ? "border-green-500 text-green-600 hover:bg-green-50"
+                            : "border-red-300 text-red-500 hover:bg-red-50"
                             }`}
                         >
                           {gettingLocation ? (
@@ -5106,8 +5134,8 @@ const EmployeePanel = () => {
                         type="button"
                         onClick={() => setShowMessageSearch((prev) => !prev)}
                         className={`flex h-10 w-10 sm:h-11 sm:w-11 items-center justify-center rounded-full border transition-all ${showMessageSearch
-                            ? "bg-secondary text-white border-secondary shadow-md"
-                            : "bg-muted text-muted-foreground border-border hover:bg-muted/80"
+                          ? "bg-secondary text-white border-secondary shadow-md"
+                          : "bg-muted text-muted-foreground border-border hover:bg-muted/80"
                           }`}
                       >
                         <Search
@@ -5808,14 +5836,14 @@ touch-manipulation
                             type="button"
                             onClick={() => openNotification(notification)}
                             className={`group w-full rounded-2xl border p-3 text-left transition hover:-translate-y-0.5 hover:shadow-md ${notification.readAt
-                                ? "border-border bg-muted/30"
-                                : "border-secondary/40 bg-secondary/10"
+                              ? "border-border bg-muted/30"
+                              : "border-secondary/40 bg-secondary/10"
                               }`}
                           >
                             <div className="flex items-start gap-3">
                               <div className={`flex h-10 w-10 shrink-0 items-center justify-center rounded-2xl border ${notification.readAt
-                                  ? "border-border bg-card"
-                                  : "border-secondary/30 bg-card"
+                                ? "border-border bg-card"
+                                : "border-secondary/30 bg-card"
                                 }`}>
                                 {context.icon}
                               </div>
@@ -6172,8 +6200,8 @@ touch-manipulation
                               disabled={!canSelectMessage}
                               onClick={() => togglePrivateMessageSelection(msg.id)}
                               className={`flex h-7 w-7 shrink-0 items-center justify-center rounded-full border transition ${isSelected
-                                  ? "border-secondary bg-secondary text-white"
-                                  : "border-border bg-card text-transparent"
+                                ? "border-secondary bg-secondary text-white"
+                                : "border-border bg-card text-transparent"
                                 } ${!canSelectMessage ? "opacity-30" : ""}`}
                               title={
                                 canSelectMessage
@@ -6238,74 +6266,74 @@ touch-manipulation
                                   animate={{ opacity: 1, y: 0, scale: 1 }}
                                   transition={{ duration: 0.14, ease: "easeOut" }}
                                   className={`absolute right-0 z-40 w-44 overflow-hidden rounded-xl border border-border bg-white shadow-xl ${privateMessageMenuPlacement === "top"
-                                      ? "bottom-10 origin-bottom-right"
-                                      : "top-10 origin-top-right"
+                                    ? "bottom-10 origin-bottom-right"
+                                    : "top-10 origin-top-right"
                                     }`}
                                 >
-                                <button
-                                  type="button"
-                                  onClick={(e) => {
-                                    e.stopPropagation();
-                                    setReplyingToPrivateMessage(msg);
-                                    setPrivateMessageMenuId(null);
-                                  }}
-                                  className="flex w-full items-center gap-2 px-3 py-2 text-left text-xs hover:bg-muted"
-                                >
-                                  <Reply className="h-3.5 w-3.5" />
-                                  Responder
-                                </button>
-
-                                {isMine && (
                                   <button
                                     type="button"
                                     onClick={(e) => {
                                       e.stopPropagation();
-                                      setIsSelectingPrivateMessages(true);
-                                      setSelectedPrivateMessageIds((prev) =>
-                                        prev.includes(msg.id) ? prev : [...prev, msg.id]
-                                      );
+                                      setReplyingToPrivateMessage(msg);
                                       setPrivateMessageMenuId(null);
                                     }}
                                     className="flex w-full items-center gap-2 px-3 py-2 text-left text-xs hover:bg-muted"
                                   >
-                                    <Check className="h-3.5 w-3.5" />
-                                    Selecionar
+                                    <Reply className="h-3.5 w-3.5" />
+                                    Responder
                                   </button>
-                                )}
 
-                                {isMine && msg.message?.trim() && (
-                                  <button
-                                    type="button"
-                                    onClick={() => {
-                                      setEditingPrivateMessageId(msg.id);
-                                      setEditingPrivateMessageText(msg.message);
-                                      setPrivateMessageMenuId(null);
-                                    }}
-                                    className="flex w-full items-center gap-2 px-3 py-2 text-left text-xs hover:bg-muted"
-                                  >
-                                    <Pencil className="h-3.5 w-3.5" />
-                                    Editar
-                                  </button>
-                                )}
+                                  {isMine && (
+                                    <button
+                                      type="button"
+                                      onClick={(e) => {
+                                        e.stopPropagation();
+                                        setIsSelectingPrivateMessages(true);
+                                        setSelectedPrivateMessageIds((prev) =>
+                                          prev.includes(msg.id) ? prev : [...prev, msg.id]
+                                        );
+                                        setPrivateMessageMenuId(null);
+                                      }}
+                                      className="flex w-full items-center gap-2 px-3 py-2 text-left text-xs hover:bg-muted"
+                                    >
+                                      <Check className="h-3.5 w-3.5" />
+                                      Selecionar
+                                    </button>
+                                  )}
 
-                                {isMine && (
-                                  <button
-                                    type="button"
-                                    onClick={() => deletePrivateMessage(msg.id)}
-                                    className="flex w-full items-center gap-2 px-3 py-2 text-left text-xs text-red-600 hover:bg-red-50"
-                                  >
-                                    <Trash2 className="h-3.5 w-3.5" />
-                                    Excluir
-                                  </button>
-                                )}
+                                  {isMine && msg.message?.trim() && (
+                                    <button
+                                      type="button"
+                                      onClick={() => {
+                                        setEditingPrivateMessageId(msg.id);
+                                        setEditingPrivateMessageText(msg.message);
+                                        setPrivateMessageMenuId(null);
+                                      }}
+                                      className="flex w-full items-center gap-2 px-3 py-2 text-left text-xs hover:bg-muted"
+                                    >
+                                      <Pencil className="h-3.5 w-3.5" />
+                                      Editar
+                                    </button>
+                                  )}
+
+                                  {isMine && (
+                                    <button
+                                      type="button"
+                                      onClick={() => deletePrivateMessage(msg.id)}
+                                      className="flex w-full items-center gap-2 px-3 py-2 text-left text-xs text-red-600 hover:bg-red-50"
+                                    >
+                                      <Trash2 className="h-3.5 w-3.5" />
+                                      Excluir
+                                    </button>
+                                  )}
                                 </motion.div>
                               )}
                             </div>
 
                             <div
                               className={`min-w-[170px] rounded-2xl px-3 py-2 pr-10 text-sm shadow-sm border ${isMine
-                                  ? "bg-emerald-50 text-emerald-900 border-emerald-200"
-                                  : "bg-white text-gray-900 border-gray-200"
+                                ? "bg-emerald-50 text-emerald-900 border-emerald-200"
+                                : "bg-white text-gray-900 border-gray-200"
                                 }`}
                             >
                               {!isMine && (
@@ -6569,8 +6597,8 @@ touch-manipulation
                           : startPrivateAudioRecording
                       }
                       className={`h-11 w-11 shrink-0 ${isRecordingPrivateAudio
-                          ? "border-red-500 text-red-600 animate-pulse"
-                          : ""
+                        ? "border-red-500 text-red-600 animate-pulse"
+                        : ""
                         }`}
                     >
                       {isRecordingPrivateAudio ? (

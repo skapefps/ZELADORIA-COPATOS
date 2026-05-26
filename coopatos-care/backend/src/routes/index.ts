@@ -157,6 +157,86 @@ const mailTransporter = nodemailer.createTransport({
   },
 });
 
+const rawPublicAppUrl =
+  process.env.PUBLIC_APP_URL ||
+  process.env.FRONTEND_URL ||
+  "https://zeladoriacoopatos.com.br";
+const publicAppUrl = rawPublicAppUrl
+  .replace("https://www.zeladoriacoopatos.com.br", "https://zeladoriacoopatos.com.br")
+  .replace(/\/$/, "");
+const publicApiUrl =
+  process.env.PUBLIC_API_URL ||
+  process.env.API_URL ||
+  "https://zeladoria-coopatos-api.onrender.com";
+const VERIFICATION_COOLDOWN_SECONDS = 120;
+
+const adminEmployeeSelect = {
+  id: true,
+  registrationNumber: true,
+  name: true,
+  email: true,
+  cpf: true,
+  phone: true,
+  avatarUrl: true,
+  birthDate: true,
+  department: true,
+  emailVerifiedAt: true,
+  emailVerificationSentAt: true,
+  deletedAt: true,
+  createdAt: true,
+  updatedAt: true,
+  _count: {
+    select: {
+      reports: true,
+      participations: true,
+    },
+  },
+};
+
+const sendEmployeeVerificationEmail = async (
+  employee: {
+    id: number;
+    name: string;
+    email: string | null;
+    emailVerificationToken: string | null;
+  }
+) => {
+  if (!employee.email || !employee.emailVerificationToken) return;
+
+  const verificationUrl = `${publicAppUrl}/validar-email/${employee.emailVerificationToken}`;
+
+  await mailTransporter.sendMail({
+    from: process.env.MAIL_FROM,
+    to: employee.email,
+    subject: `Valide seu acesso - ${brandPreset.appName}`,
+    html: `
+      <div style="font-family: Arial, sans-serif; background:${brandPreset.colors.emailBackground}; padding:28px;">
+        <div style="max-width:620px; margin:0 auto; background:#ffffff; border-radius:18px; overflow:hidden; border:1px solid #e5e7eb;">
+          <div style="background:${brandPreset.colors.primary}; padding:24px; text-align:center;">
+            <h1 style="color:#ffffff; margin:0; font-size:22px;">${brandPreset.appName}</h1>
+            <p style="color:#d1fae5; margin:6px 0 0; font-size:14px;">Validação de cadastro</p>
+          </div>
+          <div style="padding:28px;">
+            <h2 style="color:#111827; margin-top:0;">Olá, ${employee.name}!</h2>
+            <p style="font-size:15px; color:#374151; line-height:1.6;">
+              Seu cadastro foi criado/atualizado no ${brandPreset.appName}. Para liberar o acesso, valide seu e-mail no botão abaixo.
+            </p>
+            <p style="text-align:center; margin:28px 0;">
+              <a href="${verificationUrl}" style="display:inline-block; background:${brandPreset.colors.secondary}; color:#ffffff; text-decoration:none; padding:14px 22px; border-radius:12px; font-weight:700;">
+                Validar acesso
+              </a>
+            </p>
+            <p style="font-size:12px; color:#6b7280; line-height:1.6;">
+              Se o botão não funcionar, copie e cole este link no navegador:<br/>
+              ${verificationUrl}
+            </p>
+          </div>
+        </div>
+      </div>
+    `,
+  });
+};
+
 router.post("/employee/recover-registration", async (req, res) => {
   const { email, cpf } = req.body;
 
@@ -471,24 +551,7 @@ router.get("/admin/employees", async (_req, res) => {
       orderBy: {
         name: "asc",
       },
-      select: {
-        id: true,
-        registrationNumber: true,
-        name: true,
-        email: true,
-        cpf: true,
-        phone: true,
-        department: true,
-        deletedAt: true,
-        createdAt: true,
-        updatedAt: true,
-        _count: {
-          select: {
-            reports: true,
-            participations: true,
-          },
-        },
-      },
+      select: adminEmployeeSelect,
     });
 
     return res.json(employees);
@@ -509,6 +572,8 @@ router.post("/admin/employees", async (req, res) => {
       cpf,
       phone,
       department,
+      avatarUrl,
+      birthDate,
     } = req.body;
 
     if (!registrationNumber || !name || !cpf) {
@@ -516,6 +581,8 @@ router.post("/admin/employees", async (req, res) => {
         error: "Matrícula, nome e CPF são obrigatórios.",
       });
     }
+
+    const verificationToken = email ? crypto.randomUUID() : null;
 
     const employee = await prisma.employee.create({
       data: {
@@ -525,28 +592,22 @@ router.post("/admin/employees", async (req, res) => {
         cpf: String(cpf).replace(/\D/g, ""),
         phone: phone ? String(phone).trim() : null,
         department: department ? String(department).trim() : null,
+        avatarUrl: avatarUrl ? String(avatarUrl) : null,
+        birthDate: birthDate ? new Date(String(birthDate)) : null,
+        emailVerificationToken: verificationToken,
+        emailVerificationSentAt: verificationToken ? new Date() : null,
       },
       select: {
-        id: true,
-        registrationNumber: true,
-        name: true,
-        email: true,
-        cpf: true,
-        phone: true,
-        department: true,
-        deletedAt: true,
-        createdAt: true,
-        updatedAt: true,
-        _count: {
-          select: {
-            reports: true,
-            participations: true,
-          },
-        },
+        ...adminEmployeeSelect,
+        emailVerificationToken: true,
       },
     });
 
-    return res.status(201).json(employee);
+    await sendEmployeeVerificationEmail(employee);
+
+    const { emailVerificationToken: _token, ...safeEmployee } = employee;
+
+    return res.status(201).json(safeEmployee);
   } catch (error: any) {
     console.error("Erro ao criar funcionário:", error);
     return res.status(500).json({
@@ -568,6 +629,8 @@ router.patch("/admin/employees/:id", async (req, res) => {
       cpf,
       phone,
       department,
+      avatarUrl,
+      birthDate,
     } = req.body;
 
     if (!registrationNumber || !name || !cpf) {
@@ -576,6 +639,21 @@ router.patch("/admin/employees/:id", async (req, res) => {
       });
     }
 
+    const currentEmployee = await prisma.employee.findUnique({
+      where: {
+        id,
+      },
+      select: {
+        email: true,
+        emailVerifiedAt: true,
+      },
+    });
+
+    const normalizedEmail = email ? String(email).trim().toLowerCase() : null;
+    const shouldVerifyEmail =
+      normalizedEmail && normalizedEmail !== currentEmployee?.email;
+    const verificationToken = shouldVerifyEmail ? crypto.randomUUID() : undefined;
+
     const employee = await prisma.employee.update({
       where: {
         id,
@@ -583,32 +661,29 @@ router.patch("/admin/employees/:id", async (req, res) => {
       data: {
         registrationNumber: String(registrationNumber).trim(),
         name: String(name).trim(),
-        email: email ? String(email).trim().toLowerCase() : null,
+        email: normalizedEmail,
         cpf: String(cpf).replace(/\D/g, ""),
         phone: phone ? String(phone).trim() : null,
         department: department ? String(department).trim() : null,
+        avatarUrl: avatarUrl ? String(avatarUrl) : null,
+        birthDate: birthDate ? new Date(String(birthDate)) : null,
+        emailVerifiedAt: shouldVerifyEmail ? null : undefined,
+        emailVerificationToken: verificationToken,
+        emailVerificationSentAt: shouldVerifyEmail ? new Date() : undefined,
       },
       select: {
-        id: true,
-        registrationNumber: true,
-        name: true,
-        email: true,
-        cpf: true,
-        phone: true,
-        department: true,
-        deletedAt: true,
-        createdAt: true,
-        updatedAt: true,
-        _count: {
-          select: {
-            reports: true,
-            participations: true,
-          },
-        },
+        ...adminEmployeeSelect,
+        emailVerificationToken: true,
       },
     });
 
-    return res.json(employee);
+    if (shouldVerifyEmail) {
+      await sendEmployeeVerificationEmail(employee);
+    }
+
+    const { emailVerificationToken: _token, ...safeEmployee } = employee;
+
+    return res.json(safeEmployee);
   } catch (error: any) {
     console.error("Erro ao atualizar funcionário:", error);
     return res.status(500).json({
@@ -633,24 +708,7 @@ router.patch("/admin/employees/:id/status", async (req, res) => {
         deletedAt: active ? null : new Date(),
         activeSessionToken: active ? undefined : null,
       },
-      select: {
-        id: true,
-        registrationNumber: true,
-        name: true,
-        email: true,
-        cpf: true,
-        phone: true,
-        department: true,
-        deletedAt: true,
-        createdAt: true,
-        updatedAt: true,
-        _count: {
-          select: {
-            reports: true,
-            participations: true,
-          },
-        },
-      },
+      select: adminEmployeeSelect,
     });
 
     if (!active) {
@@ -665,6 +723,150 @@ router.patch("/admin/employees/:id/status", async (req, res) => {
     return res.status(500).json({
       error: "Erro ao alterar status do funcionário.",
     });
+  }
+});
+
+router.post("/admin/employees/:id/send-verification", async (req, res) => {
+  try {
+    const id = Number(req.params.id);
+    const currentEmployee = await prisma.employee.findUnique({
+      where: {
+        id,
+      },
+      select: {
+        email: true,
+        emailVerifiedAt: true,
+        emailVerificationSentAt: true,
+      },
+    });
+
+    if (!currentEmployee?.email) {
+      return res.status(400).json({
+        error: "Funcionário não possui e-mail cadastrado.",
+      });
+    }
+
+    if (currentEmployee.emailVerifiedAt) {
+      return res.status(400).json({
+        error: "Este e-mail já foi validado.",
+      });
+    }
+
+    if (currentEmployee.emailVerificationSentAt) {
+      const elapsedSeconds = Math.floor(
+        (Date.now() - currentEmployee.emailVerificationSentAt.getTime()) / 1000
+      );
+      const remainingSeconds = VERIFICATION_COOLDOWN_SECONDS - elapsedSeconds;
+
+      if (remainingSeconds > 0) {
+        return res.status(429).json({
+          error: "Aguarde para reenviar a validação.",
+          remainingSeconds,
+        });
+      }
+    }
+
+    const token = crypto.randomUUID();
+
+    const employee = await prisma.employee.update({
+      where: {
+        id,
+      },
+      data: {
+        emailVerificationToken: token,
+        emailVerificationSentAt: new Date(),
+        emailVerifiedAt: null,
+      },
+      select: {
+        ...adminEmployeeSelect,
+        emailVerificationToken: true,
+      },
+    });
+
+    await sendEmployeeVerificationEmail(employee);
+
+    const { emailVerificationToken: _token, ...safeEmployee } = employee;
+
+    return res.json(safeEmployee);
+  } catch (error) {
+    console.error("Erro ao reenviar validação:", error);
+    return res.status(500).json({
+      error: "Erro ao reenviar validação.",
+    });
+  }
+});
+
+router.get("/employee/verify-email/:token", async (req, res) => {
+  try {
+    const token = req.params.token;
+
+    const existingEmployee = await prisma.employee.findUnique({
+      where: {
+        emailVerificationToken: token,
+      },
+      select: {
+        id: true,
+      },
+    });
+
+    if (!existingEmployee) {
+      if (req.headers.accept?.includes("application/json")) {
+        return res.status(400).json({
+          error: "Link de validação inválido ou já utilizado.",
+        });
+      }
+
+      return res.redirect(`${publicAppUrl}/validar-email/expirado`);
+    }
+
+    const employee = await prisma.employee.update({
+      where: {
+        id: existingEmployee.id,
+      },
+      data: {
+        emailVerifiedAt: new Date(),
+        emailVerificationToken: null,
+        emailVerificationSentAt: null,
+      },
+      select: adminEmployeeSelect,
+    });
+
+    io.emit("employee-verification-updated", employee);
+
+    if (req.headers.accept?.includes("application/json")) {
+      return res.json({
+        message: "E-mail validado.",
+        employee,
+      });
+    }
+
+    return res.send(`
+      <!doctype html>
+      <html lang="pt-BR">
+        <head>
+          <meta charset="utf-8" />
+          <meta name="viewport" content="width=device-width, initial-scale=1" />
+          <title>E-mail validado</title>
+          <style>
+            body { margin:0; min-height:100vh; display:grid; place-items:center; font-family:Arial,sans-serif; background:#f3f4f6; color:#111827; }
+            main { max-width:520px; margin:24px; background:white; border:1px solid #e5e7eb; border-radius:22px; padding:28px; text-align:center; box-shadow:0 18px 50px rgba(15,23,42,.12); }
+            .icon { width:56px; height:56px; border-radius:18px; display:grid; place-items:center; margin:0 auto 16px; background:${brandPreset.colors.secondary}; color:white; font-size:28px; }
+            a { display:inline-block; margin-top:18px; border-radius:12px; padding:12px 18px; background:${brandPreset.colors.primary}; color:white; text-decoration:none; font-weight:700; }
+          </style>
+        </head>
+        <body>
+          <main>
+            <div class="icon">✓</div>
+            <h1>E-mail validado</h1>
+            <p>Seu acesso ao ${brandPreset.appName} foi liberado.</p>
+            <a href="${publicAppUrl}">Ir para o login</a>
+          </main>
+        </body>
+      </html>
+    `);
+  } catch (error) {
+    console.error("Erro ao validar e-mail:", error);
+    return res.status(400).send("Link de validação inválido ou expirado.");
   }
 });
 
@@ -1021,6 +1223,7 @@ router.post("/reports", async (req, res) => {
     title,
     description,
     referencePoint,
+    priority,
     latitude,
     longitude,
     address,
@@ -1049,6 +1252,7 @@ router.post("/reports", async (req, res) => {
       statusId: openStatus.id,
       description,
       referencePoint,
+      priority: priority || "MEDIA",
       address,
       latitude,
       longitude,
@@ -1079,6 +1283,105 @@ router.post("/reports", async (req, res) => {
   return res.status(201).json(report);
 });
 
+router.post("/admin/reports", async (req, res) => {
+  try {
+    const {
+      employeeId,
+      categoryId,
+      statusId,
+      title,
+      description,
+      referencePoint,
+      priority,
+      latitude,
+      longitude,
+      address,
+      participantIds,
+      mediaItems,
+    } = req.body;
+
+    if (!employeeId || !categoryId) {
+      return res.status(400).json({
+        error: "Funcionário responsável e categoria são obrigatórios.",
+      });
+    }
+
+    const openStatus = await prisma.reportStatus.findFirst({
+      where: {
+        name: "ABERTO",
+      },
+    });
+
+    const reportStatusId = statusId
+      ? Number(statusId)
+      : openStatus?.id;
+
+    if (!reportStatusId) {
+      return res.status(400).json({
+        error: "Status do chamado não encontrado.",
+      });
+    }
+
+    const uniqueParticipantIds = Array.from(
+      new Set([Number(employeeId), ...(participantIds || []).map(Number)])
+    ).filter(Boolean);
+
+    const report = await prisma.report.create({
+      data: {
+        employeeId: Number(employeeId),
+        categoryId: Number(categoryId),
+        statusId: reportStatusId,
+        title: title?.trim() || null,
+        description: description?.trim() || null,
+        referencePoint: referencePoint?.trim() || null,
+        priority: priority || "MEDIA",
+        address: address?.trim() || null,
+        latitude: latitude === "" || latitude === null ? null : Number(latitude),
+        longitude: longitude === "" || longitude === null ? null : Number(longitude),
+        participants: {
+          create: uniqueParticipantIds.map((participantId) => ({
+            employeeId: participantId,
+            role: participantId === Number(employeeId) ? "OWNER" : "PARTICIPANT",
+          })),
+        },
+        images: mediaItems?.length
+          ? {
+            create: mediaItems.map((item: any) => ({
+              imageUrl: item.imageUrl,
+              publicId: item.publicId,
+              resourceType: item.resourceType || "image",
+            })),
+          }
+          : undefined,
+      },
+      include: reportInclude,
+    });
+
+    for (const participantId of uniqueParticipantIds) {
+      if (participantId === Number(employeeId)) continue;
+
+      await createNotification({
+        recipientId: participantId,
+        actorId: null,
+        type: "PARTICIPANT_ADDED",
+        title: "Você foi atribuído a um chamado",
+        body: `Você foi atribuído ao chamado #${report.id}.`,
+        reportId: report.id,
+      });
+    }
+
+    io.emit("report-created");
+    io.emit("reports-updated");
+
+    return res.status(201).json(report);
+  } catch (error) {
+    console.error(error);
+    return res.status(500).json({
+      error: "Erro ao criar chamado.",
+    });
+  }
+});
+
 router.patch("/reports/:id", async (req, res) => {
   const id = Number(req.params.id);
 
@@ -1087,6 +1390,7 @@ router.patch("/reports/:id", async (req, res) => {
     title,
     description,
     referencePoint,
+    priority,
     latitude,
     longitude,
     address,
@@ -1101,6 +1405,7 @@ router.patch("/reports/:id", async (req, res) => {
       title,
       description,
       referencePoint,
+      priority,
       latitude,
       longitude,
       address,
@@ -1111,6 +1416,211 @@ router.patch("/reports/:id", async (req, res) => {
   io.emit("report-updated");
   io.emit("reports-updated");
   return res.json(report);
+});
+
+router.patch("/admin/reports/:id", async (req, res) => {
+  try {
+    const id = Number(req.params.id);
+
+    const {
+      employeeId,
+      categoryId,
+      statusId,
+      title,
+      description,
+      referencePoint,
+      priority,
+      latitude,
+      longitude,
+      address,
+      participantIds,
+    } = req.body;
+
+    await prisma.report.update({
+      where: {
+        id,
+      },
+      data: {
+        employeeId: employeeId ? Number(employeeId) : undefined,
+        categoryId: categoryId ? Number(categoryId) : undefined,
+        statusId: statusId ? Number(statusId) : undefined,
+        title: title?.trim() || null,
+        description: description?.trim() || null,
+        referencePoint: referencePoint?.trim() || null,
+        priority: priority || undefined,
+        address: address?.trim() || null,
+        latitude: latitude === "" || latitude === null ? null : Number(latitude),
+        longitude: longitude === "" || longitude === null ? null : Number(longitude),
+      },
+    });
+
+    if (Array.isArray(participantIds)) {
+      const normalizedParticipantIds = Array.from(
+        new Set([
+          ...(employeeId ? [Number(employeeId)] : []),
+          ...participantIds.map(Number),
+        ])
+      ).filter(Boolean);
+
+      await prisma.reportParticipant.deleteMany({
+        where: {
+          reportId: id,
+          employeeId: {
+            notIn: normalizedParticipantIds,
+          },
+        },
+      });
+
+      for (const participantId of normalizedParticipantIds) {
+        await prisma.reportParticipant.upsert({
+          where: {
+            reportId_employeeId: {
+              reportId: id,
+              employeeId: participantId,
+            },
+          },
+          update: {
+            role: participantId === Number(employeeId) ? "OWNER" : "PARTICIPANT",
+          },
+          create: {
+            reportId: id,
+            employeeId: participantId,
+            role: participantId === Number(employeeId) ? "OWNER" : "PARTICIPANT",
+          },
+        });
+      }
+    }
+
+    const report = await prisma.report.findUnique({
+      where: {
+        id,
+      },
+      include: reportInclude,
+    });
+
+    io.emit("report-updated");
+    io.emit("reports-updated");
+
+    return res.json(report);
+  } catch (error) {
+    console.error(error);
+    return res.status(500).json({
+      error: "Erro ao atualizar chamado.",
+    });
+  }
+});
+
+router.delete("/admin/reports/:id", async (req, res) => {
+  try {
+    const id = Number(req.params.id);
+
+    const report = await prisma.report.findUnique({
+      where: { id },
+      include: {
+        images: true,
+        messages: {
+          include: {
+            media: true,
+          },
+        },
+        notes: {
+          include: {
+            media: true,
+          },
+        },
+      },
+    });
+
+    if (!report) {
+      return res.status(404).json({
+        error: "Chamado não encontrado.",
+      });
+    }
+
+    await prisma.$transaction([
+      prisma.notification.deleteMany({ where: { reportId: id } }),
+      prisma.reportMessageMention.deleteMany({
+        where: {
+          message: {
+            reportId: id,
+          },
+        },
+      }),
+      prisma.reportMessageMedia.deleteMany({
+        where: {
+          message: {
+            reportId: id,
+          },
+        },
+      }),
+      prisma.reportMessageRead.deleteMany({ where: { reportId: id } }),
+      prisma.reportMessage.updateMany({
+        where: { reportId: id },
+        data: { replyToMessageId: null },
+      }),
+      prisma.reportMessage.deleteMany({ where: { reportId: id } }),
+      prisma.reportNoteMedia.deleteMany({
+        where: {
+          note: {
+            reportId: id,
+          },
+        },
+      }),
+      prisma.reportNote.deleteMany({ where: { reportId: id } }),
+      prisma.reportParticipant.deleteMany({ where: { reportId: id } }),
+      prisma.reportImage.deleteMany({ where: { reportId: id } }),
+      prisma.report.delete({ where: { id } }),
+    ]);
+
+    const mediaToDestroy = [
+      ...report.images.map((item) => ({
+        publicId: item.publicId,
+        resourceType: item.resourceType,
+      })),
+      ...report.messages.flatMap((message) => [
+        {
+          publicId: message.publicId,
+          resourceType: message.resourceType,
+        },
+        ...message.media.map((item) => ({
+          publicId: item.publicId,
+          resourceType: item.resourceType,
+        })),
+      ]),
+      ...report.notes.flatMap((note) =>
+        note.media.map((item) => ({
+          publicId: item.publicId,
+          resourceType: item.resourceType,
+        }))
+      ),
+    ].filter((item) => item.publicId);
+
+    for (const item of mediaToDestroy) {
+      try {
+        await cloudinary.uploader.destroy(item.publicId as string, {
+          resource_type:
+            item.resourceType === "video" || item.resourceType === "audio"
+              ? "video"
+              : "image",
+        });
+      } catch (cloudinaryError) {
+        console.error("Erro ao remover mídia do Cloudinary:", cloudinaryError);
+      }
+    }
+
+    io.emit("report-deleted", { id });
+    io.emit("reports-updated");
+
+    return res.json({
+      message: "Chamado excluído com sucesso.",
+      id,
+    });
+  } catch (error) {
+    console.error(error);
+    return res.status(500).json({
+      error: "Erro ao excluir chamado.",
+    });
+  }
 });
 
 router.delete("/report-images/:id", async (req, res) => {
@@ -1223,6 +1733,19 @@ router.post("/admin-login", async (req, res) => {
       });
     }
 
+    const isAdministrativeDepartment =
+      user.employee?.department
+        ?.normalize("NFD")
+        .replace(/\p{Diacritic}/gu, "")
+        .toLowerCase()
+        .includes("administrativo") ?? false;
+
+    if (!isAdministrativeDepartment) {
+      return res.status(403).json({
+        error: "Acesso administrativo permitido apenas ao departamento administrativo.",
+      });
+    }
+
     const passwordIsValid = await bcrypt.compare(
       String(password),
       user.passwordHash
@@ -1279,6 +1802,18 @@ router.post("/employee-login", async (req, res) => {
   if (!employee) {
     return res.status(404).json({
       error: "Matrícula ou CPF inválidos.",
+    });
+  }
+
+  if (employee.deletedAt) {
+    return res.status(403).json({
+      error: "Cadastro desativado. Procure o administrador.",
+    });
+  }
+
+  if (employee.email && !employee.emailVerifiedAt) {
+    return res.status(403).json({
+      error: "Valide seu e-mail antes de acessar.",
     });
   }
 

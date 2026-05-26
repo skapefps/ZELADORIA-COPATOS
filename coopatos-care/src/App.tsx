@@ -10,6 +10,7 @@ import AdminLogin from "./pages/AdminLogin";
 import EmployeePanel from "./pages/EmployeePanel";
 import Dashboard from "./pages/Dashboard";
 import NotFound from "./pages/NotFound";
+import VerifyEmployeeEmail from "./pages/VerifyEmployeeEmail";
 
 const queryClient = new QueryClient();
 
@@ -22,6 +23,17 @@ const ProtectedEmployee = ({ children }: { children: React.ReactNode }) => {
 const ProtectedAdmin = ({ children }: { children: React.ReactNode }) => {
   const { isAuthenticated, role } = useAuth();
   if (!isAuthenticated || role !== "admin") return <Navigate to="/admin/login" />;
+
+  const admin = JSON.parse(localStorage.getItem("admin") || "{}");
+  const department = admin?.employee?.department || "";
+  const isAdministrativeDepartment = department
+    .normalize("NFD")
+    .replace(/\p{Diacritic}/gu, "")
+    .toLowerCase()
+    .includes("administrativo");
+
+  if (!isAdministrativeDepartment) return <Navigate to="/admin/login" />;
+
   return <>{children}</>;
 };
 
@@ -36,6 +48,7 @@ const App = () => (
             <Routes>
               <Route path="/" element={<EmployeeLogin />} />
               <Route path="/admin/login" element={<AdminLogin />} />
+              <Route path="/validar-email/:token" element={<VerifyEmployeeEmail />} />
               <Route path="/funcionario" element={<ProtectedEmployee><EmployeePanel /></ProtectedEmployee>} />
               <Route path="/dashboard" element={<ProtectedAdmin><Dashboard /></ProtectedAdmin>} />
               <Route path="*" element={<NotFound />} />

@@ -14,6 +14,11 @@ model Employee {
   email              String?
   cpf                String   @unique
   phone              String?
+  avatarUrl          String?
+  birthDate          DateTime?
+  emailVerifiedAt    DateTime?
+  emailVerificationToken String? @unique
+  emailVerificationSentAt DateTime?
   messageReads ReportMessageRead[]
   department         String?
   activeSessionToken String?
@@ -95,6 +100,7 @@ model Report {
   title            String?
   description      String?
   referencePoint   String?
+  priority         String?  @default("MEDIA")
 
   latitude         Float?
   longitude        Float?

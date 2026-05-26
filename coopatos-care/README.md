@@ -69,7 +69,18 @@ Ao trocar a logo, coloque o arquivo em `public/` e atualize `logoSrc`/`faviconSr
 - Busca/filtros em telas do funcionário.
 - Recuperação de matrícula por e-mail e CPF.
 - Preset whitelabel para trocar nome, logo, favicon e cores principais.
-- Admin: início do CRUD de funcionários com listagem, busca, criação, edição, desativação e restauração.
+- Admin: CRUD de funcionários iniciado com listagem, busca, criação/edição em modal, foto de perfil, data de nascimento, departamento por preset, desativação/restauração e validação de e-mail.
+- Admin: registro visual de quando o e-mail de validação foi enviado, cooldown de reenvio e validação por link direto da API para evitar 404 no domínio frontend durante deploy.
+- Admin: criação, edição, exclusão e atribuição múltipla de funcionários em chamados pelo modal administrativo.
+- Admin: chamados com GPS, busca por endereço, preenchimento por CEP, upload de fotos/vídeos, expansão, download, remoção de mídia e preview responsivo.
+- Admin: filtro de período personalizado por data inicial/final, além dos atalhos de 7, 30, 90, 180 e 365 dias.
+- Admin: acesso administrativo bloqueado para usuários fora do departamento administrativo.
+- Chamados: prioridade persistida no banco (`BAIXA`, `MEDIA`, `ALTA`, `CRITICA`) e exibida visualmente na lista/admin.
+- Validação de e-mail: link volta para o site, a página valida no backend, o token é invalidado após uso e e-mails já validados não podem receber novo link de validação.
+- Validação de e-mail: usuários existentes com e-mail foram marcados como validados via migration; novos cadastros e trocas futuras de e-mail continuam exigindo validação.
+- Vercel: `vercel.json` inclui redirect de `www.zeladoriacoopatos.com.br` para `zeladoriacoopatos.com.br`.
+- Admin: filtros de chamados por categoria, status, funcionário atribuído, período e busca textual.
+- Admin: mapa de chamados reconectado para pins e mapa de calor com base nos chamados filtrados, com z-index ajustado para não cobrir modais.
 
 ## Ambiente
 
@@ -104,6 +115,8 @@ MAIL_USER=
 MAIL_PASS=
 MAIL_FROM=
 ADMIN_SUPPORT_EMAIL=
+PUBLIC_APP_URL=https://zeladoriacoopatos.com.br
+PUBLIC_API_URL=https://zeladoria-coopatos-api.onrender.com
 ```
 
 Na Vercel/frontend:
@@ -213,11 +226,11 @@ Antes de mexer nesses itens, verificar se já foram implementados no código atu
 
 Roadmap sugerido:
 
-1. CRUD de funcionários: listar, buscar, criar, editar, desativar e restaurar já iniciado. Próximos passos: resetar acesso, validação visual de CPF/matrícula e histórico administrativo.
+1. CRUD de funcionários: listar, buscar, criar/editar em modal, foto de perfil, nascimento, departamento presetado, desativar/restaurar e validação de e-mail já iniciado. Próximos passos: resetar acesso, validação visual de CPF/matrícula, auditoria e permissões por papel.
 2. CRUD de admins e permissões.
 3. Perfis: Master, Supervisor, Analista e Somente leitura.
 4. Departamentos: responsáveis, cores, edição e exclusão.
-5. Chamados avançados: status, transferência, responsável, prazo, SLA, histórico e observações internas.
+5. Chamados avançados: criar, editar, excluir e atribuir funcionário já iniciado. Próximos passos: prazo, SLA, histórico de auditoria e permissões finas por papel.
 6. Notificações avançadas: menções, resumo diário e histórico completo.
 
 ## Segurança

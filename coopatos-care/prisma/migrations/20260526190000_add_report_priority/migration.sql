@@ -1,0 +1,1 @@
+ALTER TABLE "Report" ADD COLUMN "priority" TEXT DEFAULT 'MEDIA';

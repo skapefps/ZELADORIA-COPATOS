@@ -142,6 +142,8 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
 
     if (reason === "timeout") {
       sessionStorage.setItem("sessionExpired", "true");
+    } else {
+      sessionStorage.removeItem("sessionExpired");
     }
 
     setAuth({
