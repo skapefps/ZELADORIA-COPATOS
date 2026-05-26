@@ -329,6 +329,7 @@ const EmployeePanel = () => {
   const messagesContainerRef = useRef<HTMLDivElement | null>(null);
   const previousMessagesLengthRef = useRef(0);
   const sendingMessageRef = useRef(false);
+  const sendingPrivateMessageRef = useRef(false);
   const [newMessagesCount, setNewMessagesCount] = useState(0);
   const [isNearBottom, setIsNearBottom] = useState(true);
   const [editCoords, setEditCoords] = useState<{ lat: number; lng: number } | null>(null);
@@ -357,6 +358,7 @@ const EmployeePanel = () => {
   const [editingPrivateMessageText, setEditingPrivateMessageText] = useState("");
   const [replyingToPrivateMessage, setReplyingToPrivateMessage] = useState<PrivateMessage | null>(null);
   const privateChatFileInputRef = useRef<HTMLInputElement>(null);
+  const privateMessageInputRef = useRef<HTMLTextAreaElement | null>(null);
   const privateMessagesContainerRef = useRef<HTMLDivElement | null>(null);
   const privateMessagesEndRef = useRef<HTMLDivElement | null>(null);
   const [showPrivateEmojiPicker, setShowPrivateEmojiPicker] = useState(false);
@@ -383,6 +385,7 @@ const EmployeePanel = () => {
   const [addingParticipant, setAddingParticipant] = useState(false);
   const [currentImageIndex, setCurrentImageIndex] = useState(0);
   const chatFileInputRef = useRef<HTMLInputElement>(null);
+  const messageInputRef = useRef<HTMLInputElement | null>(null);
   const emojiPickerRef = useRef<HTMLDivElement | null>(null);
   const messageRefs = useRef<Record<number, HTMLDivElement | null>>({});
   const isNearBottomRef = useRef(true);
@@ -1431,6 +1434,7 @@ const EmployeePanel = () => {
 
   const sendPrivateMessage = async () => {
     if (
+      sendingPrivateMessageRef.current ||
       !privateConversation ||
       sendingPrivateMessage ||
       (!privateMessageText.trim() && privateChatFiles.length === 0)
@@ -1438,6 +1442,7 @@ const EmployeePanel = () => {
       return;
     }
 
+    sendingPrivateMessageRef.current = true;
     setSendingPrivateMessage(true);
 
     try {
@@ -1496,6 +1501,7 @@ const EmployeePanel = () => {
         variant: "destructive",
       });
     } finally {
+      sendingPrivateMessageRef.current = false;
       setSendingPrivateMessage(false);
     }
   };
@@ -2188,8 +2194,6 @@ const EmployeePanel = () => {
       if (chatFileInputRef.current) {
         chatFileInputRef.current.value = "";
       }
-
-      await loadMessages(selectedReport.id);
 
       markMessagesAsRead(selectedReport.id);
     } catch (error) {
@@ -4671,7 +4675,12 @@ const EmployeePanel = () => {
                         type="button"
                         variant="outline"
                         size="icon"
-                        onClick={() => setShowEmojiPicker((prev) => !prev)}
+                        onMouseDown={(e) => e.preventDefault()}
+                        onTouchStart={(e) => e.preventDefault()}
+                        onClick={() => {
+                          messageInputRef.current?.blur();
+                          setShowEmojiPicker((prev) => !prev);
+                        }}
                       >
                         <Smile className="w-5 h-5" />
                       </Button>
@@ -4715,12 +4724,14 @@ const EmployeePanel = () => {
                       )}
                     </Button>
                     <Input
+                      ref={messageInputRef}
                       value={newMessage}
                       onChange={(e) => {
                         setNewMessage(e.target.value);
                         sendTypingSignal();
                       }}
                       placeholder="Escreva uma mensagem..."
+                      className="text-base"
                       onKeyDown={(e) => {
                         if (e.key === "Enter") {
                           e.preventDefault();
@@ -5716,7 +5727,12 @@ touch-manipulation
                         type="button"
                         variant="outline"
                         size="icon"
-                        onClick={() => setShowPrivateEmojiPicker((prev) => !prev)}
+                        onMouseDown={(e) => e.preventDefault()}
+                        onTouchStart={(e) => e.preventDefault()}
+                        onClick={() => {
+                          privateMessageInputRef.current?.blur();
+                          setShowPrivateEmojiPicker((prev) => !prev);
+                        }}
                         className="h-11 w-11 shrink-0"
                       >
                         <Smile className="h-4 w-4" />
@@ -5736,6 +5752,7 @@ touch-manipulation
                     </div>
 
                     <Textarea
+                      ref={privateMessageInputRef}
                       value={privateMessageText}
                       onChange={(e) => {
                         setPrivateMessageText(e.target.value);
@@ -5747,6 +5764,16 @@ touch-manipulation
                       onKeyDown={(e) => {
                         if (e.key === "Enter" && !e.shiftKey) {
                           e.preventDefault();
+
+                          if (
+                            e.repeat ||
+                            sendingPrivateMessageRef.current ||
+                            sendingPrivateMessage ||
+                            isRecordingPrivateAudio
+                          ) {
+                            return;
+                          }
+
                           sendPrivateMessage();
                         }
                       }}
