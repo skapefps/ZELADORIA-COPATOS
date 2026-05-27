@@ -5,6 +5,7 @@ import { io } from "socket.io-client";
 import { motion, AnimatePresence } from "framer-motion";
 import {
   AlertCircle,
+  BarChart3,
   Calendar,
   CheckCircle,
   Download,
@@ -40,6 +41,20 @@ import {
   UserCheck,
   UserPlus,
 } from "lucide-react";
+import {
+  Bar,
+  BarChart,
+  CartesianGrid,
+  Cell,
+  Line,
+  LineChart,
+  Pie,
+  PieChart,
+  ResponsiveContainer,
+  Tooltip,
+  XAxis,
+  YAxis,
+} from "recharts";
 
 import { Button } from "@/components/ui/button";
 import { useToast } from "@/hooks/use-toast";
@@ -56,6 +71,7 @@ import { brandPreset } from "@/config/brand";
 import DashboardMaps from "@/components/DashboardMaps";
 
 type AdminSection =
+  | "analytics"
   | "reports"
   | "employees"
   | "users"
@@ -84,6 +100,7 @@ type AdminReport = {
   employee: {
     id: number;
     name: string;
+    department?: string | null;
   };
   participants?: {
     id: number;
@@ -122,6 +139,24 @@ type AdminEmployee = {
   };
 };
 
+type AdminDepartment = {
+  id: number;
+  name: string;
+  description?: string | null;
+  color?: string | null;
+  active: boolean;
+  deletedAt?: string | null;
+  createdAt: string;
+  updatedAt: string;
+};
+
+type DepartmentForm = {
+  name: string;
+  description: string;
+  color: string;
+  active: boolean;
+};
+
 type EmployeeForm = {
   registrationNumber: string;
   name: string;
@@ -157,6 +192,13 @@ const emptyEmployeeForm: EmployeeForm = {
   avatarUrl: "",
   birthDate: "",
   department: "",
+};
+
+const emptyDepartmentForm: DepartmentForm = {
+  name: "",
+  description: "",
+  color: "#2563eb",
+  active: true,
 };
 
 const emptyReportForm: ReportForm = {
@@ -291,6 +333,15 @@ const priorityBadgeClass = (priority?: string | null) =>
   priorityOptions.find((item) => item.value === priority)?.badge ||
   "border-yellow-200 bg-yellow-50 text-yellow-700";
 
+const chartPalette = [
+  "#2563eb",
+  "#16a34a",
+  "#f59e0b",
+  "#dc2626",
+  "#7c3aed",
+  "#0f766e",
+];
+
 const Dashboard = () => {
   const { logout } = useAuth();
   const navigate = useNavigate();
@@ -306,6 +357,15 @@ const Dashboard = () => {
   const [employeeFormErrors, setEmployeeFormErrors] =
     useState<EmployeeFormErrors>({});
   const [showEmployeeModal, setShowEmployeeModal] = useState(false);
+  const [departments, setDepartments] = useState<AdminDepartment[]>([]);
+  const [departmentSearch, setDepartmentSearch] = useState("");
+  const [departmentForm, setDepartmentForm] =
+    useState<DepartmentForm>(emptyDepartmentForm);
+  const [showDepartmentModal, setShowDepartmentModal] = useState(false);
+  const [editingDepartmentId, setEditingDepartmentId] = useState<number | null>(
+    null
+  );
+  const [savingDepartment, setSavingDepartment] = useState(false);
   const [verificationNow, setVerificationNow] = useState(Date.now());
   const [editingEmployeeId, setEditingEmployeeId] = useState<number | null>(null);
   const [savingEmployee, setSavingEmployee] = useState(false);
@@ -345,6 +405,11 @@ const Dashboard = () => {
   const [uploadingReportMedia, setUploadingReportMedia] = useState(false);
 
   const admin = JSON.parse(localStorage.getItem("admin") || "{}");
+  const adminHeaders = (extra?: Record<string, string>) => ({
+    "X-Admin-Id": String(admin?.id || ""),
+    "X-Admin-Session-Token": localStorage.getItem("adminSessionToken") || "",
+    ...extra,
+  });
 
   useEffect(() => {
     const auth = JSON.parse(localStorage.getItem("auth") || "{}");
@@ -377,12 +442,18 @@ const Dashboard = () => {
           categoriesResponse,
           statusesResponse,
           employeesResponse,
+          departmentsResponse,
         ] =
           await Promise.all([
             fetch(`${API_URL}/reports`),
             fetch(`${API_URL}/categories`),
             fetch(`${API_URL}/statuses`),
-            fetch(`${API_URL}/admin/employees`),
+            fetch(`${API_URL}/admin/employees`, {
+              headers: adminHeaders(),
+            }),
+            fetch(`${API_URL}/admin/departments`, {
+              headers: adminHeaders(),
+            }),
           ]);
 
         const [
@@ -390,17 +461,20 @@ const Dashboard = () => {
           categoriesData,
           statusesData,
           employeesData,
+          departmentsData,
         ] = await Promise.all([
           reportsResponse.json(),
           categoriesResponse.json(),
           statusesResponse.json(),
           employeesResponse.json(),
+          departmentsResponse.json(),
         ]);
 
         setReports(asArray<AdminReport>(reportsData));
         setCategories(asArray<{ id: number; name: string }>(categoriesData));
         setStatuses(asArray<{ id: number; name: string }>(statusesData));
         setEmployees(asArray<AdminEmployee>(employeesData));
+        setDepartments(asArray<AdminDepartment>(departmentsData));
 
         if (!employeesResponse.ok || !Array.isArray(employeesData)) {
           toast({
@@ -408,6 +482,16 @@ const Dashboard = () => {
             description:
               employeesData?.error ||
               "Reinicie o backend para carregar as novas rotas do admin.",
+            variant: "destructive",
+          });
+        }
+
+        if (!departmentsResponse.ok || !Array.isArray(departmentsData)) {
+          toast({
+            title: "Departamentos não carregaram",
+            description:
+              departmentsData?.error ||
+              "Publique a API atualizada no Render para carregar departamentos.",
             variant: "destructive",
           });
         }
@@ -581,16 +665,43 @@ const Dashboard = () => {
     [employees]
   );
 
+  const filteredDepartments = useMemo(() => {
+    const search = departmentSearch.toLowerCase().trim();
+
+    return departments.filter((department) => {
+      if (!search) return true;
+
+      return (
+        department.name.toLowerCase().includes(search) ||
+        department.description?.toLowerCase().includes(search)
+      );
+    });
+  }, [departments, departmentSearch]);
+
+  const departmentStats = useMemo(
+    () => ({
+      total: departments.length,
+      active: departments.filter((department) => department.active).length,
+      inactive: departments.filter((department) => !department.active).length,
+      withEmployees: departments.filter((department) =>
+        employees.some((employee) => employee.department === department.name)
+      ).length,
+    }),
+    [departments, employees]
+  );
+
   const departmentOptions = useMemo(
-    () =>
-      Array.from(
-        new Set(
-          employees
-            .map((employee) => employee.department)
-            .filter(Boolean)
-        )
-      ).sort() as string[],
-    [employees]
+    () => {
+      const fromDepartments = departments
+        .filter((department) => department.active)
+        .map((department) => department.name);
+      const fromEmployees = employees
+        .map((employee) => employee.department)
+        .filter(Boolean) as string[];
+
+      return Array.from(new Set([...fromDepartments, ...fromEmployees])).sort();
+    },
+    [departments, employees]
   );
 
   const assignedEmployeeOptions = useMemo(
@@ -609,11 +720,125 @@ const Dashboard = () => {
     [employees, reports]
   );
 
+  const analytics = useMemo(() => {
+    const completedReports = reports.filter(
+      (report) => report.status.name === "FINALIZADO"
+    );
+    const pendingReports = reports.filter(
+      (report) => report.status.name !== "FINALIZADO"
+    );
+    const completionRate = reports.length
+      ? Math.round((completedReports.length / reports.length) * 100)
+      : 0;
+
+    const statusData = statuses.map((status, index) => ({
+      name: status.name.replace(/_/g, " "),
+      value: reports.filter((report) => report.status.id === status.id).length,
+      color: status.color || chartPalette[index % chartPalette.length],
+    }));
+
+    const priorityData = priorityOptions.map((priority, index) => ({
+      name: priority.label,
+      value: reports.filter((report) => report.priority === priority.value).length,
+      color: chartPalette[index % chartPalette.length],
+    }));
+
+    const categoryData = categories
+      .map((category, index) => ({
+        name: category.name,
+        value: reports.filter((report) => report.category.id === category.id).length,
+        color: chartPalette[index % chartPalette.length],
+      }))
+      .filter((item) => item.value > 0);
+
+    const monthlyMap = new Map<string, { month: string; abertos: number; finalizados: number }>();
+    reports.forEach((report) => {
+      const date = new Date(report.createdAt);
+      const month = `${String(date.getMonth() + 1).padStart(2, "0")}/${String(
+        date.getFullYear()
+      ).slice(-2)}`;
+      const current = monthlyMap.get(month) || {
+        month,
+        abertos: 0,
+        finalizados: 0,
+      };
+
+      current.abertos += 1;
+      if (report.status.name === "FINALIZADO") current.finalizados += 1;
+      monthlyMap.set(month, current);
+    });
+
+    const monthlyData = Array.from(monthlyMap.values()).slice(-8);
+
+    const employeeData = employees
+      .map((employee) => {
+        const assigned = reports.filter(
+          (report) =>
+            report.employee?.id === employee.id ||
+            report.participants?.some(
+              (participant) => participant.employeeId === employee.id
+            )
+        );
+
+        return {
+          name: employee.name.split(" ").slice(0, 2).join(" "),
+          total: assigned.length,
+          finalizados: assigned.filter(
+            (report) => report.status.name === "FINALIZADO"
+          ).length,
+        };
+      })
+      .filter((item) => item.total > 0)
+      .sort((a, b) => b.total - a.total)
+      .slice(0, 8);
+
+    const departmentData = departmentOptions
+      .map((department) => {
+        const team = employees.filter(
+          (employee) => employee.department === department
+        );
+        const teamIds = new Set(team.map((employee) => employee.id));
+        const assigned = reports.filter(
+          (report) =>
+            teamIds.has(report.employee?.id) ||
+            report.participants?.some((participant) =>
+              teamIds.has(participant.employeeId)
+            )
+        );
+
+        return {
+          name: department,
+          equipe: team.length,
+          chamados: assigned.length,
+          finalizados: assigned.filter(
+            (report) => report.status.name === "FINALIZADO"
+          ).length,
+        };
+      })
+      .filter((item) => item.equipe > 0 || item.chamados > 0)
+      .sort((a, b) => b.chamados - a.chamados)
+      .slice(0, 8);
+
+    return {
+      completedReports,
+      pendingReports,
+      completionRate,
+      statusData,
+      priorityData,
+      categoryData,
+      monthlyData,
+      employeeData,
+      departmentData,
+    };
+  }, [categories, departmentOptions, employees, reports, statuses]);
+
   const loadEmployees = async () => {
     setLoadingEmployees(true);
 
     try {
-      const response = await fetch(`${API_URL}/admin/employees`);
+      const response = await fetch(`${API_URL}/admin/employees`, {
+        headers: adminHeaders(),
+      });
       const data = await response.json();
 
       if (!response.ok) {
@@ -725,9 +950,9 @@ const Dashboard = () => {
           : `${API_URL}/admin/employees`,
         {
           method: editingEmployeeId ? "PATCH" : "POST",
-          headers: {
+          headers: adminHeaders({
             "Content-Type": "application/json",
-          },
+          }),
           body: JSON.stringify({
             ...employeeForm,
             cpf: employeeForm.cpf.replace(/\D/g, ""),
@@ -839,6 +1064,7 @@ const Dashboard = () => {
         `${API_URL}/admin/employees/${employee.id}/send-verification`,
         {
           method: "POST",
+          headers: adminHeaders(),
         }
       );
       const data = await response.json();
@@ -890,9 +1116,9 @@ const Dashboard = () => {
         `${API_URL}/admin/employees/${employee.id}/status`,
         {
           method: "PATCH",
-          headers: {
+          headers: adminHeaders({
             "Content-Type": "application/json",
-          },
+          }),
           body: JSON.stringify({ active }),
         }
       );
@@ -924,8 +1150,167 @@ const Dashboard = () => {
     }
   };
 
-  const exportAdminCsv = (type: "employees" | "reports" | "audit") => {
-    window.open(`${API_URL}/admin/exports/${type}`, "_blank", "noopener,noreferrer");
+  const resetDepartmentForm = () => {
+    setEditingDepartmentId(null);
+    setDepartmentForm(emptyDepartmentForm);
+  };
+
+  const openNewDepartmentModal = () => {
+    resetDepartmentForm();
+    setShowDepartmentModal(true);
+  };
+
+  const startEditingDepartment = (department: AdminDepartment) => {
+    setEditingDepartmentId(department.id);
+    setDepartmentForm({
+      name: department.name,
+      description: department.description || "",
+      color: department.color || "#2563eb",
+      active: department.active,
+    });
+    setShowDepartmentModal(true);
+  };
+
+  const saveDepartment = async () => {
+    if (!departmentForm.name.trim()) {
+      toast({
+        title: "Informe o nome do departamento",
+        variant: "destructive",
+      });
+      return;
+    }
+
+    setSavingDepartment(true);
+
+    try {
+      const response = await fetch(
+        editingDepartmentId
+          ? `${API_URL}/admin/departments/${editingDepartmentId}`
+          : `${API_URL}/admin/departments`,
+        {
+          method: editingDepartmentId ? "PATCH" : "POST",
+          headers: adminHeaders({
+            "Content-Type": "application/json",
+          }),
+          body: JSON.stringify(departmentForm),
+        }
+      );
+      const data = await response.json();
+
+      if (!response.ok) {
+        toast({
+          title: "Erro ao salvar departamento",
+          description: data.error || "Tente novamente.",
+          variant: "destructive",
+        });
+        return;
+      }
+
+      setDepartments((prev) =>
+        editingDepartmentId
+          ? prev.map((department) =>
+            department.id === editingDepartmentId ? data : department
+          )
+          : [...prev, data].sort((a, b) => a.name.localeCompare(b.name))
+      );
+      resetDepartmentForm();
+      setShowDepartmentModal(false);
+      toast({
+        title: editingDepartmentId
+          ? "Departamento atualizado"
+          : "Departamento criado",
+      });
+    } catch (error) {
+      console.error(error);
+      toast({
+        title: "Erro ao conectar com o servidor",
+        variant: "destructive",
+      });
+    } finally {
+      setSavingDepartment(false);
+    }
+  };
+
+  const toggleDepartmentStatus = async (department: AdminDepartment) => {
+    try {
+      const response = await fetch(
+        `${API_URL}/admin/departments/${department.id}`,
+        {
+          method: "PATCH",
+          headers: adminHeaders({
+            "Content-Type": "application/json",
+          }),
+          body: JSON.stringify({
+            name: department.name,
+            description: department.description || "",
+            color: department.color || "#2563eb",
+            active: !department.active,
+          }),
+        }
+      );
+      const data = await response.json();
+
+      if (!response.ok) {
+        toast({
+          title: "Erro ao alterar departamento",
+          description: data.error || "Tente novamente.",
+          variant: "destructive",
+        });
+        return;
+      }
+
+      setDepartments((prev) =>
+        prev.map((item) => (item.id === department.id ? data : item))
+      );
+      toast({
+        title: data.active ? "Departamento reativado" : "Departamento desativado",
+      });
+    } catch (error) {
+      console.error(error);
+      toast({
+        title: "Erro ao conectar com o servidor",
+        variant: "destructive",
+      });
+    }
+  };
+
+  const exportAdminCsv = async (type: "employees" | "reports" | "audit") => {
+    try {
+      const response = await fetch(`${API_URL}/admin/exports/${type}`, {
+        headers: adminHeaders(),
+      });
+
+      if (!response.ok) {
+        toast({
+          title: "Planilha ainda não disponível",
+          description:
+            "A API de produção precisa estar atualizada no Render para liberar este arquivo.",
+          variant: "destructive",
+        });
+        return;
+      }
+
+      const blob = await response.blob();
+      const url = URL.createObjectURL(blob);
+      const link = document.createElement("a");
+      const filename =
+        response.headers
+          .get("content-disposition")
+          ?.match(/filename="(.+)"/)?.[1] || `${type}.csv`;
+
+      link.href = url;
+      link.download = filename;
+      document.body.appendChild(link);
+      link.click();
+      link.remove();
+      URL.revokeObjectURL(url);
+    } catch (error) {
+      console.error(error);
+      toast({
+        title: "Erro ao baixar planilha",
+        variant: "destructive",
+      });
+    }
   };
 
   const formatVerificationSentAt = (value?: string | null) => {
@@ -1285,9 +1670,9 @@ const Dashboard = () => {
           : `${API_URL}/admin/reports`,
         {
           method: editingReportId ? "PATCH" : "POST",
-          headers: {
+          headers: adminHeaders({
             "Content-Type": "application/json",
-          },
+          }),
           body: JSON.stringify({
             ...reportForm,
             participantIds: reportParticipantIds.map(Number),
@@ -1338,6 +1723,7 @@ const Dashboard = () => {
     try {
       const response = await fetch(`${API_URL}/admin/reports/${report.id}`, {
         method: "DELETE",
+        headers: adminHeaders(),
       });
       const data = await response.json();
 
@@ -1534,6 +1920,7 @@ const Dashboard = () => {
   };
 
   const adminMenu = [
+    { id: "analytics", label: "Indicadores", icon: BarChart3 },
     { id: "reports", label: "Chamados", icon: ClipboardList },
     { id: "employees", label: "Funcionários", icon: Users },
     { id: "users", label: "Usuários", icon: UserCog },
@@ -1542,6 +1929,7 @@ const Dashboard = () => {
   ] as const;
 
   const sectionTitle = {
+    analytics: "Indicadores",
     reports: "Chamados",
     employees: "Funcionários",
     users: "Usuários",
@@ -1617,7 +2005,208 @@ const Dashboard = () => {
       </div>
 
       <main className="mx-auto max-w-7xl p-4 lg:p-6">
-        {adminSection === "reports" ? (
+        {adminSection === "analytics" ? (
+          <div className="space-y-5">
+            <div className="grid gap-3 md:grid-cols-2 xl:grid-cols-4">
+              {[
+                {
+                  label: "Chamados totais",
+                  value: reports.length,
+                  detail: `${filtered.length} no filtro atual`,
+                },
+                {
+                  label: "Concluídos",
+                  value: analytics.completedReports.length,
+                  detail: `${analytics.completionRate}% de conclusão`,
+                },
+                {
+                  label: "Pendentes",
+                  value: analytics.pendingReports.length,
+                  detail: "Abertos, análise ou andamento",
+                },
+                {
+                  label: "Equipe ativa",
+                  value: employeeStats.active,
+                  detail: `${departmentStats.active} departamentos ativos`,
+                },
+              ].map((item) => (
+                <div
+                  key={item.label}
+                  className="rounded-2xl border border-border bg-card p-4 shadow-sm"
+                >
+                  <p className="text-xs font-medium uppercase tracking-wide text-muted-foreground">
+                    {item.label}
+                  </p>
+                  <p className="mt-2 text-3xl font-bold text-primary">
+                    {item.value}
+                  </p>
+                  <p className="mt-1 text-xs text-muted-foreground">
+                    {item.detail}
+                  </p>
+                </div>
+              ))}
+            </div>
+
+            <div className="grid gap-4 xl:grid-cols-[1.25fr_0.75fr]">
+              <div className="rounded-2xl border border-border bg-card p-4 shadow-sm">
+                <div className="mb-4 flex items-center justify-between gap-3">
+                  <div>
+                    <p className="text-sm font-semibold">Evolução mensal</p>
+                    <p className="text-xs text-muted-foreground">
+                      Chamados abertos e finalizados por mês.
+                    </p>
+                  </div>
+                  <Calendar className="h-5 w-5 text-primary" />
+                </div>
+                <div className="h-72">
+                  <ResponsiveContainer width="100%" height="100%">
+                    <LineChart data={analytics.monthlyData}>
+                      <CartesianGrid strokeDasharray="3 3" vertical={false} />
+                      <XAxis dataKey="month" tickLine={false} />
+                      <YAxis allowDecimals={false} tickLine={false} />
+                      <Tooltip />
+                      <Line
+                        type="monotone"
+                        dataKey="abertos"
+                        stroke="#2563eb"
+                        strokeWidth={3}
+                        dot={{ r: 4 }}
+                      />
+                      <Line
+                        type="monotone"
+                        dataKey="finalizados"
+                        stroke="#16a34a"
+                        strokeWidth={3}
+                        dot={{ r: 4 }}
+                      />
+                    </LineChart>
+                  </ResponsiveContainer>
+                </div>
+              </div>
+
+              <div className="rounded-2xl border border-border bg-card p-4 shadow-sm">
+                <div className="mb-4 flex items-center justify-between gap-3">
+                  <div>
+                    <p className="text-sm font-semibold">Distribuição por status</p>
+                    <p className="text-xs text-muted-foreground">
+                      Percentual operacional atual.
+                    </p>
+                  </div>
+                  <BarChart3 className="h-5 w-5 text-primary" />
+                </div>
+                <div className="h-72">
+                  <ResponsiveContainer width="100%" height="100%">
+                    <PieChart>
+                      <Pie
+                        data={analytics.statusData}
+                        dataKey="value"
+                        nameKey="name"
+                        innerRadius={58}
+                        outerRadius={92}
+                        paddingAngle={3}
+                      >
+                        {analytics.statusData.map((entry, index) => (
+                          <Cell
+                            key={entry.name}
+                            fill={entry.color || chartPalette[index % chartPalette.length]}
+                          />
+                        ))}
+                      </Pie>
+                      <Tooltip />
+                    </PieChart>
+                  </ResponsiveContainer>
+                </div>
+              </div>
+            </div>
+
+            <div className="grid gap-4 xl:grid-cols-2">
+              <div className="rounded-2xl border border-border bg-card p-4 shadow-sm">
+                <p className="text-sm font-semibold">Produção individual</p>
+                <p className="mb-4 text-xs text-muted-foreground">
+                  Ranking dos funcionários mais envolvidos em chamados.
+                </p>
+                <div className="h-80">
+                  <ResponsiveContainer width="100%" height="100%">
+                    <BarChart data={analytics.employeeData} layout="vertical">
+                      <CartesianGrid strokeDasharray="3 3" horizontal={false} />
+                      <XAxis type="number" allowDecimals={false} />
+                      <YAxis dataKey="name" type="category" width={96} />
+                      <Tooltip />
+                      <Bar dataKey="total" fill="#2563eb" radius={[0, 8, 8, 0]} />
+                      <Bar dataKey="finalizados" fill="#16a34a" radius={[0, 8, 8, 0]} />
+                    </BarChart>
+                  </ResponsiveContainer>
+                </div>
+              </div>
+
+              <div className="rounded-2xl border border-border bg-card p-4 shadow-sm">
+                <p className="text-sm font-semibold">Produção por departamento</p>
+                <p className="mb-4 text-xs text-muted-foreground">
+                  Volume de chamados por equipe e taxa de conclusão.
+                </p>
+                <div className="h-80">
+                  <ResponsiveContainer width="100%" height="100%">
+                    <BarChart data={analytics.departmentData}>
+                      <CartesianGrid strokeDasharray="3 3" vertical={false} />
+                      <XAxis dataKey="name" tickLine={false} />
+                      <YAxis allowDecimals={false} tickLine={false} />
+                      <Tooltip />
+                      <Bar dataKey="chamados" fill="#7c3aed" radius={[8, 8, 0, 0]} />
+                      <Bar dataKey="finalizados" fill="#16a34a" radius={[8, 8, 0, 0]} />
+                    </BarChart>
+                  </ResponsiveContainer>
+                </div>
+              </div>
+            </div>
+
+            <div className="grid gap-4 xl:grid-cols-2">
+              <div className="rounded-2xl border border-border bg-card p-4 shadow-sm">
+                <p className="text-sm font-semibold">Categorias com mais demanda</p>
+                <div className="mt-4 space-y-3">
+                  {analytics.categoryData.slice(0, 6).map((item) => (
+                    <div key={item.name}>
+                      <div className="mb-1 flex items-center justify-between text-sm">
+                        <span>{item.name}</span>
+                        <span className="font-semibold">{item.value}</span>
+                      </div>
+                      <div className="h-2 rounded-full bg-muted">
+                        <div
+                          className="h-2 rounded-full"
+                          style={{
+                            width: `${Math.max(
+                              8,
+                              (item.value / Math.max(1, reports.length)) * 100
+                            )}%`,
+                            backgroundColor: item.color,
+                          }}
+                        />
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              </div>
+
+              <div className="rounded-2xl border border-border bg-card p-4 shadow-sm">
+                <p className="text-sm font-semibold">Prioridade dos chamados</p>
+                <div className="mt-4 grid grid-cols-2 gap-3">
+                  {analytics.priorityData.map((item) => (
+                    <div
+                      key={item.name}
+                      className="rounded-xl border border-border bg-background p-3"
+                    >
+                      <div
+                        className="mb-3 h-2 rounded-full"
+                        style={{ backgroundColor: item.color }}
+                      />
+                      <p className="text-xs text-muted-foreground">{item.name}</p>
+                      <p className="text-2xl font-bold">{item.value}</p>
+                    </div>
+                  ))}
+                </div>
+              </div>
+            </div>
+          </div>
+        ) : adminSection === "reports" ? (
           <>
             <div className="mb-6 grid grid-cols-2 gap-3 lg:grid-cols-4">
               {[
@@ -2121,6 +2710,155 @@ const Dashboard = () => {
                 </div>
             </div>
           </div>
+        ) : adminSection === "departments" ? (
+          <div className="space-y-5">
+            <div className="grid gap-3 md:grid-cols-2 xl:grid-cols-4">
+              {[
+                { label: "Departamentos", value: departmentStats.total },
+                { label: "Ativos", value: departmentStats.active },
+                { label: "Inativos", value: departmentStats.inactive },
+                { label: "Com funcionários", value: departmentStats.withEmployees },
+              ].map((item) => (
+                <div
+                  key={item.label}
+                  className="rounded-2xl border border-border bg-card p-4 shadow-sm"
+                >
+                  <p className="mb-1 text-xs text-muted-foreground">
+                    {item.label}
+                  </p>
+                  <p className="text-2xl font-bold text-primary">
+                    {item.value}
+                  </p>
+                </div>
+              ))}
+            </div>
+
+            <div className="rounded-2xl border border-border bg-card shadow-sm">
+              <div className="flex flex-col gap-3 border-b border-border p-4 lg:flex-row lg:items-center lg:justify-between">
+                <div>
+                  <p className="text-sm font-semibold">Departamentos</p>
+                  <p className="text-xs text-muted-foreground">
+                    Áreas usadas para filtros, cadastro e indicadores.
+                  </p>
+                </div>
+
+                <div className="flex flex-col gap-2 sm:flex-row">
+                  <div className="relative">
+                    <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
+                    <Input
+                      value={departmentSearch}
+                      onChange={(event) => setDepartmentSearch(event.target.value)}
+                      placeholder="Buscar departamento..."
+                      className="pl-9 lg:w-[320px]"
+                    />
+                  </div>
+                  <Button
+                    type="button"
+                    onClick={openNewDepartmentModal}
+                    className="gap-2"
+                  >
+                    <Plus className="h-4 w-4" />
+                    Novo departamento
+                  </Button>
+                </div>
+              </div>
+
+              <div className="grid gap-3 p-4 md:grid-cols-2 xl:grid-cols-3">
+                {filteredDepartments.length === 0 ? (
+                  <p className="text-sm text-muted-foreground">
+                    Nenhum departamento encontrado.
+                  </p>
+                ) : (
+                  filteredDepartments.map((department) => {
+                    const teamCount = employees.filter(
+                      (employee) => employee.department === department.name
+                    ).length;
+                    const reportCount = reports.filter(
+                      (report) =>
+                        report.employee?.department === department.name ||
+                        report.participants?.some(
+                          (participant) =>
+                            participant.employee.department === department.name
+                        )
+                    ).length;
+
+                    return (
+                      <div
+                        key={department.id}
+                        className="rounded-2xl border border-border bg-background p-4 shadow-sm transition hover:-translate-y-0.5 hover:shadow-md"
+                      >
+                        <div className="flex items-start justify-between gap-3">
+                          <div className="flex items-center gap-3">
+                            <span
+                              className="h-10 w-2 rounded-full"
+                              style={{ backgroundColor: department.color || "#2563eb" }}
+                            />
+                            <div>
+                              <p className="font-semibold">{department.name}</p>
+                              <p className="text-xs text-muted-foreground">
+                                {department.active ? "Ativo" : "Inativo"}
+                              </p>
+                            </div>
+                          </div>
+                          <span
+                            className={`rounded-full px-2 py-0.5 text-[11px] font-medium ${department.active
+                                ? "bg-green-50 text-green-700"
+                                : "bg-red-50 text-red-700"
+                              }`}
+                          >
+                            {department.active ? "Ativo" : "Inativo"}
+                          </span>
+                        </div>
+
+                        <p className="mt-3 min-h-10 text-sm text-muted-foreground">
+                          {department.description || "Sem descrição cadastrada."}
+                        </p>
+
+                        <div className="mt-4 flex flex-wrap gap-2 text-xs text-muted-foreground">
+                          <span className="rounded-full bg-muted px-2.5 py-1">
+                            {teamCount} funcionário(s)
+                          </span>
+                          <span className="rounded-full bg-muted px-2.5 py-1">
+                            {reportCount} chamado(s)
+                          </span>
+                        </div>
+
+                        <div className="mt-4 flex flex-wrap gap-2">
+                          <Button
+                            type="button"
+                            variant="outline"
+                            size="sm"
+                            onClick={() => startEditingDepartment(department)}
+                            className="gap-1"
+                          >
+                            <Pencil className="h-3.5 w-3.5" />
+                            Editar
+                          </Button>
+                          <Button
+                            type="button"
+                            variant="outline"
+                            size="sm"
+                            onClick={() => toggleDepartmentStatus(department)}
+                            className={`gap-1 ${department.active
+                                ? "border-red-200 text-red-700 hover:bg-red-50"
+                                : "border-green-200 text-green-700 hover:bg-green-50"
+                              }`}
+                          >
+                            {department.active ? (
+                              <Trash2 className="h-3.5 w-3.5" />
+                            ) : (
+                              <RotateCcw className="h-3.5 w-3.5" />
+                            )}
+                            {department.active ? "Desativar" : "Reativar"}
+                          </Button>
+                        </div>
+                      </div>
+                    );
+                  })
+                )}
+              </div>
+            </div>
+          </div>
         ) : (
           <div className="rounded-2xl border border-border bg-card p-6 shadow-sm">
             <p className="text-lg font-semibold">{sectionTitle}</p>
@@ -2132,6 +2870,147 @@ const Dashboard = () => {
       </main>
 
       <AnimatePresence>
+        {showDepartmentModal && (
+          <motion.div
+            className="fixed inset-0 z-[10000] flex items-end justify-center bg-black/60 p-0 sm:items-center sm:p-4"
+            initial={{ opacity: 0 }}
+            animate={{ opacity: 1 }}
+            exit={{ opacity: 0 }}
+            onClick={() => {
+              setShowDepartmentModal(false);
+              resetDepartmentForm();
+            }}
+          >
+            <motion.div
+              initial={{ opacity: 0, y: 36, scale: 0.98 }}
+              animate={{ opacity: 1, y: 0, scale: 1 }}
+              exit={{ opacity: 0, y: 36, scale: 0.98 }}
+              onClick={(event) => event.stopPropagation()}
+              className="w-full max-w-xl rounded-t-3xl border border-border bg-card shadow-2xl sm:rounded-3xl"
+            >
+              <div className="flex items-center justify-between border-b border-border p-4">
+                <div className="flex items-center gap-3">
+                  <div className="flex h-11 w-11 items-center justify-center rounded-2xl bg-primary/10 text-primary">
+                    <Building2 className="h-5 w-5" />
+                  </div>
+                  <div>
+                    <h2 className="text-lg font-bold">
+                      {editingDepartmentId
+                        ? "Editar departamento"
+                        : "Novo departamento"}
+                    </h2>
+                    <p className="text-xs text-muted-foreground">
+                      Organização operacional e indicadores.
+                    </p>
+                  </div>
+                </div>
+                <button
+                  type="button"
+                  onClick={() => {
+                    setShowDepartmentModal(false);
+                    resetDepartmentForm();
+                  }}
+                  className="flex h-9 w-9 items-center justify-center rounded-full bg-muted text-muted-foreground hover:text-foreground"
+                >
+                  <X className="h-4 w-4" />
+                </button>
+              </div>
+
+              <div className="space-y-4 p-4">
+                <div>
+                  <label className="mb-1 block text-xs font-medium text-muted-foreground">
+                    Nome
+                  </label>
+                  <Input
+                    value={departmentForm.name}
+                    onChange={(event) =>
+                      setDepartmentForm((prev) => ({
+                        ...prev,
+                        name: event.target.value,
+                      }))
+                    }
+                    placeholder="Ex: Administrativo"
+                  />
+                </div>
+
+                <div>
+                  <label className="mb-1 block text-xs font-medium text-muted-foreground">
+                    Descrição
+                  </label>
+                  <Input
+                    value={departmentForm.description}
+                    onChange={(event) =>
+                      setDepartmentForm((prev) => ({
+                        ...prev,
+                        description: event.target.value,
+                      }))
+                    }
+                    placeholder="Responsabilidades principais da área"
+                  />
+                </div>
+
+                <div className="grid gap-3 sm:grid-cols-[1fr_auto]">
+                  <div>
+                    <label className="mb-1 block text-xs font-medium text-muted-foreground">
+                      Cor do indicador
+                    </label>
+                    <Input
+                      type="color"
+                      value={departmentForm.color}
+                      onChange={(event) =>
+                        setDepartmentForm((prev) => ({
+                          ...prev,
+                          color: event.target.value,
+                        }))
+                      }
+                      className="h-11"
+                    />
+                  </div>
+                  <label className="flex items-center gap-2 rounded-xl border border-border px-3 py-2 text-sm">
+                    <input
+                      type="checkbox"
+                      checked={departmentForm.active}
+                      onChange={(event) =>
+                        setDepartmentForm((prev) => ({
+                          ...prev,
+                          active: event.target.checked,
+                        }))
+                      }
+                    />
+                    Ativo
+                  </label>
+                </div>
+
+                <div className="flex justify-end gap-2 pt-2">
+                  <Button
+                    type="button"
+                    variant="outline"
+                    onClick={() => {
+                      setShowDepartmentModal(false);
+                      resetDepartmentForm();
+                    }}
+                  >
+                    Cancelar
+                  </Button>
+                  <Button
+                    type="button"
+                    onClick={saveDepartment}
+                    disabled={savingDepartment}
+                    className="gap-2"
+                  >
+                    {savingDepartment ? (
+                      <Loader2 className="h-4 w-4 animate-spin" />
+                    ) : (
+                      <Save className="h-4 w-4" />
+                    )}
+                    Salvar
+                  </Button>
+                </div>
+              </div>
+            </motion.div>
+          </motion.div>
+        )}
+
         {showReportModal && (
           <motion.div
             className="fixed inset-0 z-[10000] flex items-end justify-center bg-black/60 p-0 sm:items-center sm:p-4"

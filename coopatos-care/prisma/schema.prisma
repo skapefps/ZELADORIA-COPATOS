@@ -83,6 +83,22 @@ model AuditLog {
   @@index([createdAt])
 }
 
+model Department {
+  id          Int      @id @default(autoincrement())
+
+  name        String   @unique
+  description String?
+  color       String?
+  active      Boolean  @default(true)
+
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+  deletedAt   DateTime?
+
+  @@index([name])
+  @@index([active])
+}
+
 model Category {
   id          Int      @id @default(autoincrement())
 

@@ -84,6 +84,9 @@ Ao trocar a logo, coloque o arquivo em `public/` e atualize `logoSrc`/`faviconSr
 - Admin: cadastro de funcionário com CPF e telefone mascarados, limite de caracteres, validações de CPF/e-mail/telefone, e-mail obrigatório e envio assíncrono da validação logo após criar/alterar e-mail.
 - Admin: exportações CSV para planilhas de funcionários, chamados e auditoria.
 - Admin: auditoria inicial de cadastro/edição/desativação de funcionários, envio de validação e criação/edição de chamados.
+- Admin: aba de indicadores iniciada com visão executiva, evolução mensal, distribuição por status, prioridade, categorias, produtividade individual e produtividade por departamento.
+- Admin: CRUD inicial de departamentos com criação/edição em modal, cor de identificação, ativação/desativação, busca, contadores e auditoria.
+- Admin: rotas `/admin/*` protegidas no backend por sessão administrativa e departamento administrativo, não apenas pelo bloqueio visual do frontend.
 
 ## Ambiente
 

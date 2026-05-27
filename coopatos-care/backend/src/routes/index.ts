@@ -1,4 +1,4 @@
-import { Router } from "express";
+import { NextFunction, Request, Response, Router } from "express";
 import type { Prisma } from "@prisma/client";
 import { io } from "../server.js";
 import { prisma } from "../prisma/client.js";
@@ -289,6 +289,59 @@ const sendCsv = (
   res.setHeader("Content-Type", "text/csv; charset=utf-8");
   res.setHeader("Content-Disposition", `attachment; filename="${filename}"`);
   return res.send(`\uFEFF${csv}`);
+};
+
+const requireAdminRequest = async (
+  req: Request,
+  res: Response,
+  next: NextFunction
+) => {
+  try {
+    const adminId = Number(req.headers["x-admin-id"]);
+    const sessionToken = String(req.headers["x-admin-session-token"] || "");
+
+    if (!adminId || !sessionToken) {
+      return res.status(401).json({
+        error: "Sessão administrativa inválida.",
+      });
+    }
+
+    const user = await prisma.user.findFirst({
+      where: {
+        id: adminId,
+        deletedAt: null,
+        role: "ADMIN",
+      },
+      include: {
+        employee: true,
+      },
+    });
+
+    const isAdministrativeDepartment =
+      user?.employee?.department
+        ?.normalize("NFD")
+        .replace(/\p{Diacritic}/gu, "")
+        .toLowerCase()
+        .includes("administrativo") ?? false;
+
+    if (
+      !user ||
+      !user.employee ||
+      user.employee.activeSessionToken !== sessionToken ||
+      !isAdministrativeDepartment
+    ) {
+      return res.status(403).json({
+        error: "Acesso administrativo não autorizado.",
+      });
+    }
+
+    return next();
+  } catch (error) {
+    console.error("Erro ao validar sessão administrativa:", error);
+    return res.status(500).json({
+      error: "Erro ao validar sessão administrativa.",
+    });
+  }
 };
 
 const sendEmployeeVerificationEmail = async (
@@ -642,6 +695,8 @@ router.get("/employees", async (req, res) => {
 
   return res.json(employees);
 });
+
+router.use("/admin", requireAdminRequest);
 
 router.get("/admin/employees", async (_req, res) => {
   try {
@@ -1289,6 +1344,170 @@ router.get("/admin/audit-logs", async (req, res) => {
     console.error("Erro ao carregar auditoria:", error);
     return res.status(500).json({
       error: "Erro ao carregar auditoria.",
+    });
+  }
+});
+
+router.get("/admin/departments", async (_req, res) => {
+  try {
+    const departments = await prisma.department.findMany({
+      orderBy: {
+        name: "asc",
+      },
+    });
+
+    return res.json(departments);
+  } catch (error) {
+    console.error("Erro ao carregar departamentos:", error);
+    return res.status(500).json({
+      error: "Erro ao carregar departamentos.",
+    });
+  }
+});
+
+router.post("/admin/departments", async (req, res) => {
+  try {
+    const name = String(req.body.name || "").trim();
+    const description = req.body.description
+      ? String(req.body.description).trim()
+      : null;
+    const color = req.body.color ? String(req.body.color) : "#2563eb";
+
+    if (!name) {
+      return res.status(400).json({
+        error: "Nome do departamento é obrigatório.",
+      });
+    }
+
+    const department = await prisma.department.create({
+      data: {
+        name,
+        description,
+        color,
+      },
+    });
+
+    await createAuditLog({
+      action: "DEPARTMENT_CREATED",
+      entityType: "DEPARTMENT",
+      entityId: department.id,
+      summary: `Departamento ${department.name} criado.`,
+      metadata: {
+        color: department.color,
+      },
+    });
+
+    return res.status(201).json(department);
+  } catch (error: any) {
+    console.error("Erro ao criar departamento:", error);
+
+    if (error?.code === "P2002") {
+      return res.status(409).json({
+        error: "Já existe um departamento com esse nome.",
+      });
+    }
+
+    return res.status(500).json({
+      error: "Erro ao criar departamento.",
+    });
+  }
+});
+
+router.patch("/admin/departments/:id", async (req, res) => {
+  try {
+    const id = Number(req.params.id);
+    const name = String(req.body.name || "").trim();
+    const description = req.body.description
+      ? String(req.body.description).trim()
+      : null;
+    const color = req.body.color ? String(req.body.color) : "#2563eb";
+    const active =
+      typeof req.body.active === "boolean" ? req.body.active : undefined;
+
+    if (!id || Number.isNaN(id)) {
+      return res.status(400).json({
+        error: "Departamento inválido.",
+      });
+    }
+
+    if (!name) {
+      return res.status(400).json({
+        error: "Nome do departamento é obrigatório.",
+      });
+    }
+
+    const department = await prisma.department.update({
+      where: {
+        id,
+      },
+      data: {
+        name,
+        description,
+        color,
+        active,
+        deletedAt: active === false ? new Date() : active === true ? null : undefined,
+      },
+    });
+
+    await createAuditLog({
+      action: "DEPARTMENT_UPDATED",
+      entityType: "DEPARTMENT",
+      entityId: department.id,
+      summary: `Departamento ${department.name} atualizado.`,
+      metadata: {
+        active: department.active,
+        color: department.color,
+      },
+    });
+
+    return res.json(department);
+  } catch (error: any) {
+    console.error("Erro ao atualizar departamento:", error);
+
+    if (error?.code === "P2002") {
+      return res.status(409).json({
+        error: "Já existe um departamento com esse nome.",
+      });
+    }
+
+    return res.status(500).json({
+      error: "Erro ao atualizar departamento.",
+    });
+  }
+});
+
+router.delete("/admin/departments/:id", async (req, res) => {
+  try {
+    const id = Number(req.params.id);
+
+    if (!id || Number.isNaN(id)) {
+      return res.status(400).json({
+        error: "Departamento inválido.",
+      });
+    }
+
+    const department = await prisma.department.update({
+      where: {
+        id,
+      },
+      data: {
+        active: false,
+        deletedAt: new Date(),
+      },
+    });
+
+    await createAuditLog({
+      action: "DEPARTMENT_DISABLED",
+      entityType: "DEPARTMENT",
+      entityId: department.id,
+      summary: `Departamento ${department.name} desativado.`,
+    });
+
+    return res.json(department);
+  } catch (error) {
+    console.error("Erro ao desativar departamento:", error);
+    return res.status(500).json({
+      error: "Erro ao desativar departamento.",
     });
   }
 });
@@ -2157,6 +2376,17 @@ router.post("/admin-login", async (req, res) => {
     }
 
     const adminSessionToken = crypto.randomUUID();
+
+    if (user.employeeId) {
+      await prisma.employee.update({
+        where: {
+          id: user.employeeId,
+        },
+        data: {
+          activeSessionToken: adminSessionToken,
+        },
+      });
+    }
 
     return res.json({
       message: "Login administrativo realizado com sucesso.",
