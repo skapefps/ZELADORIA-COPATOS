@@ -1,4 +1,5 @@
 import { Router } from "express";
+import type { Prisma } from "@prisma/client";
 import { io } from "../server.js";
 import { prisma } from "../prisma/client.js";
 import crypto from "crypto";
@@ -160,10 +161,8 @@ const mailTransporter = nodemailer.createTransport({
 const rawPublicAppUrl =
   process.env.PUBLIC_APP_URL ||
   process.env.FRONTEND_URL ||
-  "https://zeladoriacoopatos.com.br";
-const publicAppUrl = rawPublicAppUrl
-  .replace("https://www.zeladoriacoopatos.com.br", "https://zeladoriacoopatos.com.br")
-  .replace(/\/$/, "");
+  "https://www.zeladoriacoopatos.com.br";
+const publicAppUrl = rawPublicAppUrl.replace(/\/$/, "");
 const publicApiUrl =
   process.env.PUBLIC_API_URL ||
   process.env.API_URL ||
@@ -191,6 +190,105 @@ const adminEmployeeSelect = {
       participations: true,
     },
   },
+};
+
+const isValidEmail = (email: string) =>
+  /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email);
+
+const isValidCpf = (cpf: string) => {
+  const cleanCpf = cpf.replace(/\D/g, "");
+
+  if (cleanCpf.length !== 11 || /^(\d)\1+$/.test(cleanCpf)) return false;
+
+  const calcDigit = (base: string, factor: number) => {
+    let total = 0;
+
+    for (const digit of base) {
+      total += Number(digit) * factor;
+      factor -= 1;
+    }
+
+    const rest = (total * 10) % 11;
+    return rest === 10 ? 0 : rest;
+  };
+
+  const firstDigit = calcDigit(cleanCpf.slice(0, 9), 10);
+  const secondDigit = calcDigit(cleanCpf.slice(0, 10), 11);
+
+  return (
+    firstDigit === Number(cleanCpf[9]) &&
+    secondDigit === Number(cleanCpf[10])
+  );
+};
+
+const sendEmployeeVerificationEmailInBackground = (employee: {
+  id: number;
+  name: string;
+  email: string | null;
+  emailVerificationToken: string | null;
+}) => {
+  void sendEmployeeVerificationEmail(employee).catch((error) => {
+    console.error("Erro ao enviar e-mail de validação:", error);
+  });
+};
+
+const createAuditLog = async ({
+  actorId,
+  actorName,
+  action,
+  entityType,
+  entityId,
+  summary,
+  metadata,
+}: {
+  actorId?: number | null;
+  actorName?: string | null;
+  action: string;
+  entityType: string;
+  entityId?: number | null;
+  summary: string;
+  metadata?: Prisma.InputJsonValue;
+}) => {
+  try {
+    await prisma.auditLog.create({
+      data: {
+        actorId: actorId || null,
+        actorName: actorName || null,
+        action,
+        entityType,
+        entityId: entityId || null,
+        summary,
+        metadata: metadata || undefined,
+      },
+    });
+  } catch (error) {
+    console.error("Erro ao registrar auditoria:", error);
+  }
+};
+
+const escapeCsvValue = (value: unknown) => {
+  if (value === null || value === undefined) return "";
+
+  const text =
+    typeof value === "object" ? JSON.stringify(value) : String(value);
+
+  return `"${text.replace(/"/g, '""')}"`;
+};
+
+const sendCsv = (
+  res: any,
+  filename: string,
+  headers: string[],
+  rows: unknown[][]
+) => {
+  const csv = [
+    headers.map(escapeCsvValue).join(","),
+    ...rows.map((row) => row.map(escapeCsvValue).join(",")),
+  ].join("\n");
+
+  res.setHeader("Content-Type", "text/csv; charset=utf-8");
+  res.setHeader("Content-Disposition", `attachment; filename="${filename}"`);
+  return res.send(`\uFEFF${csv}`);
 };
 
 const sendEmployeeVerificationEmail = async (
@@ -576,21 +674,50 @@ router.post("/admin/employees", async (req, res) => {
       birthDate,
     } = req.body;
 
-    if (!registrationNumber || !name || !cpf) {
+    if (!registrationNumber || !name || !cpf || !email) {
       return res.status(400).json({
-        error: "Matrícula, nome e CPF são obrigatórios.",
+        error: "Matrícula, nome, CPF e e-mail são obrigatórios.",
       });
     }
 
-    const verificationToken = email ? crypto.randomUUID() : null;
+    const normalizedEmail = String(email).trim().toLowerCase();
+    const cleanRegistrationNumber = String(registrationNumber).replace(/\D/g, "");
+    const cleanCpf = String(cpf).replace(/\D/g, "");
+    const cleanPhone = phone ? String(phone).replace(/\D/g, "") : null;
+
+    if (!cleanRegistrationNumber) {
+      return res.status(400).json({
+        error: "Matrícula deve conter apenas números.",
+      });
+    }
+
+    if (!isValidEmail(normalizedEmail)) {
+      return res.status(400).json({
+        error: "E-mail inválido.",
+      });
+    }
+
+    if (!isValidCpf(cleanCpf)) {
+      return res.status(400).json({
+        error: "CPF inválido.",
+      });
+    }
+
+    if (cleanPhone && !/^\d{10,11}$/.test(cleanPhone)) {
+      return res.status(400).json({
+        error: "Telefone inválido. Informe DDD e número.",
+      });
+    }
+
+    const verificationToken = crypto.randomUUID();
 
     const employee = await prisma.employee.create({
       data: {
-        registrationNumber: String(registrationNumber).trim(),
+        registrationNumber: cleanRegistrationNumber,
         name: String(name).trim(),
-        email: email ? String(email).trim().toLowerCase() : null,
-        cpf: String(cpf).replace(/\D/g, ""),
-        phone: phone ? String(phone).trim() : null,
+        email: normalizedEmail,
+        cpf: cleanCpf,
+        phone: cleanPhone,
         department: department ? String(department).trim() : null,
         avatarUrl: avatarUrl ? String(avatarUrl) : null,
         birthDate: birthDate ? new Date(String(birthDate)) : null,
@@ -603,7 +730,17 @@ router.post("/admin/employees", async (req, res) => {
       },
     });
 
-    await sendEmployeeVerificationEmail(employee);
+    sendEmployeeVerificationEmailInBackground(employee);
+    await createAuditLog({
+      action: "EMPLOYEE_CREATED",
+      entityType: "EMPLOYEE",
+      entityId: employee.id,
+      summary: `Funcionário ${employee.name} cadastrado.`,
+      metadata: {
+        email: employee.email,
+        department: employee.department,
+      },
+    });
 
     const { emailVerificationToken: _token, ...safeEmployee } = employee;
 
@@ -633,9 +770,9 @@ router.patch("/admin/employees/:id", async (req, res) => {
       birthDate,
     } = req.body;
 
-    if (!registrationNumber || !name || !cpf) {
+    if (!registrationNumber || !name || !cpf || !email) {
       return res.status(400).json({
-        error: "Matrícula, nome e CPF são obrigatórios.",
+        error: "Matrícula, nome, CPF e e-mail são obrigatórios.",
       });
     }
 
@@ -649,7 +786,35 @@ router.patch("/admin/employees/:id", async (req, res) => {
       },
     });
 
-    const normalizedEmail = email ? String(email).trim().toLowerCase() : null;
+    const normalizedEmail = String(email).trim().toLowerCase();
+    const cleanRegistrationNumber = String(registrationNumber).replace(/\D/g, "");
+    const cleanCpf = String(cpf).replace(/\D/g, "");
+    const cleanPhone = phone ? String(phone).replace(/\D/g, "") : null;
+
+    if (!cleanRegistrationNumber) {
+      return res.status(400).json({
+        error: "Matrícula deve conter apenas números.",
+      });
+    }
+
+    if (!isValidEmail(normalizedEmail)) {
+      return res.status(400).json({
+        error: "E-mail inválido.",
+      });
+    }
+
+    if (!isValidCpf(cleanCpf)) {
+      return res.status(400).json({
+        error: "CPF inválido.",
+      });
+    }
+
+    if (cleanPhone && !/^\d{10,11}$/.test(cleanPhone)) {
+      return res.status(400).json({
+        error: "Telefone inválido. Informe DDD e número.",
+      });
+    }
+
     const shouldVerifyEmail =
       normalizedEmail && normalizedEmail !== currentEmployee?.email;
     const verificationToken = shouldVerifyEmail ? crypto.randomUUID() : undefined;
@@ -659,11 +824,11 @@ router.patch("/admin/employees/:id", async (req, res) => {
         id,
       },
       data: {
-        registrationNumber: String(registrationNumber).trim(),
+        registrationNumber: cleanRegistrationNumber,
         name: String(name).trim(),
         email: normalizedEmail,
-        cpf: String(cpf).replace(/\D/g, ""),
-        phone: phone ? String(phone).trim() : null,
+        cpf: cleanCpf,
+        phone: cleanPhone,
         department: department ? String(department).trim() : null,
         avatarUrl: avatarUrl ? String(avatarUrl) : null,
         birthDate: birthDate ? new Date(String(birthDate)) : null,
@@ -678,8 +843,19 @@ router.patch("/admin/employees/:id", async (req, res) => {
     });
 
     if (shouldVerifyEmail) {
-      await sendEmployeeVerificationEmail(employee);
+      sendEmployeeVerificationEmailInBackground(employee);
     }
+
+    await createAuditLog({
+      action: "EMPLOYEE_UPDATED",
+      entityType: "EMPLOYEE",
+      entityId: employee.id,
+      summary: `Funcionário ${employee.name} atualizado.`,
+      metadata: {
+        emailChanged: Boolean(shouldVerifyEmail),
+        department: employee.department,
+      },
+    });
 
     const { emailVerificationToken: _token, ...safeEmployee } = employee;
 
@@ -716,6 +892,13 @@ router.patch("/admin/employees/:id/status", async (req, res) => {
         reason: "Seu cadastro foi desativado pelo administrador.",
       });
     }
+
+    await createAuditLog({
+      action: active ? "EMPLOYEE_RESTORED" : "EMPLOYEE_DISABLED",
+      entityType: "EMPLOYEE",
+      entityId: employee.id,
+      summary: `Funcionário ${employee.name} ${active ? "restaurado" : "desativado"}.`,
+    });
 
     return res.json(employee);
   } catch (error) {
@@ -783,7 +966,16 @@ router.post("/admin/employees/:id/send-verification", async (req, res) => {
       },
     });
 
-    await sendEmployeeVerificationEmail(employee);
+    sendEmployeeVerificationEmailInBackground(employee);
+    await createAuditLog({
+      action: "EMPLOYEE_VERIFICATION_SENT",
+      entityType: "EMPLOYEE",
+      entityId: employee.id,
+      summary: `E-mail de validação enviado para ${employee.name}.`,
+      metadata: {
+        email: employee.email,
+      },
+    });
 
     const { emailVerificationToken: _token, ...safeEmployee } = employee;
 
@@ -1078,6 +1270,156 @@ router.get("/statuses", async (req, res) => {
   return res.json(statuses);
 });
 
+router.get("/admin/audit-logs", async (req, res) => {
+  try {
+    const { entityType, limit } = req.query;
+
+    const logs = await prisma.auditLog.findMany({
+      where: {
+        entityType: entityType ? String(entityType) : undefined,
+      },
+      orderBy: {
+        createdAt: "desc",
+      },
+      take: Math.min(Number(limit || 100), 500),
+    });
+
+    return res.json(logs);
+  } catch (error) {
+    console.error("Erro ao carregar auditoria:", error);
+    return res.status(500).json({
+      error: "Erro ao carregar auditoria.",
+    });
+  }
+});
+
+router.get("/admin/exports/:type", async (req, res) => {
+  try {
+    const type = req.params.type;
+
+    if (type === "employees") {
+      const employees = await prisma.employee.findMany({
+        orderBy: {
+          name: "asc",
+        },
+        select: adminEmployeeSelect,
+      });
+
+      return sendCsv(
+        res,
+        "funcionarios.csv",
+        [
+          "ID",
+          "Matrícula",
+          "Nome",
+          "E-mail",
+          "CPF",
+          "Telefone",
+          "Departamento",
+          "Validado em",
+          "Criado em",
+          "Status",
+        ],
+        employees.map((employee) => [
+          employee.id,
+          employee.registrationNumber,
+          employee.name,
+          employee.email,
+          employee.cpf,
+          employee.phone,
+          employee.department,
+          employee.emailVerifiedAt?.toISOString(),
+          employee.createdAt.toISOString(),
+          employee.deletedAt ? "Inativo" : "Ativo",
+        ])
+      );
+    }
+
+    if (type === "reports") {
+      const reports = await prisma.report.findMany({
+        include: reportInclude,
+        orderBy: {
+          createdAt: "desc",
+        },
+      });
+
+      return sendCsv(
+        res,
+        "chamados.csv",
+        [
+          "ID",
+          "Título",
+          "Categoria",
+          "Status",
+          "Prioridade",
+          "Responsável",
+          "Participantes",
+          "Endereço",
+          "Criado em",
+          "Atualizado em",
+        ],
+        reports.map((report) => [
+          report.id,
+          report.title,
+          report.category.name,
+          report.status.name,
+          report.priority,
+          report.employee.name,
+          report.participants
+            .map((participant) => participant.employee.name)
+            .join("; "),
+          report.address || report.referencePoint,
+          report.createdAt.toISOString(),
+          report.updatedAt.toISOString(),
+        ])
+      );
+    }
+
+    if (type === "audit") {
+      const logs = await prisma.auditLog.findMany({
+        orderBy: {
+          createdAt: "desc",
+        },
+        take: 2000,
+      });
+
+      return sendCsv(
+        res,
+        "auditoria.csv",
+        [
+          "ID",
+          "Ação",
+          "Entidade",
+          "ID Entidade",
+          "Resumo",
+          "Ator",
+          "Criado em",
+          "Metadados",
+        ],
+        logs.map((log) => [
+          log.id,
+          log.action,
+          log.entityType,
+          log.entityId,
+          log.summary,
+          log.actorName || log.actorId,
+          log.createdAt.toISOString(),
+          log.metadata,
+        ])
+      );
+    }
+
+    return res.status(400).json({
+      error: "Tipo de exportação inválido.",
+    });
+  } catch (error) {
+    console.error("Erro ao exportar planilha:", error);
+    return res.status(500).json({
+      error: "Erro ao exportar planilha.",
+    });
+  }
+});
+
 router.get("/reports", async (req, res) => {
   const reports = await prisma.report.findMany({
     include: reportInclude,
@@ -1280,6 +1622,19 @@ router.post("/reports", async (req, res) => {
   io.emit("report-created");
   io.emit("reports-updated");
 
+  await createAuditLog({
+    action: "REPORT_CREATED",
+    entityType: "REPORT",
+    entityId: report.id,
+    summary: `Chamado #${report.id} criado.`,
+    metadata: {
+      title: report.title,
+      category: report.category.name,
+      status: report.status.name,
+      priority: report.priority,
+    },
+  });
+
   return res.status(201).json(report);
 });
 
@@ -1373,6 +1728,20 @@ router.post("/admin/reports", async (req, res) => {
     io.emit("report-created");
     io.emit("reports-updated");
 
+    await createAuditLog({
+      action: "REPORT_CREATED_BY_ADMIN",
+      entityType: "REPORT",
+      entityId: report.id,
+      summary: `Chamado #${report.id} criado pelo admin.`,
+      metadata: {
+        title: report.title,
+        category: report.category.name,
+        status: report.status.name,
+        priority: report.priority,
+        participantIds: uniqueParticipantIds,
+      },
+    });
+
     return res.status(201).json(report);
   } catch (error) {
     console.error(error);
@@ -1415,6 +1784,20 @@ router.patch("/reports/:id", async (req, res) => {
 
   io.emit("report-updated");
   io.emit("reports-updated");
+
+  await createAuditLog({
+    action: "REPORT_UPDATED",
+    entityType: "REPORT",
+    entityId: report.id,
+    summary: `Chamado #${report.id} atualizado.`,
+    metadata: {
+      title: report.title,
+      category: report.category.name,
+      status: report.status.name,
+      priority: report.priority,
+    },
+  });
+
   return res.json(report);
 });
 
@@ -1500,6 +1883,22 @@ router.patch("/admin/reports/:id", async (req, res) => {
 
     io.emit("report-updated");
     io.emit("reports-updated");
+
+    if (report) {
+      await createAuditLog({
+        action: "REPORT_UPDATED_BY_ADMIN",
+        entityType: "REPORT",
+        entityId: report.id,
+        summary: `Chamado #${report.id} atualizado pelo admin.`,
+        metadata: {
+          title: report.title,
+          category: report.category.name,
+          status: report.status.name,
+          priority: report.priority,
+          participantIds,
+        },
+      });
+    }
 
     return res.json(report);
   } catch (error) {

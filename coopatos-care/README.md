@@ -70,7 +70,7 @@ Ao trocar a logo, coloque o arquivo em `public/` e atualize `logoSrc`/`faviconSr
 - Recuperação de matrícula por e-mail e CPF.
 - Preset whitelabel para trocar nome, logo, favicon e cores principais.
 - Admin: CRUD de funcionários iniciado com listagem, busca, criação/edição em modal, foto de perfil, data de nascimento, departamento por preset, desativação/restauração e validação de e-mail.
-- Admin: registro visual de quando o e-mail de validação foi enviado, cooldown de reenvio e validação por link direto da API para evitar 404 no domínio frontend durante deploy.
+- Admin: registro visual de quando o e-mail de validação foi enviado, cooldown de reenvio e validação por rota do frontend (`/validar-email/:token`) chamando a API.
 - Admin: criação, edição, exclusão e atribuição múltipla de funcionários em chamados pelo modal administrativo.
 - Admin: chamados com GPS, busca por endereço, preenchimento por CEP, upload de fotos/vídeos, expansão, download, remoção de mídia e preview responsivo.
 - Admin: filtro de período personalizado por data inicial/final, além dos atalhos de 7, 30, 90, 180 e 365 dias.
@@ -78,9 +78,12 @@ Ao trocar a logo, coloque o arquivo em `public/` e atualize `logoSrc`/`faviconSr
 - Chamados: prioridade persistida no banco (`BAIXA`, `MEDIA`, `ALTA`, `CRITICA`) e exibida visualmente na lista/admin.
 - Validação de e-mail: link volta para o site, a página valida no backend, o token é invalidado após uso e e-mails já validados não podem receber novo link de validação.
 - Validação de e-mail: usuários existentes com e-mail foram marcados como validados via migration; novos cadastros e trocas futuras de e-mail continuam exigindo validação.
-- Vercel: `vercel.json` inclui redirect de `www.zeladoriacoopatos.com.br` para `zeladoriacoopatos.com.br`.
+- Vercel: `vercel.json` mantém apenas o rewrite de SPA; o domínio em produção responde em `www.zeladoriacoopatos.com.br`, e o domínio raiz pode ser definido como primário nas configurações do Vercel se a Coopatos quiser remover o `www`.
 - Admin: filtros de chamados por categoria, status, funcionário atribuído, período e busca textual.
 - Admin: mapa de chamados reconectado para pins e mapa de calor com base nos chamados filtrados, com z-index ajustado para não cobrir modais.
+- Admin: cadastro de funcionário com CPF e telefone mascarados, limite de caracteres, validações de CPF/e-mail/telefone, e-mail obrigatório e envio assíncrono da validação logo após criar/alterar e-mail.
+- Admin: exportações CSV para planilhas de funcionários, chamados e auditoria.
+- Admin: auditoria inicial de cadastro/edição/desativação de funcionários, envio de validação e criação/edição de chamados.
 
 ## Ambiente
 
@@ -115,7 +118,7 @@ MAIL_USER=
 MAIL_PASS=
 MAIL_FROM=
 ADMIN_SUPPORT_EMAIL=
-PUBLIC_APP_URL=https://zeladoriacoopatos.com.br
+PUBLIC_APP_URL=https://www.zeladoriacoopatos.com.br
 PUBLIC_API_URL=https://zeladoria-coopatos-api.onrender.com
 ```
 

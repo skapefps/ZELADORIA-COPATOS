@@ -64,6 +64,25 @@ model User {
   @@index([email])
 }
 
+model AuditLog {
+  id          Int      @id @default(autoincrement())
+
+  actorId     Int?
+  actorName   String?
+  action      String
+  entityType  String
+  entityId    Int?
+  summary     String
+  metadata    Json?
+
+  createdAt   DateTime @default(now())
+
+  @@index([actorId])
+  @@index([entityType])
+  @@index([entityId])
+  @@index([createdAt])
+}
+
 model Category {
   id          Int      @id @default(autoincrement())
 

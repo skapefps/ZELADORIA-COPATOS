@@ -9,6 +9,8 @@ import {
   CheckCircle,
   Download,
   Expand,
+  FileSpreadsheet,
+  History,
   Image as ImageIcon,
   Loader2,
   LogOut,
@@ -131,6 +133,8 @@ type EmployeeForm = {
   department: string;
 };
 
+type EmployeeFormErrors = Partial<Record<keyof EmployeeForm, string>>;
+
 type ReportForm = {
   employeeId: string;
   categoryId: string;
@@ -169,6 +173,55 @@ const emptyReportForm: ReportForm = {
 };
 
 const MAX_FILE_SIZE = 100 * 1024 * 1024;
+
+const formatCpf = (value: string) => {
+  const cleanValue = value.replace(/\D/g, "").slice(0, 11);
+
+  return cleanValue
+    .replace(/(\d{3})(\d)/, "$1.$2")
+    .replace(/(\d{3})(\d)/, "$1.$2")
+    .replace(/(\d{3})(\d{1,2})$/, "$1-$2");
+};
+
+const formatPhone = (value: string) => {
+  const cleanValue = value.replace(/\D/g, "").slice(0, 11);
+
+  if (cleanValue.length <= 10) {
+    return cleanValue
+      .replace(/(\d{2})(\d)/, "($1) $2")
+      .replace(/(\d{4})(\d)/, "$1-$2");
+  }
+
+  return cleanValue
+    .replace(/(\d{2})(\d)/, "($1) $2")
+    .replace(/(\d{5})(\d)/, "$1-$2");
+};
+
+const isValidEmail = (email: string) =>
+  /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email);
+
+const isValidCpf = (cpf: string) => {
+  const cleanCpf = cpf.replace(/\D/g, "");
+
+  if (cleanCpf.length !== 11 || /^(\d)\1+$/.test(cleanCpf)) return false;
+
+  const calcDigit = (base: string, factor: number) => {
+    let total = 0;
+
+    for (const digit of base) {
+      total += Number(digit) * factor;
+      factor -= 1;
+    }
+
+    const rest = (total * 10) % 11;
+    return rest === 10 ? 0 : rest;
+  };
+
+  return (
+    calcDigit(cleanCpf.slice(0, 9), 10) === Number(cleanCpf[9]) &&
+    calcDigit(cleanCpf.slice(0, 10), 11) === Number(cleanCpf[10])
+  );
+};
 
 const asArray = <T,>(value: unknown): T[] =>
   Array.isArray(value) ? value : [];
@@ -250,6 +303,8 @@ const Dashboard = () => {
   const [employeeSearch, setEmployeeSearch] = useState("");
   const [employeeForm, setEmployeeForm] =
     useState<EmployeeForm>(emptyEmployeeForm);
+  const [employeeFormErrors, setEmployeeFormErrors] =
+    useState<EmployeeFormErrors>({});
   const [showEmployeeModal, setShowEmployeeModal] = useState(false);
   const [verificationNow, setVerificationNow] = useState(Date.now());
   const [editingEmployeeId, setEditingEmployeeId] = useState<number | null>(null);
@@ -305,6 +360,7 @@ const Dashboard = () => {
         title: `✓ Bem-vindo, ${admin.employee?.name || admin.email}!`,
         description: "Acesso administrativo realizado com sucesso.",
         className: "bg-secondary text-secondary-foreground border-secondary",
+        duration: 1200,
       });
 
       localStorage.setItem("adminWelcomeShown", "true");
@@ -599,8 +655,8 @@ const Dashboard = () => {
       registrationNumber: employee.registrationNumber,
       name: employee.name,
       email: employee.email || "",
-      cpf: employee.cpf,
-      phone: employee.phone || "",
+      cpf: formatCpf(employee.cpf),
+      phone: employee.phone ? formatPhone(employee.phone) : "",
       avatarUrl: employee.avatarUrl || "",
       birthDate: employee.birthDate ? employee.birthDate.slice(0, 10) : "",
       department: employee.department || "",
@@ -616,9 +672,50 @@ const Dashboard = () => {
   const resetEmployeeForm = () => {
     setEditingEmployeeId(null);
     setEmployeeForm(emptyEmployeeForm);
+    setEmployeeFormErrors({});
+  };
+
+  const validateEmployeeForm = () => {
+    const errors: EmployeeFormErrors = {};
+
+    if (!employeeForm.name.trim()) {
+      errors.name = "Informe o nome completo.";
+    }
+
+    if (!employeeForm.registrationNumber.trim()) {
+      errors.registrationNumber = "Informe a matrícula.";
+    }
+
+    if (!employeeForm.email.trim()) {
+      errors.email = "E-mail é obrigatório.";
+    } else if (!isValidEmail(employeeForm.email.trim())) {
+      errors.email = "Informe um e-mail válido.";
+    }
+
+    if (!isValidCpf(employeeForm.cpf)) {
+      errors.cpf = "Informe um CPF válido.";
+    }
+
+    const phoneDigits = employeeForm.phone.replace(/\D/g, "");
+    if (phoneDigits && phoneDigits.length < 10) {
+      errors.phone = "Informe um telefone com DDD.";
+    }
+
+    setEmployeeFormErrors(errors);
+
+    return Object.keys(errors).length === 0;
   };
 
   const saveEmployee = async () => {
+    if (!validateEmployeeForm()) {
+      toast({
+        title: "Revise os dados do funcionário",
+        description: "Existem campos obrigatórios ou inválidos.",
+        variant: "destructive",
+      });
+      return;
+    }
+
     setSavingEmployee(true);
 
     try {
@@ -631,7 +728,12 @@ const Dashboard = () => {
           headers: {
             "Content-Type": "application/json",
           },
-          body: JSON.stringify(employeeForm),
+          body: JSON.stringify({
+            ...employeeForm,
+            cpf: employeeForm.cpf.replace(/\D/g, ""),
+            phone: employeeForm.phone.replace(/\D/g, ""),
+            email: employeeForm.email.trim().toLowerCase(),
+          }),
         }
       );
 
@@ -820,6 +922,10 @@ const Dashboard = () => {
         variant: "destructive",
       });
     }
+  };
+
+  const exportAdminCsv = (type: "employees" | "reports" | "audit") => {
+    window.open(`${API_URL}/admin/exports/${type}`, "_blank", "noopener,noreferrer");
   };
 
   const formatVerificationSentAt = (value?: string | null) => {
@@ -1580,6 +1686,26 @@ const Dashboard = () => {
                   <Plus className="h-4 w-4" />
                   Novo
                 </Button>
+                <Button
+                  type="button"
+                  variant="outline"
+                  size="sm"
+                  onClick={() => exportAdminCsv("reports")}
+                  className="gap-1"
+                >
+                  <FileSpreadsheet className="h-4 w-4" />
+                  Planilha
+                </Button>
+                <Button
+                  type="button"
+                  variant="outline"
+                  size="sm"
+                  onClick={() => exportAdminCsv("audit")}
+                  className="gap-1"
+                >
+                  <History className="h-4 w-4" />
+                  Auditoria
+                </Button>
               </div>
 
               <div className="flex flex-1 flex-wrap gap-2">
@@ -1833,6 +1959,15 @@ const Dashboard = () => {
                         className="pl-9 lg:w-[320px]"
                       />
                     </div>
+                    <Button
+                      type="button"
+                      variant="outline"
+                      onClick={() => exportAdminCsv("employees")}
+                      className="gap-2"
+                    >
+                      <FileSpreadsheet className="h-4 w-4" />
+                      Exportar
+                    </Button>
                     <Button
                       type="button"
                       onClick={openNewEmployeeModal}
@@ -2467,7 +2602,13 @@ const Dashboard = () => {
                             name: event.target.value,
                           }))
                         }
+                        aria-invalid={Boolean(employeeFormErrors.name)}
                       />
+                      {employeeFormErrors.name && (
+                        <p className="mt-1 text-xs text-red-600">
+                          {employeeFormErrors.name}
+                        </p>
+                      )}
                     </div>
 
                     <div>
@@ -2479,10 +2620,21 @@ const Dashboard = () => {
                         onChange={(event) =>
                           setEmployeeForm((prev) => ({
                             ...prev,
-                            registrationNumber: event.target.value,
+                            registrationNumber: event.target.value
+                              .replace(/\D/g, "")
+                              .slice(0, 12),
                           }))
                         }
+                        inputMode="numeric"
+                        aria-invalid={Boolean(
+                          employeeFormErrors.registrationNumber
+                        )}
                       />
+                      {employeeFormErrors.registrationNumber && (
+                        <p className="mt-1 text-xs text-red-600">
+                          {employeeFormErrors.registrationNumber}
+                        </p>
+                      )}
                     </div>
 
                     <div>
@@ -2494,10 +2646,18 @@ const Dashboard = () => {
                         onChange={(event) =>
                           setEmployeeForm((prev) => ({
                             ...prev,
-                            cpf: event.target.value,
+                            cpf: formatCpf(event.target.value),
                           }))
                         }
+                        inputMode="numeric"
+                        maxLength={14}
+                        placeholder="000.000.000-00"
+                        aria-invalid={Boolean(employeeFormErrors.cpf)}
                       />
+                      <div className="mt-1 flex justify-between text-[11px] text-muted-foreground">
+                        <span>{employeeFormErrors.cpf || "Somente 11 dígitos."}</span>
+                        <span>{employeeForm.cpf.replace(/\D/g, "").length}/11</span>
+                      </div>
                     </div>
 
                     <div>
@@ -2512,7 +2672,15 @@ const Dashboard = () => {
                             email: event.target.value,
                           }))
                         }
+                        type="email"
+                        placeholder="nome@empresa.com"
+                        aria-invalid={Boolean(employeeFormErrors.email)}
                       />
+                      {employeeFormErrors.email && (
+                        <p className="mt-1 text-xs text-red-600">
+                          {employeeFormErrors.email}
+                        </p>
+                      )}
                     </div>
 
                     <div>
@@ -2524,10 +2692,19 @@ const Dashboard = () => {
                         onChange={(event) =>
                           setEmployeeForm((prev) => ({
                             ...prev,
-                            phone: event.target.value,
+                            phone: formatPhone(event.target.value),
                           }))
                         }
+                        inputMode="tel"
+                        maxLength={15}
+                        placeholder="(00) 00000-0000"
+                        aria-invalid={Boolean(employeeFormErrors.phone)}
                       />
+                      {employeeFormErrors.phone && (
+                        <p className="mt-1 text-xs text-red-600">
+                          {employeeFormErrors.phone}
+                        </p>
+                      )}
                     </div>
 
                     <div>
