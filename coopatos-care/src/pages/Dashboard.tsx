@@ -150,6 +150,29 @@ type AdminDepartment = {
   updatedAt: string;
 };
 
+type AdminUser = {
+  id: number;
+  email: string;
+  role: "ADMIN" | "EMPLOYEE";
+  employeeId?: number | null;
+  createdAt: string;
+  updatedAt: string;
+  deletedAt?: string | null;
+  employee?: AdminEmployee | null;
+};
+
+type AuditLog = {
+  id: number;
+  action: string;
+  entityType: string;
+  entityId?: number | null;
+  summary: string;
+  actorName?: string | null;
+  actorId?: number | null;
+  metadata?: unknown;
+  createdAt: string;
+};
+
 type DepartmentForm = {
   name: string;
   description: string;
@@ -359,6 +382,7 @@ const Dashboard = () => {
   const [showEmployeeModal, setShowEmployeeModal] = useState(false);
   const [departments, setDepartments] = useState<AdminDepartment[]>([]);
   const [departmentSearch, setDepartmentSearch] = useState("");
+  const [departmentStatusFilter, setDepartmentStatusFilter] = useState("active");
   const [departmentForm, setDepartmentForm] =
     useState<DepartmentForm>(emptyDepartmentForm);
   const [showDepartmentModal, setShowDepartmentModal] = useState(false);
@@ -366,6 +390,14 @@ const Dashboard = () => {
     null
   );
   const [savingDepartment, setSavingDepartment] = useState(false);
+  const [users, setUsers] = useState<AdminUser[]>([]);
+  const [userSearch, setUserSearch] = useState("");
+  const [userStatusFilter, setUserStatusFilter] = useState("active");
+  const [userRoleFilter, setUserRoleFilter] = useState("all");
+  const [userDepartmentFilter, setUserDepartmentFilter] = useState("all");
+  const [auditLogs, setAuditLogs] = useState<AuditLog[]>([]);
+  const [showAuditModal, setShowAuditModal] = useState(false);
+  const [loadingAuditLogs, setLoadingAuditLogs] = useState(false);
   const [verificationNow, setVerificationNow] = useState(Date.now());
   const [editingEmployeeId, setEditingEmployeeId] = useState<number | null>(null);
   const [savingEmployee, setSavingEmployee] = useState(false);
@@ -443,6 +475,7 @@ const Dashboard = () => {
           statusesResponse,
           employeesResponse,
           departmentsResponse,
+          usersResponse,
         ] =
           await Promise.all([
             fetch(`${API_URL}/reports`),
@@ -454,6 +487,9 @@ const Dashboard = () => {
             fetch(`${API_URL}/admin/departments`, {
               headers: adminHeaders(),
             }),
+            fetch(`${API_URL}/admin/users`, {
+              headers: adminHeaders(),
+            }),
           ]);
 
         const [
@@ -462,12 +498,14 @@ const Dashboard = () => {
           statusesData,
           employeesData,
           departmentsData,
+          usersData,
         ] = await Promise.all([
           reportsResponse.json(),
           categoriesResponse.json(),
           statusesResponse.json(),
           employeesResponse.json(),
           departmentsResponse.json(),
+          usersResponse.json(),
         ]);
 
         setReports(asArray<AdminReport>(reportsData));
@@ -475,6 +513,7 @@ const Dashboard = () => {
         setStatuses(asArray<{ id: number; name: string }>(statusesData));
         setEmployees(asArray<AdminEmployee>(employeesData));
         setDepartments(asArray<AdminDepartment>(departmentsData));
+        setUsers(asArray<AdminUser>(usersData));
 
         if (!employeesResponse.ok || !Array.isArray(employeesData)) {
           toast({
@@ -492,6 +531,16 @@ const Dashboard = () => {
             description:
               departmentsData?.error ||
               "Publique a API atualizada no Render para carregar departamentos.",
+            variant: "destructive",
+          });
+        }
+
+        if (!usersResponse.ok || !Array.isArray(usersData)) {
+          toast({
+            title: "Usuários não carregaram",
+            description:
+              usersData?.error ||
+              "Publique a API atualizada no Render para carregar usuários.",
             variant: "destructive",
           });
         }
@@ -669,6 +718,12 @@ const Dashboard = () => {
     const search = departmentSearch.toLowerCase().trim();
 
     return departments.filter((department) => {
+      const matchesStatus =
+        departmentStatusFilter === "all" ||
+        (departmentStatusFilter === "active" && department.active) ||
+        (departmentStatusFilter === "inactive" && !department.active);
+
+      if (!matchesStatus) return false;
       if (!search) return true;
 
       return (
@@ -676,7 +731,29 @@ const Dashboard = () => {
         department.description?.toLowerCase().includes(search)
       );
     });
-  }, [departments, departmentSearch]);
+  }, [departments, departmentSearch, departmentStatusFilter]);
+
+  const filteredUsers = useMemo(() => {
+    const search = userSearch.toLowerCase().trim();
+
+    return users.filter((user) => {
+      const matchesStatus =
+        userStatusFilter === "all" ||
+        (userStatusFilter === "active" && !user.deletedAt) ||
+        (userStatusFilter === "inactive" && user.deletedAt);
+      const matchesRole = userRoleFilter === "all" || user.role === userRoleFilter;
+      const matchesDepartment =
+        userDepartmentFilter === "all" ||
+        user.employee?.department === userDepartmentFilter;
+      const matchesSearch =
+        !search ||
+        user.email.toLowerCase().includes(search) ||
+        user.employee?.name.toLowerCase().includes(search) ||
+        user.employee?.registrationNumber.toLowerCase().includes(search);
+
+      return matchesStatus && matchesRole && matchesDepartment && matchesSearch;
+    });
+  }, [users, userSearch, userStatusFilter, userRoleFilter, userDepartmentFilter]);
 
   const departmentStats = useMemo(
     () => ({
@@ -1271,6 +1348,118 @@ const Dashboard = () => {
         title: "Erro ao conectar com o servidor",
         variant: "destructive",
       });
+    }
+  };
+
+  const changeEmployeeDepartment = async (
+    employeeId: number,
+    department: string
+  ) => {
+    try {
+      const response = await fetch(
+        `${API_URL}/admin/employees/${employeeId}/department`,
+        {
+          method: "PATCH",
+          headers: adminHeaders({
+            "Content-Type": "application/json",
+          }),
+          body: JSON.stringify({ department }),
+        }
+      );
+      const data = await response.json();
+
+      if (!response.ok) {
+        toast({
+          title: "Erro ao mudar departamento",
+          description: data.error || "Tente novamente.",
+          variant: "destructive",
+        });
+        return;
+      }
+
+      setEmployees((prev) =>
+        prev.map((employee) => (employee.id === data.id ? data : employee))
+      );
+      setUsers((prev) =>
+        prev.map((user) =>
+          user.employee?.id === data.id
+            ? { ...user, employee: { ...user.employee, department: data.department } }
+            : user
+        )
+      );
+      toast({
+        title: "Departamento atualizado",
+      });
+    } catch (error) {
+      console.error(error);
+      toast({
+        title: "Erro ao conectar com o servidor",
+        variant: "destructive",
+      });
+    }
+  };
+
+  const toggleUserStatus = async (user: AdminUser) => {
+    try {
+      const response = await fetch(`${API_URL}/admin/users/${user.id}/status`, {
+        method: "PATCH",
+        headers: adminHeaders({
+          "Content-Type": "application/json",
+        }),
+        body: JSON.stringify({ active: Boolean(user.deletedAt) }),
+      });
+      const data = await response.json();
+
+      if (!response.ok) {
+        toast({
+          title: "Erro ao alterar usuário",
+          description: data.error || "Tente novamente.",
+          variant: "destructive",
+        });
+        return;
+      }
+
+      setUsers((prev) => prev.map((item) => (item.id === data.id ? data : item)));
+      toast({
+        title: data.deletedAt ? "Usuário desativado" : "Usuário restaurado",
+      });
+    } catch (error) {
+      console.error(error);
+      toast({
+        title: "Erro ao conectar com o servidor",
+        variant: "destructive",
+      });
+    }
+  };
+
+  const openAuditLogs = async () => {
+    setShowAuditModal(true);
+    setLoadingAuditLogs(true);
+
+    try {
+      const response = await fetch(`${API_URL}/admin/audit-logs?limit=200`, {
+        headers: adminHeaders(),
+      });
+      const data = await response.json();
+
+      if (!response.ok) {
+        toast({
+          title: "Erro ao carregar auditoria",
+          description: data.error || "Tente novamente.",
+          variant: "destructive",
+        });
+        return;
+      }
+
+      setAuditLogs(asArray<AuditLog>(data));
+    } catch (error) {
+      console.error(error);
+      toast({
+        title: "Erro ao conectar com o servidor",
+        variant: "destructive",
+      });
+    } finally {
+      setLoadingAuditLogs(false);
     }
   };
 
@@ -2289,7 +2478,7 @@ const Dashboard = () => {
                   type="button"
                   variant="outline"
                   size="sm"
-                  onClick={() => exportAdminCsv("audit")}
+                  onClick={openAuditLogs}
                   className="gap-1"
                 >
                   <History className="h-4 w-4" />
@@ -2710,6 +2899,148 @@ const Dashboard = () => {
                 </div>
             </div>
           </div>
+        ) : adminSection === "users" ? (
+          <div className="space-y-5">
+            <div className="rounded-2xl border border-border bg-card shadow-sm">
+              <div className="flex flex-col gap-3 border-b border-border p-4">
+                <div>
+                  <p className="text-sm font-semibold">Usuários</p>
+                  <p className="text-xs text-muted-foreground">
+                    {filteredUsers.length} usuário(s) encontrados
+                  </p>
+                </div>
+
+                <div className="grid gap-2 md:grid-cols-4">
+                  <div className="relative md:col-span-1">
+                    <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
+                    <Input
+                      value={userSearch}
+                      onChange={(event) => setUserSearch(event.target.value)}
+                      placeholder="Buscar e-mail, nome, matrícula..."
+                      className="pl-9"
+                    />
+                  </div>
+                  <Select value={userStatusFilter} onValueChange={setUserStatusFilter}>
+                    <SelectTrigger>
+                      <SelectValue placeholder="Status" />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="active">Ativos</SelectItem>
+                      <SelectItem value="inactive">Desativados</SelectItem>
+                      <SelectItem value="all">Todos</SelectItem>
+                    </SelectContent>
+                  </Select>
+                  <Select value={userRoleFilter} onValueChange={setUserRoleFilter}>
+                    <SelectTrigger>
+                      <SelectValue placeholder="Perfil" />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="all">Todos perfis</SelectItem>
+                      <SelectItem value="ADMIN">Admin</SelectItem>
+                      <SelectItem value="EMPLOYEE">Funcionário</SelectItem>
+                    </SelectContent>
+                  </Select>
+                  <Select
+                    value={userDepartmentFilter}
+                    onValueChange={setUserDepartmentFilter}
+                  >
+                    <SelectTrigger>
+                      <SelectValue placeholder="Departamento" />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="all">Todos departamentos</SelectItem>
+                      {departmentOptions.map((department) => (
+                        <SelectItem key={department} value={department}>
+                          {department}
+                        </SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                </div>
+              </div>
+
+              <div className="divide-y divide-border">
+                {filteredUsers.length === 0 ? (
+                  <p className="p-4 text-sm text-muted-foreground">
+                    Nenhum usuário encontrado.
+                  </p>
+                ) : (
+                  filteredUsers.map((user) => (
+                    <div
+                      key={user.id}
+                      className="flex flex-col gap-3 p-4 lg:flex-row lg:items-center"
+                    >
+                      <div className="min-w-0 flex-1">
+                        <div className="flex flex-wrap items-center gap-2">
+                          <p className="truncate text-sm font-semibold">
+                            {user.email}
+                          </p>
+                          <span className="rounded-full bg-primary/10 px-2 py-0.5 text-[11px] font-medium text-primary">
+                            {user.role}
+                          </span>
+                          <span
+                            className={`rounded-full px-2 py-0.5 text-[11px] font-medium ${user.deletedAt
+                                ? "bg-red-50 text-red-700"
+                                : "bg-green-50 text-green-700"
+                              }`}
+                          >
+                            {user.deletedAt ? "Desativado" : "Ativo"}
+                          </span>
+                        </div>
+                        <p className="mt-1 text-xs text-muted-foreground">
+                          {user.employee?.name || "Sem funcionário vinculado"} •{" "}
+                          {user.employee?.department || "Sem departamento"}
+                        </p>
+                      </div>
+
+                      <div className="flex flex-wrap gap-2">
+                        {user.employee && (
+                          <Select
+                            value={user.employee.department || "none"}
+                            onValueChange={(value) =>
+                              changeEmployeeDepartment(
+                                user.employee!.id,
+                                value === "none" ? "" : value
+                              )
+                            }
+                          >
+                            <SelectTrigger className="h-9 w-[210px]">
+                              <SelectValue placeholder="Departamento" />
+                            </SelectTrigger>
+                            <SelectContent>
+                              <SelectItem value="none">Sem departamento</SelectItem>
+                              {departmentOptions.map((department) => (
+                                <SelectItem key={department} value={department}>
+                                  {department}
+                                </SelectItem>
+                              ))}
+                            </SelectContent>
+                          </Select>
+                        )}
+                        <Button
+                          type="button"
+                          variant="outline"
+                          size="sm"
+                          onClick={() => toggleUserStatus(user)}
+                          className={`gap-1 ${user.deletedAt
+                              ? "border-green-200 text-green-700 hover:bg-green-50"
+                              : "border-red-200 text-red-700 hover:bg-red-50"
+                            }`}
+                        >
+                          {user.deletedAt ? (
+                            <RotateCcw className="h-3.5 w-3.5" />
+                          ) : (
+                            <Trash2 className="h-3.5 w-3.5" />
+                          )}
+                          {user.deletedAt ? "Restaurar" : "Desativar"}
+                        </Button>
+                      </div>
+                    </div>
+                  ))
+                )}
+              </div>
+            </div>
+          </div>
         ) : adminSection === "departments" ? (
           <div className="space-y-5">
             <div className="grid gap-3 md:grid-cols-2 xl:grid-cols-4">
@@ -2752,6 +3083,19 @@ const Dashboard = () => {
                       className="pl-9 lg:w-[320px]"
                     />
                   </div>
+                  <Select
+                    value={departmentStatusFilter}
+                    onValueChange={setDepartmentStatusFilter}
+                  >
+                    <SelectTrigger className="sm:w-[170px]">
+                      <SelectValue placeholder="Status" />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="active">Ativos</SelectItem>
+                      <SelectItem value="inactive">Desativados</SelectItem>
+                      <SelectItem value="all">Todos</SelectItem>
+                    </SelectContent>
+                  </Select>
                   <Button
                     type="button"
                     onClick={openNewDepartmentModal}
@@ -2814,16 +3158,62 @@ const Dashboard = () => {
                           {department.description || "Sem descrição cadastrada."}
                         </p>
 
-                        <div className="mt-4 flex flex-wrap gap-2 text-xs text-muted-foreground">
+	                        <div className="mt-4 flex flex-wrap gap-2 text-xs text-muted-foreground">
                           <span className="rounded-full bg-muted px-2.5 py-1">
                             {teamCount} funcionário(s)
                           </span>
                           <span className="rounded-full bg-muted px-2.5 py-1">
                             {reportCount} chamado(s)
-                          </span>
+	                          </span>
+	                        </div>
+
+                        <div className="mt-4 space-y-2 rounded-xl border border-border bg-card/60 p-3">
+                          <p className="text-xs font-semibold text-muted-foreground">
+                            Funcionários deste departamento
+                          </p>
+                          {employees.filter(
+                            (employee) => employee.department === department.name
+                          ).length === 0 ? (
+                            <p className="text-xs text-muted-foreground">
+                              Nenhum funcionário vinculado.
+                            </p>
+                          ) : (
+                            employees
+                              .filter((employee) => employee.department === department.name)
+                              .slice(0, 4)
+                              .map((employee) => (
+                                <div
+                                  key={employee.id}
+                                  className="flex items-center justify-between gap-2 text-xs"
+                                >
+                                  <span className="truncate">{employee.name}</span>
+                                  <Select
+                                    value={employee.department || "none"}
+                                    onValueChange={(value) =>
+                                      changeEmployeeDepartment(
+                                        employee.id,
+                                        value === "none" ? "" : value
+                                      )
+                                    }
+                                  >
+                                    <SelectTrigger className="h-8 w-[140px]">
+                                      <SelectValue />
+                                    </SelectTrigger>
+                                    <SelectContent>
+                                      <SelectItem value="none">Sem depto.</SelectItem>
+                                      {departmentOptions.map((item) => (
+                                        <SelectItem key={item} value={item}>
+                                          {item}
+                                        </SelectItem>
+                                      ))}
+                                    </SelectContent>
+                                  </Select>
+                                </div>
+                              ))
+                          )}
                         </div>
 
-                        <div className="mt-4 flex flex-wrap gap-2">
+	                        <div className="mt-4 flex flex-wrap gap-2">
                           <Button
                             type="button"
                             variant="outline"
@@ -2870,6 +3260,100 @@ const Dashboard = () => {
       </main>
 
       <AnimatePresence>
+        {showAuditModal && (
+          <motion.div
+            className="fixed inset-0 z-[10000] flex items-end justify-center bg-black/60 p-0 sm:items-center sm:p-4"
+            initial={{ opacity: 0 }}
+            animate={{ opacity: 1 }}
+            exit={{ opacity: 0 }}
+            onClick={() => setShowAuditModal(false)}
+          >
+            <motion.div
+              initial={{ opacity: 0, y: 36, scale: 0.98 }}
+              animate={{ opacity: 1, y: 0, scale: 1 }}
+              exit={{ opacity: 0, y: 36, scale: 0.98 }}
+              onClick={(event) => event.stopPropagation()}
+              className="max-h-[90dvh] w-full max-w-4xl overflow-hidden rounded-t-3xl border border-border bg-card shadow-2xl sm:rounded-3xl"
+            >
+              <div className="flex items-center justify-between border-b border-border p-4">
+                <div className="flex items-center gap-3">
+                  <div className="flex h-11 w-11 items-center justify-center rounded-2xl bg-primary/10 text-primary">
+                    <History className="h-5 w-5" />
+                  </div>
+                  <div>
+                    <h2 className="text-lg font-bold">Auditoria</h2>
+                    <p className="text-xs text-muted-foreground">
+                      Últimas alterações registradas no sistema.
+                    </p>
+                  </div>
+                </div>
+                <div className="flex items-center gap-2">
+                  <Button
+                    type="button"
+                    variant="outline"
+                    size="sm"
+                    onClick={() => exportAdminCsv("audit")}
+                    className="gap-2"
+                  >
+                    <Download className="h-4 w-4" />
+                    Baixar
+                  </Button>
+                  <button
+                    type="button"
+                    onClick={() => setShowAuditModal(false)}
+                    className="flex h-9 w-9 items-center justify-center rounded-full bg-muted text-muted-foreground hover:text-foreground"
+                  >
+                    <X className="h-4 w-4" />
+                  </button>
+                </div>
+              </div>
+
+              <div className="max-h-[72dvh] overflow-y-auto p-4">
+                {loadingAuditLogs ? (
+                  <div className="flex items-center gap-2 text-sm text-muted-foreground">
+                    <Loader2 className="h-4 w-4 animate-spin" />
+                    Carregando auditoria...
+                  </div>
+                ) : auditLogs.length === 0 ? (
+                  <p className="text-sm text-muted-foreground">
+                    Nenhum registro de auditoria encontrado.
+                  </p>
+                ) : (
+                  <div className="space-y-3">
+                    {auditLogs.map((log) => (
+                      <div
+                        key={log.id}
+                        className="rounded-2xl border border-border bg-background p-4"
+                      >
+                        <div className="flex flex-wrap items-center justify-between gap-2">
+                          <div className="flex flex-wrap items-center gap-2">
+                            <span className="rounded-full bg-primary/10 px-2.5 py-1 text-xs font-semibold text-primary">
+                              {log.action}
+                            </span>
+                            <span className="rounded-full bg-muted px-2.5 py-1 text-xs text-muted-foreground">
+                              {log.entityType}
+                              {log.entityId ? ` #${log.entityId}` : ""}
+                            </span>
+                          </div>
+                          <span className="text-xs text-muted-foreground">
+                            {new Date(log.createdAt).toLocaleString("pt-BR")}
+                          </span>
+                        </div>
+                        <p className="mt-3 text-sm font-medium">{log.summary}</p>
+                        {log.metadata ? (
+                          <pre className="mt-3 max-h-32 overflow-auto rounded-xl bg-muted p-3 text-xs text-muted-foreground">
+                            {JSON.stringify(log.metadata, null, 2)}
+                          </pre>
+                        ) : null}
+                      </div>
+                    ))}
+                  </div>
+                )}
+              </div>
+            </motion.div>
+          </motion.div>
+        )}
+
         {showDepartmentModal && (
           <motion.div
             className="fixed inset-0 z-[10000] flex items-end justify-center bg-black/60 p-0 sm:items-center sm:p-4"

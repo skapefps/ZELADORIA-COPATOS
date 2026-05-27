@@ -87,6 +87,8 @@ Ao trocar a logo, coloque o arquivo em `public/` e atualize `logoSrc`/`faviconSr
 - Admin: aba de indicadores iniciada com visão executiva, evolução mensal, distribuição por status, prioridade, categorias, produtividade individual e produtividade por departamento.
 - Admin: CRUD inicial de departamentos com criação/edição em modal, cor de identificação, ativação/desativação, busca, contadores e auditoria.
 - Admin: rotas `/admin/*` protegidas no backend por sessão administrativa e departamento administrativo, não apenas pelo bloqueio visual do frontend.
+- Funcionário: criação/edição de chamados com prioridade, finalização do próprio chamado e ordenação de "Meus Reportes" com pendentes primeiro, por prioridade e depois data.
+- Admin: login administrativo apenas por e-mail, usuários com filtros por status/perfil/departamento, auditoria visual antes do download CSV e mudança rápida de departamento de funcionários.
 
 ## Ambiente
 

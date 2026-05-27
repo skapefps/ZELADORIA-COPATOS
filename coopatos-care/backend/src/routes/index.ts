@@ -716,6 +716,95 @@ router.get("/admin/employees", async (_req, res) => {
   }
 });
 
+router.get("/admin/users", async (_req, res) => {
+  try {
+    const users = await prisma.user.findMany({
+      include: {
+        employee: true,
+      },
+      orderBy: {
+        createdAt: "desc",
+      },
+    });
+
+    return res.json(users);
+  } catch (error) {
+    console.error("Erro ao listar usuários:", error);
+    return res.status(500).json({
+      error: "Erro ao listar usuários.",
+    });
+  }
+});
+
+router.patch("/admin/users/:id/status", async (req, res) => {
+  try {
+    const id = Number(req.params.id);
+    const active = Boolean(req.body.active);
+
+    const user = await prisma.user.update({
+      where: {
+        id,
+      },
+      data: {
+        deletedAt: active ? null : new Date(),
+      },
+      include: {
+        employee: true,
+      },
+    });
+
+    await createAuditLog({
+      action: active ? "USER_RESTORED" : "USER_DISABLED",
+      entityType: "USER",
+      entityId: user.id,
+      summary: `Usuário ${user.email} ${active ? "restaurado" : "desativado"}.`,
+    });
+
+    return res.json(user);
+  } catch (error) {
+    console.error("Erro ao alterar usuário:", error);
+    return res.status(500).json({
+      error: "Erro ao alterar usuário.",
+    });
+  }
+});
+
+router.patch("/admin/employees/:id/department", async (req, res) => {
+  try {
+    const id = Number(req.params.id);
+    const department = req.body.department
+      ? String(req.body.department).trim()
+      : null;
+
+    const employee = await prisma.employee.update({
+      where: {
+        id,
+      },
+      data: {
+        department,
+      },
+      select: adminEmployeeSelect,
+    });
+
+    await createAuditLog({
+      action: "EMPLOYEE_DEPARTMENT_CHANGED",
+      entityType: "EMPLOYEE",
+      entityId: employee.id,
+      summary: `${employee.name} movido para ${department || "sem departamento"}.`,
+      metadata: {
+        department,
+      },
+    });
+
+    return res.json(employee);
+  } catch (error) {
+    console.error("Erro ao alterar departamento do funcionário:", error);
+    return res.status(500).json({
+      error: "Erro ao alterar departamento do funcionário.",
+    });
+  }
+});
+
 router.post("/admin/employees", async (req, res) => {
   try {
     const {
@@ -2329,16 +2418,7 @@ router.post("/admin-login", async (req, res) => {
       where: {
         deletedAt: null,
         role: "ADMIN",
-        OR: [
-          {
-            email: login,
-          },
-          {
-            employee: {
-              registrationNumber: login,
-            },
-          },
-        ],
+        email: login,
       },
       include: {
         employee: true,

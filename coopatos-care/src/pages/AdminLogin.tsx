@@ -69,7 +69,8 @@ const AdminLogin = () => {
         <div className="bg-card rounded-xl p-6 shadow-xl">
           <form onSubmit={handleSubmit} className="space-y-4">
             <Input
-              placeholder="E-mail ou matrícula"
+              type="email"
+              placeholder="E-mail administrativo"
               value={user}
               onChange={(e) => {
                 setUser(e.target.value);

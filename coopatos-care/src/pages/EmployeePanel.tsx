@@ -25,6 +25,7 @@ import {
   MessageCircle,
   Check,
   CheckCheck,
+  CheckCircle,
   Search,
   Pencil,
   Filter,
@@ -77,6 +78,7 @@ type Report = {
   longitude?: number | null;
   address?: string | null;
   createdAt: string;
+  priority?: string | null;
 
   category: {
     id: number;
@@ -288,6 +290,36 @@ const statusColors: Record<string, string> = {
   FINALIZADO: "bg-green-100 text-green-700 border-green-200",
 };
 
+const priorityOptions = [
+  {
+    value: "BAIXA",
+    label: "Baixa",
+    className: "border-green-200 bg-green-50 text-green-700",
+    rank: 1,
+  },
+  {
+    value: "MEDIA",
+    label: "Média",
+    className: "border-yellow-200 bg-yellow-50 text-yellow-700",
+    rank: 2,
+  },
+  {
+    value: "ALTA",
+    label: "Alta",
+    className: "border-orange-200 bg-orange-50 text-orange-700",
+    rank: 3,
+  },
+  {
+    value: "CRITICA",
+    label: "Crítica",
+    className: "border-red-200 bg-red-50 text-red-700",
+    rank: 4,
+  },
+];
+
+const getPriorityOption = (priority?: string | null) =>
+  priorityOptions.find((item) => item.value === priority) || priorityOptions[1];
+
 const departmentColors: Record<string, string> = {
   Financeiro:
     "bg-emerald-100 text-emerald-800 border-emerald-200",
@@ -474,6 +506,7 @@ const EmployeePanel = () => {
   const [selectedReport, setSelectedReport] = useState<Report | null>(null);
   const [isEditing, setIsEditing] = useState(false);
   const [editCategoryId, setEditCategoryId] = useState("");
+  const [editPriority, setEditPriority] = useState("MEDIA");
   const [showMessagesModal, setShowMessagesModal] = useState(false);
   const [editDescription, setEditDescription] = useState("");
   const [showMessageSearch, setShowMessageSearch] = useState(false);
@@ -506,6 +539,7 @@ const EmployeePanel = () => {
   const [savingEdit, setSavingEdit] = useState(false);
 
   const [categoryId, setCategoryId] = useState("");
+  const [priority, setPriority] = useState("MEDIA");
   const [categories, setCategories] = useState<Category[]>([]);
 
   const [description, setDescription] = useState("");
@@ -860,7 +894,22 @@ const EmployeePanel = () => {
     loadTeamEmployees();
   }, [toast, API_URL]);
 
-  const filteredReports = myReports.filter((report) => {
+  const sortReportsForEmployee = (items: Report[]) =>
+    [...items].sort((a, b) => {
+      const aDone = a.status.name === "FINALIZADO";
+      const bDone = b.status.name === "FINALIZADO";
+
+      if (aDone !== bDone) return aDone ? 1 : -1;
+
+      const priorityDiff =
+        getPriorityOption(b.priority).rank - getPriorityOption(a.priority).rank;
+
+      if (priorityDiff !== 0) return priorityDiff;
+
+      return new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime();
+    });
+
+  const filteredReports = sortReportsForEmployee(myReports.filter((report) => {
 
     const search = searchTerm.toLowerCase();
 
@@ -879,7 +928,7 @@ const EmployeePanel = () => {
       categoryFilter === "all" || String(report.category.id) === categoryFilter;
 
     return matchesSearch && matchesStatus && matchesCategory;
-  });
+  }));
 
   const scrollToMessage = (messageId: number) => {
     const element = messageRefs.current[messageId];
@@ -910,7 +959,7 @@ const EmployeePanel = () => {
     )
     : 0;
 
-  const filteredAllReports = allReports.filter((report) => {
+  const filteredAllReports = sortReportsForEmployee(allReports.filter((report) => {
 
     const search = searchTerm.toLowerCase();
 
@@ -931,7 +980,7 @@ const EmployeePanel = () => {
       categoryFilter === "all" || String(report.category.id) === categoryFilter;
 
     return matchesSearch && matchesStatus && matchesCategory;
-  });
+  }));
 
   const unreadNotificationsCount = notifications.filter(
     (notification) => !notification.readAt
@@ -2960,6 +3009,7 @@ const EmployeePanel = () => {
         body: JSON.stringify({
           employeeId: employee.id,
           categoryId: Number(categoryId),
+          priority,
           title,
           description,
           referencePoint,
@@ -2990,6 +3040,7 @@ const EmployeePanel = () => {
 
       // Reset form
       setCategoryId("");
+      setPriority("MEDIA");
       setTitle("");
       setDescription("");
       setReferencePoint("");
@@ -3289,6 +3340,7 @@ const EmployeePanel = () => {
     setDetailImageIndex(0);
     setIsEditing(false);
     setEditCategoryId(String(report.category.id));
+    setEditPriority(report.priority || "MEDIA");
     setEditDescription(report.description || "");
     setEditReferencePoint(report.referencePoint || "");
     loadMessages(report.id);
@@ -3325,6 +3377,7 @@ const EmployeePanel = () => {
         },
         body: JSON.stringify({
           categoryId: Number(editCategoryId),
+          priority: editPriority,
           description: editDescription,
           title: editTitle,
           referencePoint: editReferencePoint,
@@ -3367,6 +3420,73 @@ const EmployeePanel = () => {
       });
     } finally {
       setSavingEdit(false);
+    }
+  };
+
+  const finalizeReport = async (report: Report) => {
+    if (report.status.name === "FINALIZADO") return;
+
+    let finalStatusId = allReports
+      .concat(myReports)
+      .find((item) => item.status.name === "FINALIZADO")?.status.id;
+
+    if (!finalStatusId) {
+      const response = await fetch(`${API_URL}/statuses`);
+      const statuses = await response.json();
+      finalStatusId = statuses.find(
+        (status: { id: number; name: string }) => status.name === "FINALIZADO"
+      )?.id;
+    }
+
+    if (!finalStatusId) {
+      toast({
+        title: "Status finalizado não encontrado",
+        description: "Peça ao administrador para conferir os status do sistema.",
+        variant: "destructive",
+      });
+      return;
+    }
+
+    try {
+      const response = await fetch(`${API_URL}/reports/${report.id}/status`, {
+        method: "PATCH",
+        headers: {
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify({
+          statusId: finalStatusId,
+          actorId: employee.id,
+        }),
+      });
+      const data = await response.json();
+
+      if (!response.ok) {
+        toast({
+          title: "Erro ao finalizar chamado",
+          description: data.error || "Tente novamente.",
+          variant: "destructive",
+        });
+        return;
+      }
+
+      setMyReports((prev) =>
+        prev.map((item) => (item.id === data.id ? data : item))
+      );
+      setAllReports((prev) =>
+        prev.map((item) => (item.id === data.id ? data : item))
+      );
+      setSelectedReport((prev) => (prev?.id === data.id ? data : prev));
+
+      toast({
+        title: "Chamado finalizado",
+        description: "Ele foi movido para o final da lista de meus reportes.",
+      });
+    } catch (error) {
+      console.error(error);
+      toast({
+        title: "Erro ao conectar com o servidor",
+        variant: "destructive",
+      });
     }
   };
 
@@ -3732,6 +3852,19 @@ const EmployeePanel = () => {
         </SelectContent>
       </Select>
 
+      <Select value={priority} onValueChange={setPriority}>
+        <SelectTrigger>
+          <SelectValue placeholder="Prioridade do chamado" />
+        </SelectTrigger>
+        <SelectContent>
+          {priorityOptions.map((item) => (
+            <SelectItem key={item.value} value={item.value}>
+              {item.label}
+            </SelectItem>
+          ))}
+        </SelectContent>
+      </Select>
+
       {/* GPS */}
       <div className="flex gap-2">
         <Button
@@ -3957,6 +4090,12 @@ const EmployeePanel = () => {
                   <span>{report.category.name}</span>
                 </div>
 
+                <span
+                  className={`inline-flex w-fit rounded-full border px-2 py-0.5 text-[11px] font-semibold ${getPriorityOption(report.priority).className}`}
+                >
+                  {getPriorityOption(report.priority).label}
+                </span>
+
                 {report.employee?.name && (
                   <p className="text-xs text-muted-foreground">
                     Aberto por {report.employee.name}
@@ -3992,6 +4131,17 @@ const EmployeePanel = () => {
             >
               Ver detalhes
             </Button>
+            {report.status.name !== "FINALIZADO" && (
+              <Button
+                variant="outline"
+                size="sm"
+                className="mt-2 w-full gap-2 border-green-200 text-green-700 hover:bg-green-50"
+                onClick={() => finalizeReport(report)}
+              >
+                <CheckCircle className="h-4 w-4" />
+                Finalizar
+              </Button>
+            )}
           </div>
         ))
       )}
@@ -4149,6 +4299,12 @@ const EmployeePanel = () => {
                   {categoryIcons[report.category.name] || categoryIcons["Outros"]}
                   <span>{report.category.name}</span>
                 </div>
+
+                <span
+                  className={`inline-flex w-fit rounded-full border px-2 py-0.5 text-[11px] font-semibold ${getPriorityOption(report.priority).className}`}
+                >
+                  {getPriorityOption(report.priority).label}
+                </span>
 
                 {report.employee?.name && (
                   <p className="text-xs text-muted-foreground">
@@ -4539,6 +4695,33 @@ const EmployeePanel = () => {
                     <p>{selectedReport.title || "Sem nome"}</p>
                   )}
                 </div>
+
+                <div className="mb-4">
+                  <label className="text-xs font-medium uppercase tracking-wide text-muted-foreground">
+                    Prioridade
+                  </label>
+
+                  {isEditing ? (
+                    <Select value={editPriority} onValueChange={setEditPriority}>
+                      <SelectTrigger>
+                        <SelectValue />
+                      </SelectTrigger>
+                      <SelectContent>
+                        {priorityOptions.map((item) => (
+                          <SelectItem key={item.value} value={item.value}>
+                            {item.label}
+                          </SelectItem>
+                        ))}
+                      </SelectContent>
+                    </Select>
+                  ) : (
+                    <span
+                      className={`mt-1 inline-flex rounded-full border px-3 py-1 text-xs font-semibold ${getPriorityOption(selectedReport.priority).className}`}
+                    >
+                      {getPriorityOption(selectedReport.priority).label}
+                    </span>
+                  )}
+                </div>
                 <div className="mb-4">
                   <label className="text-sm font-medium">Descrição</label>
 
@@ -4637,6 +4820,18 @@ const EmployeePanel = () => {
                       {selectedReport.status.name}
                     </span>
                   </div>
+                  {!isEditing && selectedReport.status.name !== "FINALIZADO" && (
+                    <Button
+                      type="button"
+                      variant="outline"
+                      size="sm"
+                      onClick={() => finalizeReport(selectedReport)}
+                      className="mt-3 gap-2 border-green-200 text-green-700 hover:bg-green-50"
+                    >
+                      <CheckCircle className="h-4 w-4" />
+                      Finalizar chamado
+                    </Button>
+                  )}
                 </div>
 
                 {isEditing && (
