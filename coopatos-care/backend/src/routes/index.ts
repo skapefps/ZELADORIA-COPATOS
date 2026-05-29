@@ -7,8 +7,13 @@ import nodemailer from "nodemailer";
 import bcrypt from "bcryptjs";
 import { v2 as cloudinary } from "cloudinary";
 import { brandPreset } from "../config/brand.js";
+import { AsyncLocalStorage } from "node:async_hooks";
 
 const router = Router();
+const auditActorStorage = new AsyncLocalStorage<{
+  actorId: number | null;
+  actorName: string | null;
+}>();
 
 cloudinary.config({
   cloud_name: process.env.CLOUDINARY_CLOUD_NAME,
@@ -256,10 +261,12 @@ const createAuditLog = async ({
   metadata?: Prisma.InputJsonValue;
 }) => {
   try {
+    const currentActor = auditActorStorage.getStore();
+
     await prisma.auditLog.create({
       data: {
-        actorId: actorId || null,
-        actorName: actorName || null,
+        actorId: actorId || currentActor?.actorId || null,
+        actorName: actorName || currentActor?.actorName || null,
         action,
         entityType,
         entityId: entityId || null,
@@ -339,7 +346,13 @@ const requireAdminRequest = async (
       });
     }
 
-    return next();
+    return auditActorStorage.run(
+      {
+        actorId: user.employee.id,
+        actorName: user.employee.name || user.email,
+      },
+      () => next()
+    );
   } catch (error) {
     console.error("Erro ao validar sessão administrativa:", error);
     return res.status(500).json({

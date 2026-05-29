@@ -86,7 +86,7 @@ Também existe personalização visual pelo painel administrativo em `Configura�
 - Admin: cadastro de funcionário com CPF e telefone mascarados, limite de caracteres, validações de CPF/e-mail/telefone, e-mail obrigatório e envio assíncrono da validação logo após criar/alterar e-mail.
 - Admin: exportações CSV para planilhas de funcionários, chamados e auditoria.
 - Admin: auditoria inicial de cadastro/edição/desativação de funcionários, envio de validação e criação/edição de chamados.
-- Admin: aba de indicadores com filtros por categoria, status, pessoa, período e busca/local, cards clicáveis para abrir chamados filtrados, visão executiva, evolução mensal, status, prioridade, categorias, produtividade individual, produtividade por departamento, recorrência de locais, idade média pendente, críticos pendentes e exportação PDF configurável.
+- Admin: aba de indicadores com filtros próprios por categoria, status, pessoa, período e busca/local, cards clicáveis para abrir chamados filtrados sem alterar os filtros dos indicadores, visão executiva, evolução mensal, status, prioridade, categorias, produtividade individual, eficiência por pessoa, backlog por status, produtividade por departamento, recorrência de locais, críticos pendentes e exportação PDF configurável.
 - Admin: CRUD inicial de departamentos com criação/edição em modal, cor de identificação, ativação/desativação, busca, contadores e auditoria.
 - Admin: rotas `/admin/*` protegidas no backend por sessão administrativa e departamento administrativo, não apenas pelo bloqueio visual do frontend.
 - Funcionário: criação/edição de chamados com prioridade, finalização do próprio chamado e ordenação de "Meus Reportes" com pendentes primeiro, por prioridade e depois data.
@@ -95,7 +95,8 @@ Também existe personalização visual pelo painel administrativo em `Configura�
 - Admin: aba Mapa separada com filtros próprios, pins/heatmap e atalho para criar chamado.
 - Admin: Personalização whitelabel visual com prévia, aplicação imediata e restauração do preset original.
 - Sessão: inatividade centralizada em 15 minutos, aviso específico no login administrativo e comparação de token por aba usando `sessionStorage` para impedir que uma nova sessão no mesmo navegador mantenha a aba antiga ativa.
-- Admin: exportação de chamados em CSV com personalização de colunas e respeitando os filtros atuais de categoria, pessoa, status, período e local/busca.
+- Admin: exportação de chamados em CSV e PDF com personalização de colunas e respeitando os filtros atuais de categoria, pessoa, status, período e local/busca; funcionários e auditoria também contam com relatório PDF.
+- Admin: auditoria passa a exibir o responsável pela alteração, resolvendo ids para nome/e-mail quando possível e registrando automaticamente o ator das rotas administrativas.
 
 ## Ambiente
 

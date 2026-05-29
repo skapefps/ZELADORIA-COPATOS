@@ -249,7 +249,9 @@ type AnalyticsExportSection =
   | "employees"
   | "departments"
   | "monthly"
-  | "locations";
+  | "locations"
+  | "backlog"
+  | "efficiency";
 
 const emptyEmployeeForm: EmployeeForm = {
   registrationNumber: "",
@@ -466,7 +468,81 @@ const analyticsExportSections: { id: AnalyticsExportSection; label: string }[] =
   { id: "departments", label: "Departamentos" },
   { id: "monthly", label: "Evolução mensal" },
   { id: "locations", label: "Locais recorrentes" },
+  { id: "backlog", label: "Backlog por status" },
+  { id: "efficiency", label: "Eficiência por pessoa" },
 ];
+
+const filterReports = (
+  reports: AdminReport[],
+  filters: {
+    category: string;
+    status: string;
+    employee: string;
+    period: string;
+    startDate: string;
+    endDate: string;
+    location: string;
+  }
+) => {
+  let result = [...reports];
+
+  if (filters.category !== "all") {
+    result = result.filter((report) => String(report.category.id) === filters.category);
+  }
+
+  if (filters.status !== "all") {
+    result = result.filter((report) => String(report.status.id) === filters.status);
+  }
+
+  if (filters.employee !== "all") {
+    result = result.filter(
+      (report) =>
+        String(report.employee?.id) === filters.employee ||
+        report.participants?.some(
+          (participant) => String(participant.employeeId) === filters.employee
+        )
+    );
+  }
+
+  if (filters.period === "custom") {
+    const start = filters.startDate
+      ? new Date(`${filters.startDate}T00:00:00`).getTime()
+      : null;
+    const end = filters.endDate
+      ? new Date(`${filters.endDate}T23:59:59`).getTime()
+      : null;
+
+    result = result.filter((report) => {
+      const createdAt = new Date(report.createdAt).getTime();
+      if (start && createdAt < start) return false;
+      if (end && createdAt > end) return false;
+      return true;
+    });
+  } else if (filters.period !== "all") {
+    const since = Date.now() - Number(filters.period) * 24 * 60 * 60 * 1000;
+    result = result.filter(
+      (report) => new Date(report.createdAt).getTime() >= since
+    );
+  }
+
+  if (filters.location.trim()) {
+    const search = filters.location.toLowerCase();
+
+    result = result.filter(
+      (report) =>
+        report.referencePoint?.toLowerCase().includes(search) ||
+        report.address?.toLowerCase().includes(search) ||
+        report.description?.toLowerCase().includes(search) ||
+        report.title?.toLowerCase().includes(search) ||
+        report.employee?.name?.toLowerCase().includes(search) ||
+        String(report.id).includes(search)
+    );
+  }
+
+  return result.sort(
+    (a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime()
+  );
+};
 
 const Dashboard = () => {
   const { logout } = useAuth();
@@ -526,6 +602,13 @@ const Dashboard = () => {
   const [filterStartDate, setFilterStartDate] = useState("");
   const [filterEndDate, setFilterEndDate] = useState("");
   const [filterLocation, setFilterLocation] = useState("");
+  const [analyticsCategory, setAnalyticsCategory] = useState("all");
+  const [analyticsStatus, setAnalyticsStatus] = useState("all");
+  const [analyticsEmployee, setAnalyticsEmployee] = useState("all");
+  const [analyticsPeriod, setAnalyticsPeriod] = useState("all");
+  const [analyticsStartDate, setAnalyticsStartDate] = useState("");
+  const [analyticsEndDate, setAnalyticsEndDate] = useState("");
+  const [analyticsLocation, setAnalyticsLocation] = useState("");
   const [selectedReport, setSelectedReport] = useState<AdminReport | null>(null);
   const [showReportModal, setShowReportModal] = useState(false);
   const [reportForm, setReportForm] = useState<ReportForm>(emptyReportForm);
@@ -851,68 +934,15 @@ const Dashboard = () => {
   };
 
   const filtered = useMemo(() => {
-    let result = [...reports];
-
-    if (filterCategory !== "all") {
-      result = result.filter((r) => String(r.category.id) === filterCategory);
-    }
-
-    if (filterStatus !== "all") {
-      result = result.filter((r) => String(r.status.id) === filterStatus);
-    }
-
-    if (filterEmployee !== "all") {
-      result = result.filter(
-        (r) =>
-          String(r.employee?.id) === filterEmployee ||
-          r.participants?.some(
-            (participant) => String(participant.employeeId) === filterEmployee
-          )
-      );
-    }
-
-    if (filterPeriod === "custom") {
-      const start = filterStartDate
-        ? new Date(`${filterStartDate}T00:00:00`).getTime()
-        : null;
-      const end = filterEndDate
-        ? new Date(`${filterEndDate}T23:59:59`).getTime()
-        : null;
-
-      result = result.filter((r) => {
-        const createdAt = new Date(r.createdAt).getTime();
-        if (start && createdAt < start) return false;
-        if (end && createdAt > end) return false;
-        return true;
-      });
-    } else if (filterPeriod !== "all") {
-      const days = Number(filterPeriod);
-      const since = Date.now() - days * 24 * 60 * 60 * 1000;
-
-      result = result.filter(
-        (r) => new Date(r.createdAt).getTime() >= since
-      );
-    }
-
-    if (filterLocation.trim()) {
-      const search = filterLocation.toLowerCase();
-
-      result = result.filter(
-        (r) =>
-          r.referencePoint?.toLowerCase().includes(search) ||
-          r.address?.toLowerCase().includes(search) ||
-          r.description?.toLowerCase().includes(search) ||
-          r.title?.toLowerCase().includes(search) ||
-          r.employee?.name?.toLowerCase().includes(search) ||
-          String(r.id).includes(search)
-      );
-    }
-
-    return result.sort(
-      (a, b) =>
-        new Date(b.createdAt).getTime() -
-        new Date(a.createdAt).getTime()
-    );
+    return filterReports(reports, {
+      category: filterCategory,
+      status: filterStatus,
+      employee: filterEmployee,
+      period: filterPeriod,
+      startDate: filterStartDate,
+      endDate: filterEndDate,
+      location: filterLocation,
+    });
   }, [
     reports,
     filterCategory,
@@ -922,6 +952,27 @@ const Dashboard = () => {
     filterStartDate,
     filterEndDate,
     filterLocation,
+  ]);
+
+  const analyticsFiltered = useMemo(() => {
+    return filterReports(reports, {
+      category: analyticsCategory,
+      status: analyticsStatus,
+      employee: analyticsEmployee,
+      period: analyticsPeriod,
+      startDate: analyticsStartDate,
+      endDate: analyticsEndDate,
+      location: analyticsLocation,
+    });
+  }, [
+    reports,
+    analyticsCategory,
+    analyticsStatus,
+    analyticsEmployee,
+    analyticsPeriod,
+    analyticsStartDate,
+    analyticsEndDate,
+    analyticsLocation,
   ]);
 
   const stats = useMemo(
@@ -1049,7 +1100,7 @@ const Dashboard = () => {
   );
 
   const analytics = useMemo(() => {
-    const sourceReports = filtered;
+    const sourceReports = analyticsFiltered;
     const completedReports = sourceReports.filter(
       (report) => report.status.name === "FINALIZADO"
     );
@@ -1062,20 +1113,19 @@ const Dashboard = () => {
     const openCriticalReports = sourceReports.filter(
       (report) => report.status.name !== "FINALIZADO" && report.priority === "CRITICA"
     );
-    const reportsWithMedia = sourceReports.filter(
-      (report) => (report.images?.length || 0) > 0
+    const highRiskReports = sourceReports.filter(
+      (report) =>
+        report.status.name !== "FINALIZADO" &&
+        ["ALTA", "CRITICA"].includes(report.priority || "")
     );
-    const averageAgeDays = pendingReports.length
-      ? Math.round(
-        pendingReports.reduce(
-          (total, report) =>
-            total +
-            (Date.now() - new Date(report.createdAt).getTime()) /
-            (1000 * 60 * 60 * 24),
-          0
-        ) / pendingReports.length
-      )
-      : 0;
+    const unassignedReports = sourceReports.filter(
+      (report) => !report.participants?.length
+    );
+    const reportsCreatedThisWeek = sourceReports.filter(
+      (report) =>
+        Date.now() - new Date(report.createdAt).getTime() <=
+        7 * 24 * 60 * 60 * 1000
+    );
 
     const statusData = statuses.map((status, index) => ({
       name: status.name.replace(/_/g, " "),
@@ -1175,14 +1225,38 @@ const Dashboard = () => {
       .map(([name, value]) => ({ name, value }))
       .sort((a, b) => b.value - a.value)
       .slice(0, 8);
+    const efficiencyData = employees
+      .map((employee) => {
+        const assigned = sourceReports.filter(
+          (report) =>
+            report.employee?.id === employee.id ||
+            report.participants?.some(
+              (participant) => participant.employeeId === employee.id
+            )
+        );
+        const done = assigned.filter(
+          (report) => report.status.name === "FINALIZADO"
+        ).length;
+
+        return {
+          name: employee.name.split(" ").slice(0, 2).join(" "),
+          taxa: assigned.length ? Math.round((done / assigned.length) * 100) : 0,
+          total: assigned.length,
+        };
+      })
+      .filter((item) => item.total > 0)
+      .sort((a, b) => b.taxa - a.taxa)
+      .slice(0, 8);
+    const backlogData = statusData.filter((item) => item.name !== "FINALIZADO");
 
     return {
       completedReports,
       pendingReports,
       openCriticalReports,
-      reportsWithMedia,
+      highRiskReports,
+      unassignedReports,
+      reportsCreatedThisWeek,
       completionRate,
-      averageAgeDays,
       statusData,
       priorityData,
       categoryData,
@@ -1190,8 +1264,10 @@ const Dashboard = () => {
       employeeData,
       departmentData,
       locationData,
+      efficiencyData,
+      backlogData,
     };
-  }, [categories, departmentOptions, employees, filtered, statuses]);
+  }, [analyticsFiltered, categories, departmentOptions, employees, statuses]);
 
   const loadEmployees = async () => {
     setLoadingEmployees(true);
@@ -1826,6 +1902,182 @@ const Dashboard = () => {
     setShowReportExportModal(false);
   };
 
+  const openPrintDocument = (title: string, body: string) => {
+    const printWindow = window.open("", "_blank", "width=1100,height=800");
+
+    if (!printWindow) {
+      toast({
+        title: "Popup bloqueado",
+        description: "Libere popups para gerar o PDF.",
+        variant: "destructive",
+      });
+      return;
+    }
+
+    printWindow.document.write(`
+      <!doctype html>
+      <html lang="pt-BR">
+        <head>
+          <meta charset="utf-8" />
+          <title>${title} - ${brandPreset.appName}</title>
+          <style>
+            * { box-sizing: border-box; }
+            body { margin: 0; padding: 32px; font-family: Arial, sans-serif; color: #1f3557; background: #f4f7fb; }
+            header { display: flex; align-items: center; gap: 16px; margin-bottom: 22px; }
+            header img { width: 72px; height: 72px; object-fit: contain; }
+            h1 { margin: 0; font-size: 26px; }
+            h2 { margin: 0 0 12px; font-size: 18px; }
+            .muted { color: #62708a; font-size: 13px; }
+            .panel { background: #fff; border: 1px solid #dbe3ef; border-radius: 16px; padding: 14px; margin-bottom: 14px; }
+            .filters { display: grid; grid-template-columns: repeat(4, 1fr); gap: 10px; margin-bottom: 16px; }
+            .filter { background: #fff; border: 1px solid #dbe3ef; border-radius: 14px; padding: 12px; }
+            table { width: 100%; border-collapse: collapse; background: #fff; border-radius: 16px; overflow: hidden; }
+            th { background: #1f3557; color: #fff; font-size: 11px; text-align: left; padding: 9px; }
+            td { border-bottom: 1px solid #edf1f7; font-size: 11px; padding: 8px; vertical-align: top; }
+            tr:nth-child(even) td { background: #f8fafc; }
+            @media print { body { background: #fff; padding: 18px; } .panel, table { break-inside: avoid; } }
+          </style>
+        </head>
+        <body>
+          <header>
+            <img src="${brandPreset.logoSrc}" alt="" />
+            <div>
+              <h1>${title}</h1>
+              <div class="muted">${brandPreset.organizationName} • ${new Date().toLocaleString("pt-BR")}</div>
+            </div>
+          </header>
+          ${body}
+        </body>
+      </html>
+    `);
+    printWindow.document.close();
+    printWindow.focus();
+    window.setTimeout(() => printWindow.print(), 400);
+  };
+
+  const exportFilteredReportsPdf = () => {
+    if (selectedReportColumns.length === 0) {
+      toast({
+        title: "Selecione ao menos uma coluna",
+        variant: "destructive",
+      });
+      return;
+    }
+
+    const columns = reportExportColumns.filter((column) =>
+      selectedReportColumns.includes(column.id)
+    );
+    const filters = formatFiltersForExport();
+
+    openPrintDocument(
+      "Relatório de chamados",
+      `
+        <section class="filters">
+          <div class="filter"><strong>Categoria</strong><br /><span class="muted">${filters.category}</span></div>
+          <div class="filter"><strong>Status</strong><br /><span class="muted">${filters.status}</span></div>
+          <div class="filter"><strong>Pessoa</strong><br /><span class="muted">${filters.employee}</span></div>
+          <div class="filter"><strong>Período</strong><br /><span class="muted">${filters.period}</span></div>
+        </section>
+        <div class="panel"><strong>${filtered.length}</strong> chamado(s) encontrados</div>
+        <table>
+          <thead>
+            <tr>${columns.map((column) => `<th>${column.label}</th>`).join("")}</tr>
+          </thead>
+          <tbody>
+            ${filtered
+        .map(
+          (report) =>
+            `<tr>${columns
+              .map((column) => `<td>${column.getValue(report) || ""}</td>`)
+              .join("")}</tr>`
+        )
+        .join("")}
+          </tbody>
+        </table>
+      `
+    );
+    setShowReportExportModal(false);
+  };
+
+  const exportEmployeesPdf = () => {
+    openPrintDocument(
+      "Relatório de funcionários",
+      `
+        <div class="panel"><strong>${filteredEmployees.length}</strong> funcionário(s) no filtro atual</div>
+        <table>
+          <thead>
+            <tr>
+              <th>Nome</th><th>Matrícula</th><th>E-mail</th><th>Departamento</th><th>Status</th><th>Validado</th>
+            </tr>
+          </thead>
+          <tbody>
+            ${filteredEmployees
+        .map(
+          (employee) => `
+            <tr>
+              <td>${employee.name}</td>
+              <td>${employee.registrationNumber}</td>
+              <td>${employee.email || ""}</td>
+              <td>${employee.department || ""}</td>
+              <td>${employee.deletedAt ? "Inativo" : "Ativo"}</td>
+              <td>${employee.emailVerifiedAt ? "Sim" : "Não"}</td>
+            </tr>
+          `
+        )
+        .join("")}
+          </tbody>
+        </table>
+      `
+    );
+  };
+
+  const exportAuditPdf = async () => {
+    let logs = auditLogs;
+
+    if (logs.length === 0) {
+      try {
+        const response = await fetch(`${API_URL}/admin/audit-logs?limit=500`, {
+          headers: adminHeaders(),
+        });
+        const data = await response.json();
+
+        if (response.ok) {
+          logs = asArray<AuditLog>(data);
+          setAuditLogs(logs);
+        }
+      } catch (error) {
+        console.error(error);
+      }
+    }
+
+    openPrintDocument(
+      "Relatório de auditoria",
+      `
+        <div class="panel"><strong>${logs.length}</strong> registro(s) de auditoria</div>
+        <table>
+          <thead>
+            <tr><th>Data</th><th>Ação</th><th>Entidade</th><th>Resumo</th><th>Alterado por</th></tr>
+          </thead>
+          <tbody>
+            ${logs
+        .map(
+          (log) => `
+            <tr>
+              <td>${new Date(log.createdAt).toLocaleString("pt-BR")}</td>
+              <td>${log.action}</td>
+              <td>${log.entityType}${log.entityId ? ` #${log.entityId}` : ""}</td>
+              <td>${log.summary}</td>
+              <td>${getAuditActorName(log)}</td>
+            </tr>
+          `
+        )
+        .join("")}
+          </tbody>
+        </table>
+      `
+    );
+  };
+
   const toggleReportExportColumn = (column: ReportExportColumn) => {
     setSelectedReportColumns((prev) =>
       prev.includes(column)
@@ -1843,14 +2095,30 @@ const Dashboard = () => {
   };
 
   const openReportsByStatus = (statusName?: string) => {
+    setFilterCategory(analyticsCategory);
+    setFilterEmployee(analyticsEmployee);
+    setFilterPeriod(analyticsPeriod);
+    setFilterStartDate(analyticsStartDate);
+    setFilterEndDate(analyticsEndDate);
+    setFilterLocation(analyticsLocation);
+
     if (!statusName) {
-      setFilterStatus("all");
+      setFilterStatus(analyticsStatus);
     } else {
       const status = statuses.find((item) => item.name === statusName);
       setFilterStatus(status ? String(status.id) : "all");
     }
 
     setAdminSection("reports");
+  };
+
+  const applyReportStatusFilter = (statusName?: string) => {
+    if (!statusName) {
+      setFilterStatus("all");
+    } else {
+      const status = statuses.find((item) => item.name === statusName);
+      setFilterStatus(status ? String(status.id) : "all");
+    }
   };
 
   const formatFiltersForExport = () => {
@@ -1879,6 +2147,32 @@ const Dashboard = () => {
     return { category, status, employee, period };
   };
 
+  const formatAnalyticsFiltersForExport = () => {
+    const category =
+      analyticsCategory === "all"
+        ? "Todas"
+        : categories.find((item) => String(item.id) === analyticsCategory)?.name ||
+        "Selecionada";
+    const status =
+      analyticsStatus === "all"
+        ? "Todos"
+        : statuses.find((item) => String(item.id) === analyticsStatus)?.name ||
+        "Selecionado";
+    const employee =
+      analyticsEmployee === "all"
+        ? "Todos"
+        : employees.find((item) => String(item.id) === analyticsEmployee)?.name ||
+        "Selecionado";
+    const period =
+      analyticsPeriod === "custom"
+        ? `${analyticsStartDate || "início"} até ${analyticsEndDate || "hoje"}`
+        : analyticsPeriod === "all"
+          ? "Todo período"
+          : `Últimos ${analyticsPeriod} dias`;
+
+    return { category, status, employee, period };
+  };
+
   const renderPrintList = (items: { name: string; value: number }[]) =>
     items.length
       ? items
@@ -1902,7 +2196,7 @@ const Dashboard = () => {
       return;
     }
 
-    const filters = formatFiltersForExport();
+    const filters = formatAnalyticsFiltersForExport();
     const printWindow = window.open("", "_blank", "width=1100,height=800");
 
     if (!printWindow) {
@@ -1960,10 +2254,10 @@ const Dashboard = () => {
           ${section(
       "summary",
       `<section class="grid">
-              <div class="card"><small>Total filtrado</small><strong>${filtered.length}</strong></div>
+              <div class="card"><small>Total filtrado</small><strong>${analyticsFiltered.length}</strong></div>
               <div class="card"><small>Conclusão</small><strong>${analytics.completionRate}%</strong></div>
               <div class="card"><small>Pendentes críticos</small><strong>${analytics.openCriticalReports.length}</strong></div>
-              <div class="card"><small>Idade média pendente</small><strong>${analytics.averageAgeDays}d</strong></div>
+              <div class="card"><small>Sem responsável</small><strong>${analytics.unassignedReports.length}</strong></div>
             </section>`
     )}
           <section class="two">
@@ -1974,6 +2268,8 @@ const Dashboard = () => {
             ${section("employees", `<div class="panel"><h2>Produção individual</h2>${renderPrintList(analytics.employeeData.map((item) => ({ name: item.name, value: item.total })))}</div>`)}
             ${section("departments", `<div class="panel"><h2>Departamentos</h2>${renderPrintList(analytics.departmentData.map((item) => ({ name: item.name, value: item.chamados })))}</div>`)}
             ${section("monthly", `<div class="panel"><h2>Evolução mensal</h2>${renderPrintList(analytics.monthlyData.map((item) => ({ name: item.month, value: item.abertos })))}</div>`)}
+            ${section("backlog", `<div class="panel"><h2>Backlog por status</h2>${renderPrintList(analytics.backlogData)}</div>`)}
+            ${section("efficiency", `<div class="panel"><h2>Eficiência por pessoa</h2>${renderPrintList(analytics.efficiencyData.map((item) => ({ name: item.name, value: item.taxa })))}</div>`)}
           </section>
         </body>
       </html>
@@ -1995,6 +2291,20 @@ const Dashboard = () => {
       hour: "2-digit",
       minute: "2-digit",
     });
+  };
+
+  const getAuditActorName = (log: AuditLog) => {
+    if (log.actorName) return log.actorName;
+    if (log.actorId) {
+      const employee = employees.find((item) => item.id === log.actorId);
+      const user = users.find(
+        (item) => item.id === log.actorId || item.employeeId === log.actorId
+      );
+
+      return employee?.name || user?.employee?.name || user?.email || `ID ${log.actorId}`;
+    }
+
+    return "Sistema";
   };
 
   const upsertReportInState = (report: AdminReport) => {
@@ -2724,7 +3034,7 @@ const Dashboard = () => {
               </div>
 
               <div className="grid gap-2 sm:grid-cols-2 xl:grid-cols-5">
-                <Select value={filterCategory} onValueChange={setFilterCategory}>
+                <Select value={analyticsCategory} onValueChange={setAnalyticsCategory}>
                   <SelectTrigger>
                     <SelectValue placeholder="Categoria" />
                   </SelectTrigger>
@@ -2738,7 +3048,7 @@ const Dashboard = () => {
                   </SelectContent>
                 </Select>
 
-                <Select value={filterStatus} onValueChange={setFilterStatus}>
+                <Select value={analyticsStatus} onValueChange={setAnalyticsStatus}>
                   <SelectTrigger>
                     <SelectValue placeholder="Status" />
                   </SelectTrigger>
@@ -2751,8 +3061,7 @@ const Dashboard = () => {
                     ))}
                   </SelectContent>
                 </Select>
-
-                <Select value={filterEmployee} onValueChange={setFilterEmployee}>
+                <Select value={analyticsEmployee} onValueChange={setAnalyticsEmployee}>
                   <SelectTrigger>
                     <SelectValue placeholder="Pessoa" />
                   </SelectTrigger>
@@ -2766,7 +3075,7 @@ const Dashboard = () => {
                   </SelectContent>
                 </Select>
 
-                <Select value={filterPeriod} onValueChange={setFilterPeriod}>
+                <Select value={analyticsPeriod} onValueChange={setAnalyticsPeriod}>
                   <SelectTrigger>
                     <SelectValue placeholder="Período" />
                   </SelectTrigger>
@@ -2782,34 +3091,51 @@ const Dashboard = () => {
                 </Select>
 
                 <Input
-                  value={filterLocation}
-                  onChange={(event) => setFilterLocation(event.target.value)}
+                  value={analyticsLocation}
+                  onChange={(event) => setAnalyticsLocation(event.target.value)}
                   placeholder="Local, descrição ou ID..."
                 />
               </div>
 
-              {filterPeriod === "custom" && (
+              {analyticsPeriod === "custom" && (
                 <div className="mt-2 grid gap-2 sm:grid-cols-2 lg:w-[420px]">
                   <Input
                     type="date"
-                    value={filterStartDate}
-                    onChange={(event) => setFilterStartDate(event.target.value)}
+                    value={analyticsStartDate}
+                    onChange={(event) => setAnalyticsStartDate(event.target.value)}
                   />
                   <Input
                     type="date"
-                    value={filterEndDate}
-                    onChange={(event) => setFilterEndDate(event.target.value)}
+                    value={analyticsEndDate}
+                    onChange={(event) => setAnalyticsEndDate(event.target.value)}
                   />
                 </div>
               )}
+              <Button
+                type="button"
+                variant="outline"
+                size="sm"
+                onClick={() => {
+                  setAnalyticsCategory("all");
+                  setAnalyticsStatus("all");
+                  setAnalyticsEmployee("all");
+                  setAnalyticsPeriod("all");
+                  setAnalyticsStartDate("");
+                  setAnalyticsEndDate("");
+                  setAnalyticsLocation("");
+                }}
+                className="mt-3"
+              >
+                Limpar filtros
+              </Button>
             </div>
 
             <div className="grid gap-3 md:grid-cols-2 xl:grid-cols-4">
               {[
                 {
                   label: "Chamados totais",
-                  value: filtered.length,
-                  detail: `${filtered.length} no filtro atual`,
+                  value: analyticsFiltered.length,
+                  detail: `${analyticsFiltered.length} no filtro atual`,
                   action: () => openReportsByStatus(),
                 },
                 {
@@ -2856,19 +3182,19 @@ const Dashboard = () => {
             <div className="grid gap-3 md:grid-cols-3">
               {[
                 {
-                  label: "Idade média pendente",
-                  value: `${analytics.averageAgeDays}d`,
-                  detail: "Tempo médio dos chamados ainda abertos",
+                  label: "Risco alto aberto",
+                  value: analytics.highRiskReports.length,
+                  detail: "Chamados alta/crítica ainda não finalizados",
                 },
                 {
-                  label: "Com mídia",
-                  value: analytics.reportsWithMedia.length,
-                  detail: "Chamados filtrados com foto, vídeo ou anexo",
+                  label: "Sem responsável",
+                  value: analytics.unassignedReports.length,
+                  detail: "Chamados sem funcionário atribuído",
                 },
                 {
-                  label: "Locais recorrentes",
-                  value: analytics.locationData.length,
-                  detail: "Pontos com registros agrupados no filtro",
+                  label: "Abertos na semana",
+                  value: analytics.reportsCreatedThisWeek.length,
+                  detail: "Volume recente dentro dos filtros atuais",
                 },
               ].map((item) => (
                 <div
@@ -2962,6 +3288,44 @@ const Dashboard = () => {
 
             <div className="grid gap-4 xl:grid-cols-2">
               <div className="rounded-2xl border border-border bg-card p-4 shadow-sm">
+                <p className="text-sm font-semibold">Backlog por status</p>
+                <p className="mb-4 text-xs text-muted-foreground">
+                  Onde os chamados ainda não finalizados estão concentrados.
+                </p>
+                <div className="h-72">
+                  <ResponsiveContainer width="100%" height="100%">
+                    <BarChart data={analytics.backlogData}>
+                      <CartesianGrid strokeDasharray="3 3" vertical={false} />
+                      <XAxis dataKey="name" tickLine={false} />
+                      <YAxis allowDecimals={false} tickLine={false} />
+                      <Tooltip />
+                      <Bar dataKey="value" fill="#dc2626" radius={[8, 8, 0, 0]} />
+                    </BarChart>
+                  </ResponsiveContainer>
+                </div>
+              </div>
+
+              <div className="rounded-2xl border border-border bg-card p-4 shadow-sm">
+                <p className="text-sm font-semibold">Eficiência por pessoa</p>
+                <p className="mb-4 text-xs text-muted-foreground">
+                  Percentual de chamados finalizados entre os atribuídos.
+                </p>
+                <div className="h-72">
+                  <ResponsiveContainer width="100%" height="100%">
+                    <BarChart data={analytics.efficiencyData} layout="vertical">
+                      <CartesianGrid strokeDasharray="3 3" horizontal={false} />
+                      <XAxis type="number" domain={[0, 100]} tickFormatter={(value) => `${value}%`} />
+                      <YAxis dataKey="name" type="category" width={96} />
+                      <Tooltip formatter={(value) => `${value}%`} />
+                      <Bar dataKey="taxa" fill="#0f766e" radius={[0, 8, 8, 0]} />
+                    </BarChart>
+                  </ResponsiveContainer>
+                </div>
+              </div>
+            </div>
+
+            <div className="grid gap-4 xl:grid-cols-2">
+              <div className="rounded-2xl border border-border bg-card p-4 shadow-sm">
                 <p className="text-sm font-semibold">Produção individual</p>
                 <p className="mb-4 text-xs text-muted-foreground">
                   Ranking dos funcionários mais envolvidos em chamados.
@@ -3016,7 +3380,7 @@ const Dashboard = () => {
                           style={{
                             width: `${Math.max(
                               8,
-                              (item.value / Math.max(1, filtered.length)) * 100
+                              (item.value / Math.max(1, analyticsFiltered.length)) * 100
                             )}%`,
                             backgroundColor: item.color,
                           }}
@@ -3067,7 +3431,7 @@ const Dashboard = () => {
                           style={{
                             width: `${Math.max(
                               8,
-                              (item.value / Math.max(1, filtered.length)) * 100
+                              (item.value / Math.max(1, analyticsFiltered.length)) * 100
                             )}%`,
                           }}
                         />
@@ -3086,25 +3450,25 @@ const Dashboard = () => {
                   label: "Total",
                   value: stats.total,
                   color: "text-primary",
-                  action: () => openReportsByStatus(),
+                  action: () => applyReportStatusFilter(),
                 },
                 {
                   label: "Abertos",
                   value: stats.open,
                   color: "text-red-700",
-                  action: () => openReportsByStatus("ABERTO"),
+                  action: () => applyReportStatusFilter("ABERTO"),
                 },
                 {
                   label: "Em andamento",
                   value: stats.inProgress,
                   color: "text-blue-700",
-                  action: () => openReportsByStatus("EM_ANDAMENTO"),
+                  action: () => applyReportStatusFilter("EM_ANDAMENTO"),
                 },
                 {
                   label: "Finalizados",
                   value: stats.done,
                   color: "text-green-700",
-                  action: () => openReportsByStatus("FINALIZADO"),
+                  action: () => applyReportStatusFilter("FINALIZADO"),
                 },
               ].map((s) => (
                 <button
@@ -3235,6 +3599,23 @@ const Dashboard = () => {
                   onChange={(e) => setFilterLocation(e.target.value)}
                   className="h-9 w-full text-sm lg:w-[280px]"
                 />
+                <Button
+                  type="button"
+                  variant="outline"
+                  size="sm"
+                  onClick={() => {
+                    setFilterCategory("all");
+                    setFilterStatus("all");
+                    setFilterEmployee("all");
+                    setFilterPeriod("all");
+                    setFilterStartDate("");
+                    setFilterEndDate("");
+                    setFilterLocation("");
+                  }}
+                  className="justify-center"
+                >
+                  Limpar filtros
+                </Button>
               </div>
             </div>
 
@@ -3476,7 +3857,16 @@ const Dashboard = () => {
                       className="gap-2"
                     >
                       <FileSpreadsheet className="h-4 w-4" />
-                      Exportar
+                      CSV
+                    </Button>
+                    <Button
+                      type="button"
+                      variant="outline"
+                      onClick={exportEmployeesPdf}
+                      className="gap-2"
+                    >
+                      <Download className="h-4 w-4" />
+                      PDF
                     </Button>
                     <Button
                       type="button"
@@ -4144,6 +4534,17 @@ const Dashboard = () => {
             </button>
             <button
               type="button"
+              onClick={exportAuditPdf}
+              className="rounded-2xl border border-border bg-card p-5 text-left shadow-sm transition hover:-translate-y-0.5 hover:shadow-md"
+            >
+              <Download className="mb-3 h-6 w-6 text-primary" />
+              <p className="font-semibold">Auditoria em PDF</p>
+              <p className="mt-1 text-sm text-muted-foreground">
+                Gere um relatório visual com data, ação e responsável.
+              </p>
+            </button>
+            <button
+              type="button"
               onClick={() => setShowReportExportModal(true)}
               className="rounded-2xl border border-border bg-card p-5 text-left shadow-sm transition hover:-translate-y-0.5 hover:shadow-md"
             >
@@ -4239,7 +4640,17 @@ const Dashboard = () => {
                     className="gap-2"
                   >
                     <Download className="h-4 w-4" />
-                    Baixar
+                    CSV
+                  </Button>
+                  <Button
+                    type="button"
+                    variant="outline"
+                    size="sm"
+                    onClick={exportAuditPdf}
+                    className="gap-2"
+                  >
+                    <Download className="h-4 w-4" />
+                    PDF
                   </Button>
                   <button
                     type="button"
@@ -4283,6 +4694,12 @@ const Dashboard = () => {
                           </span>
                         </div>
                         <p className="mt-3 text-sm font-medium">{log.summary}</p>
+                        <p className="mt-1 text-xs text-muted-foreground">
+                          Alterado por{" "}
+                          <span className="font-semibold text-foreground">
+                            {getAuditActorName(log)}
+                          </span>
+                        </p>
                         {log.metadata ? (
                           <pre className="mt-3 max-h-32 overflow-auto rounded-xl bg-muted p-3 text-xs text-muted-foreground">
                             {JSON.stringify(log.metadata, null, 2)}
@@ -5115,7 +5532,8 @@ const Dashboard = () => {
                     {selectedReport.title || `Chamado #${selectedReport.id}`}
                   </h2>
                   <p className="text-xs text-muted-foreground">
-                    Aberto por {selectedReport.employee?.name}
+                    Aberto por {selectedReport.employee?.name} em{" "}
+                    {new Date(selectedReport.createdAt).toLocaleString("pt-BR")}
                   </p>
                 </div>
 
@@ -5527,6 +5945,15 @@ const Dashboard = () => {
                 >
                   <FileSpreadsheet className="h-4 w-4" />
                   Baixar CSV
+                </Button>
+                <Button
+                  type="button"
+                  variant="outline"
+                  onClick={exportFilteredReportsPdf}
+                  className="gap-2"
+                >
+                  <Download className="h-4 w-4" />
+                  Gerar PDF
                 </Button>
               </div>
             </motion.div>
