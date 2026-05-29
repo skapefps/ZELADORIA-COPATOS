@@ -97,6 +97,34 @@
 }
 
 @layer utilities {
+  .modal-max-h-90 {
+    max-height: 90vh;
+  }
+  .modal-max-h-72 {
+    max-height: 72vh;
+  }
+  .modal-max-h-92 {
+    max-height: 92vh;
+  }
+  .mobile-full-height {
+    height: 100vh;
+    max-height: 100vh;
+  }
+  @supports (height: 100dvh) {
+    .modal-max-h-90 {
+      max-height: 90dvh;
+    }
+    .modal-max-h-72 {
+      max-height: 72dvh;
+    }
+    .modal-max-h-92 {
+      max-height: 92dvh;
+    }
+    .mobile-full-height {
+      height: 100dvh;
+      max-height: 100dvh;
+    }
+  }
   .gradient-primary {
     background: linear-gradient(135deg, hsl(var(--primary)), hsl(var(--primary) / 0.88));
   }

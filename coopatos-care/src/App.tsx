@@ -28,7 +28,7 @@ const ProtectedAdmin = ({ children }: { children: React.ReactNode }) => {
   const department = admin?.employee?.department || "";
   const isAdministrativeDepartment = department
     .normalize("NFD")
-    .replace(/\p{Diacritic}/gu, "")
+    .replace(/[\u0300-\u036f]/g, "")
     .toLowerCase()
     .includes("administrativo");
 

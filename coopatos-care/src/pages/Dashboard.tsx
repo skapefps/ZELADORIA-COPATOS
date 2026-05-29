@@ -2127,18 +2127,18 @@ const Dashboard = () => {
   }[adminSection];
 
   return (
-    <div className="min-h-screen bg-background">
-      <header className="gradient-primary sticky top-0 z-20 flex items-center justify-between px-6 py-4">
-        <div className="flex items-center gap-3">
+    <div className="min-h-screen overflow-x-hidden bg-background">
+      <header className="gradient-primary sticky top-0 z-20 flex items-center justify-between gap-3 px-4 py-3 sm:px-6 sm:py-4">
+        <div className="flex min-w-0 items-center gap-3">
           <BrandLogo
-            imageClassName="h-20 w-20 rounded-xl object-contain"
+            imageClassName="h-14 w-14 rounded-xl object-contain sm:h-20 sm:w-20"
           />
 
-          <div>
-            <h1 className="text-lg font-bold text-primary-foreground">
+          <div className="min-w-0">
+            <h1 className="truncate text-lg font-bold text-primary-foreground sm:text-xl">
               {brandPreset.shortName}
             </h1>
-            <p className="text-xs text-primary-foreground/60">
+            <p className="truncate text-xs text-primary-foreground/60 sm:text-sm">
               {brandPreset.adminTitle} • {brandPreset.organizationName}
             </p>
           </div>
@@ -2149,14 +2149,14 @@ const Dashboard = () => {
             logout();
             navigate("/admin/login", { replace: true });
           }}
-          className="flex items-center gap-1 text-sm text-primary-foreground/70 hover:text-primary-foreground"
+          className="flex shrink-0 items-center gap-1 text-sm text-primary-foreground/70 hover:text-primary-foreground"
         >
           <LogOut className="h-4 w-4" />
           Sair
         </button>
       </header>
 
-      <div className="sticky top-[112px] z-10 border-b border-border/60 bg-background/80 backdrop-blur-xl">
+      <div className="sticky top-[80px] z-10 border-b border-border/60 bg-background/80 backdrop-blur-xl sm:top-[112px]">
         <div className="mx-auto max-w-7xl overflow-x-auto px-4 py-3">
           <div className="flex min-w-max gap-2 rounded-2xl bg-muted/40 p-1">
             {adminMenu.map((item) => {
@@ -2168,7 +2168,7 @@ const Dashboard = () => {
                   key={item.id}
                   type="button"
                   onClick={() => setAdminSection(item.id)}
-                  className={`group relative flex shrink-0 items-center gap-2 rounded-xl px-4 py-2.5 text-sm font-medium transition-all duration-300 ${active
+                  className={`group relative flex shrink-0 items-center gap-2 rounded-xl px-3 py-2.5 text-sm font-medium transition-all duration-300 sm:px-4 ${active
                       ? "bg-card text-primary shadow-sm"
                       : "text-muted-foreground hover:bg-card/70 hover:text-foreground"
                     }`}
@@ -2193,7 +2193,7 @@ const Dashboard = () => {
         </div>
       </div>
 
-      <main className="mx-auto max-w-7xl p-4 lg:p-6">
+      <main className="mx-auto w-full max-w-7xl p-4 lg:p-6">
         {adminSection === "analytics" ? (
           <div className="space-y-5">
             <div className="grid gap-3 md:grid-cols-2 xl:grid-cols-4">
@@ -2430,15 +2430,14 @@ const Dashboard = () => {
               ))}
             </div>
 
-            <div className="mb-4 flex flex-col gap-3 lg:flex-row">
-              <div className="flex gap-2">
+            <div className="mb-4 flex min-w-0 flex-col gap-3 lg:flex-row">
+              <div className="grid grid-cols-2 gap-2 sm:flex sm:flex-wrap">
                 <Button
                   variant={view === "list" ? "default" : "outline"}
                   size="sm"
                   onClick={() => setView("list")}
-                  className={
-                    view === "list" ? "bg-primary text-primary-foreground" : ""
-                  }
+                  className={`justify-center ${view === "list" ? "bg-primary text-primary-foreground" : ""
+                    }`}
                 >
                   <List className="mr-1 h-4 w-4" />
                   Lista
@@ -2448,9 +2447,8 @@ const Dashboard = () => {
                   variant={view === "maps" ? "default" : "outline"}
                   size="sm"
                   onClick={() => setView("maps")}
-                  className={
-                    view === "maps" ? "bg-primary text-primary-foreground" : ""
-                  }
+                  className={`justify-center ${view === "maps" ? "bg-primary text-primary-foreground" : ""
+                    }`}
                 >
                   <MapIcon className="mr-1 h-4 w-4" />
                   Mapas
@@ -2459,7 +2457,7 @@ const Dashboard = () => {
                   type="button"
                   size="sm"
                   onClick={openNewReportModal}
-                  className="gap-1 bg-secondary text-secondary-foreground hover:bg-secondary/90"
+                  className="justify-center gap-1 bg-secondary text-secondary-foreground hover:bg-secondary/90"
                 >
                   <Plus className="h-4 w-4" />
                   Novo
@@ -2469,7 +2467,7 @@ const Dashboard = () => {
                   variant="outline"
                   size="sm"
                   onClick={() => exportAdminCsv("reports")}
-                  className="gap-1"
+                  className="justify-center gap-1"
                 >
                   <FileSpreadsheet className="h-4 w-4" />
                   Planilha
@@ -2479,19 +2477,19 @@ const Dashboard = () => {
                   variant="outline"
                   size="sm"
                   onClick={openAuditLogs}
-                  className="gap-1"
+                  className="justify-center gap-1"
                 >
                   <History className="h-4 w-4" />
                   Auditoria
                 </Button>
               </div>
 
-              <div className="flex flex-1 flex-wrap gap-2">
+              <div className="grid min-w-0 flex-1 grid-cols-1 gap-2 sm:grid-cols-2 lg:flex lg:flex-wrap">
                 <Select
                   value={filterCategory}
                   onValueChange={setFilterCategory}
                 >
-                  <SelectTrigger className="h-9 w-[170px] text-sm">
+                  <SelectTrigger className="h-9 w-full text-sm lg:w-[170px]">
                     <SelectValue placeholder="Categoria" />
                   </SelectTrigger>
                   <SelectContent>
@@ -2510,7 +2508,7 @@ const Dashboard = () => {
                 </Select>
 
                 <Select value={filterStatus} onValueChange={setFilterStatus}>
-                  <SelectTrigger className="h-9 w-[170px] text-sm">
+                  <SelectTrigger className="h-9 w-full text-sm lg:w-[170px]">
                     <SelectValue placeholder="Status" />
                   </SelectTrigger>
                   <SelectContent>
@@ -2524,7 +2522,7 @@ const Dashboard = () => {
                 </Select>
 
                 <Select value={filterEmployee} onValueChange={setFilterEmployee}>
-                  <SelectTrigger className="h-9 w-[220px] text-sm">
+                  <SelectTrigger className="h-9 w-full text-sm lg:w-[220px]">
                     <SelectValue placeholder="Funcionário atribuído" />
                   </SelectTrigger>
                   <SelectContent>
@@ -2538,7 +2536,7 @@ const Dashboard = () => {
                 </Select>
 
                 <Select value={filterPeriod} onValueChange={setFilterPeriod}>
-                  <SelectTrigger className="h-9 w-[170px] text-sm">
+                  <SelectTrigger className="h-9 w-full text-sm lg:w-[170px]">
                     <SelectValue placeholder="Período" />
                   </SelectTrigger>
                   <SelectContent>
@@ -2553,18 +2551,18 @@ const Dashboard = () => {
                 </Select>
 
                 {filterPeriod === "custom" && (
-                  <div className="flex w-full flex-wrap gap-2 lg:w-auto">
+                  <div className="grid w-full grid-cols-1 gap-2 sm:grid-cols-2 lg:w-auto">
                     <Input
                       type="date"
                       value={filterStartDate}
                       onChange={(event) => setFilterStartDate(event.target.value)}
-                      className="h-9 w-[150px] text-sm"
+                      className="h-9 w-full text-sm lg:w-[150px]"
                     />
                     <Input
                       type="date"
                       value={filterEndDate}
                       onChange={(event) => setFilterEndDate(event.target.value)}
-                      className="h-9 w-[150px] text-sm"
+                      className="h-9 w-full text-sm lg:w-[150px]"
                     />
                   </div>
                 )}
@@ -2601,8 +2599,8 @@ const Dashboard = () => {
                     }}
                     className="group cursor-pointer rounded-2xl border border-border bg-card p-4 transition-all hover:-translate-y-0.5 hover:border-secondary/50 hover:shadow-lg"
                   >
-                    <div className="flex items-center gap-4">
-                      <div className="flex w-8 flex-col items-center gap-1">
+                    <div className="flex min-w-0 items-start gap-3 sm:items-center sm:gap-4">
+                      <div className="flex w-8 shrink-0 flex-col items-center gap-1">
                         <div
                           className={`h-8 w-2 rounded-full ${priorityBarColor(
                             report
@@ -2622,14 +2620,14 @@ const Dashboard = () => {
                       />
 
                       <div className="min-w-0 flex-1">
-                        <div className="mb-1 flex items-center gap-2">
-                          <span className="text-primary">
+                        <div className="mb-1 flex min-w-0 flex-wrap items-center gap-2">
+                          <span className="shrink-0 text-primary">
                             {categoryIcons[report.category.name] || (
                               <HelpCircle className="h-4 w-4" />
                             )}
                           </span>
 
-                          <span className="truncate text-sm font-semibold">
+                          <span className="min-w-0 max-w-full truncate text-sm font-semibold">
                             {report.title || report.category.name}
                           </span>
 
@@ -2645,12 +2643,14 @@ const Dashboard = () => {
                             "Sem descrição"}
                         </p>
 
-                        <div className="mt-1 flex flex-wrap items-center gap-3">
-                          <span className="flex items-center gap-1 text-[11px] text-muted-foreground">
+                        <div className="mt-1 flex min-w-0 flex-wrap items-center gap-2 sm:gap-3">
+                          <span className="flex min-w-0 items-center gap-1 text-[11px] text-muted-foreground">
                             <MapPin className="h-3 w-3" />
-                            {report.referencePoint ||
-                              report.address ||
-                              "Local não informado"}
+                            <span className="min-w-0 break-words">
+                              {report.referencePoint ||
+                                report.address ||
+                                "Local não informado"}
+                            </span>
                           </span>
 
                           <span className="text-[11px] text-muted-foreground">
@@ -2667,7 +2667,7 @@ const Dashboard = () => {
                       </div>
 
                       <span
-                        className={`whitespace-nowrap rounded-full border px-3 py-1 text-xs ${statusColors[report.status.name] ||
+                        className={`ml-auto shrink-0 whitespace-nowrap rounded-full border px-2.5 py-1 text-xs sm:px-3 ${statusColors[report.status.name] ||
                           "border-border bg-muted text-muted-foreground"
                           }`}
                       >
@@ -3273,7 +3273,7 @@ const Dashboard = () => {
               animate={{ opacity: 1, y: 0, scale: 1 }}
               exit={{ opacity: 0, y: 36, scale: 0.98 }}
               onClick={(event) => event.stopPropagation()}
-              className="max-h-[90dvh] w-full max-w-4xl overflow-hidden rounded-t-3xl border border-border bg-card shadow-2xl sm:rounded-3xl"
+              className="modal-max-h-90 w-full max-w-4xl overflow-hidden rounded-t-3xl border border-border bg-card shadow-2xl sm:rounded-3xl"
             >
               <div className="flex items-center justify-between border-b border-border p-4">
                 <div className="flex items-center gap-3">
@@ -3308,7 +3308,7 @@ const Dashboard = () => {
                 </div>
               </div>
 
-              <div className="max-h-[72dvh] overflow-y-auto p-4">
+              <div className="modal-max-h-72 overflow-y-auto p-4">
                 {loadingAuditLogs ? (
                   <div className="flex items-center gap-2 text-sm text-muted-foreground">
                     <Loader2 className="h-4 w-4 animate-spin" />
@@ -3508,7 +3508,7 @@ const Dashboard = () => {
               animate={{ opacity: 1, y: 0, scale: 1 }}
               exit={{ opacity: 0, y: 36, scale: 0.98 }}
               onClick={(event) => event.stopPropagation()}
-              className="max-h-[92dvh] w-full max-w-4xl overflow-y-auto rounded-t-3xl border border-border bg-card shadow-2xl sm:rounded-3xl"
+              className="modal-max-h-92 w-full max-w-4xl overflow-y-auto rounded-t-3xl border border-border bg-card shadow-2xl sm:rounded-3xl"
             >
               <div className="sticky top-0 z-10 flex items-center justify-between border-b border-border bg-card/95 p-4 backdrop-blur">
                 <div className="flex items-center gap-3">
@@ -3889,7 +3889,7 @@ const Dashboard = () => {
               animate={{ opacity: 1, y: 0, scale: 1 }}
               exit={{ opacity: 0, y: 40, scale: 0.98 }}
               onClick={(event) => event.stopPropagation()}
-              className="max-h-[92dvh] w-full max-w-3xl overflow-y-auto rounded-t-3xl border border-border bg-card shadow-2xl sm:rounded-3xl"
+              className="modal-max-h-92 w-full max-w-3xl overflow-y-auto rounded-t-3xl border border-border bg-card shadow-2xl sm:rounded-3xl"
             >
               <div className="sticky top-0 z-10 flex items-center justify-between border-b border-border bg-card/95 p-4 backdrop-blur">
                 <div className="flex items-center gap-3">
@@ -4164,7 +4164,7 @@ const Dashboard = () => {
               animate={{ opacity: 1, scale: 1 }}
               exit={{ opacity: 0, scale: 0.96 }}
               onClick={(event) => event.stopPropagation()}
-              className="max-h-[92dvh] w-full max-w-3xl overflow-y-auto rounded-t-3xl border border-border bg-card shadow-2xl sm:rounded-3xl"
+              className="modal-max-h-92 w-full max-w-3xl overflow-y-auto rounded-t-3xl border border-border bg-card shadow-2xl sm:rounded-3xl"
             >
               <div className="flex items-center justify-between border-b border-border p-4">
                 <div>

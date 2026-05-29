@@ -375,6 +375,37 @@ const getCloudinaryAudioPlaybackUrl = (url: string) => {
   return playbackUrl;
 };
 
+const mentionTailRegex = /(?:^|\s)@([A-Za-zÀ-ÿ0-9._-]*)$/;
+
+const getSupportedAudioMimeType = () => {
+  if (typeof window === "undefined" || !("MediaRecorder" in window)) {
+    return "";
+  }
+
+  const mediaRecorder = window.MediaRecorder;
+  const candidates = [
+    "audio/mp4;codecs=mp4a.40.2",
+    "audio/mp4",
+    "audio/webm;codecs=opus",
+    "audio/webm",
+  ];
+
+  return candidates.find((type) => mediaRecorder.isTypeSupported(type)) || "";
+};
+
+const createAudioFile = (parts: BlobPart[], filename: string, type: string) => {
+  const blob = new Blob(parts, { type });
+
+  try {
+    return new File([blob], filename, { type });
+  } catch {
+    return Object.assign(blob, {
+      name: filename,
+      lastModified: Date.now(),
+    }) as File;
+  }
+};
+
 const AudioMessage = ({ url, apiUrl }: { url: string; apiUrl: string }) => {
   const compatibleUrl = getCloudinaryAudioPlaybackUrl(url);
   const audioUrl = `${apiUrl}/media-proxy?url=${encodeURIComponent(compatibleUrl)}`;
@@ -1029,7 +1060,7 @@ const EmployeePanel = () => {
   );
 
   const getMentionQuery = (text: string) => {
-    const match = text.match(/(?:^|\s)@([\p{L}\p{N}._-]*)$/u);
+    const match = text.match(mentionTailRegex);
     return match ? match[1].toLowerCase() : null;
   };
 
@@ -1039,8 +1070,8 @@ const EmployeePanel = () => {
     setter: (value: string) => void
   ) => {
     const mention = `@${name} `;
-    const nextText = text.match(/(?:^|\s)@([\p{L}\p{N}._-]*)$/u)
-      ? text.replace(/(?:^|\s)@([\p{L}\p{N}._-]*)$/u, (match) =>
+    const nextText = text.match(mentionTailRegex)
+      ? text.replace(mentionTailRegex, (match) =>
         match.startsWith(" ") ? ` ${mention}` : mention
       )
       : `${text}${text.endsWith(" ") || !text ? "" : " "}${mention}`;
@@ -1612,22 +1643,23 @@ const EmployeePanel = () => {
 
   const startPrivateAudioRecording = async () => {
     try {
+      if (!navigator.mediaDevices?.getUserMedia || !("MediaRecorder" in window)) {
+        toast({
+          title: "Gravação indisponível",
+          description:
+            "Este navegador não oferece suporte completo para gravação de áudio.",
+          variant: "destructive",
+        });
+        return;
+      }
+
       const stream = await navigator.mediaDevices.getUserMedia({
         audio: true,
       });
 
-      const mimeType =
-        MediaRecorder.isTypeSupported("audio/mp4;codecs=mp4a.40.2")
-          ? "audio/mp4;codecs=mp4a.40.2"
-          : MediaRecorder.isTypeSupported("audio/mp4")
-            ? "audio/mp4"
-            : MediaRecorder.isTypeSupported("audio/webm;codecs=opus")
-              ? "audio/webm;codecs=opus"
-              : MediaRecorder.isTypeSupported("audio/webm")
-                ? "audio/webm"
-                : "";
+      const mimeType = getSupportedAudioMimeType();
 
-      const recorder = new MediaRecorder(
+      const recorder = new window.MediaRecorder(
         stream,
         mimeType ? { mimeType } : undefined
       );
@@ -1645,14 +1677,10 @@ const EmployeePanel = () => {
         const finalMimeType = recorder.mimeType || mimeType || "audio/webm";
         const extension = finalMimeType.includes("mp4") ? "m4a" : "webm";
 
-        const audioBlob = new Blob(privateAudioChunksRef.current, {
-          type: finalMimeType,
-        });
-
-        const audioFile = new File(
-          [audioBlob],
+        const audioFile = createAudioFile(
+          privateAudioChunksRef.current,
           `audio-privado-${Date.now()}.${extension}`,
-          { type: finalMimeType }
+          finalMimeType
         );
 
         setPrivateChatFiles((prev) => [...prev, audioFile]);
@@ -2503,22 +2531,23 @@ const EmployeePanel = () => {
 
   const startAudioRecording = async () => {
     try {
+      if (!navigator.mediaDevices?.getUserMedia || !("MediaRecorder" in window)) {
+        toast({
+          title: "Gravação indisponível",
+          description:
+            "Este navegador não oferece suporte completo para gravação de áudio.",
+          variant: "destructive",
+        });
+        return;
+      }
+
       const stream = await navigator.mediaDevices.getUserMedia({
         audio: true,
       });
 
-      const mimeType =
-        MediaRecorder.isTypeSupported("audio/mp4;codecs=mp4a.40.2")
-          ? "audio/mp4;codecs=mp4a.40.2"
-          : MediaRecorder.isTypeSupported("audio/mp4")
-            ? "audio/mp4"
-            : MediaRecorder.isTypeSupported("audio/webm;codecs=opus")
-              ? "audio/webm;codecs=opus"
-              : MediaRecorder.isTypeSupported("audio/webm")
-                ? "audio/webm"
-                : "";
+      const mimeType = getSupportedAudioMimeType();
 
-      const recorder = new MediaRecorder(
+      const recorder = new window.MediaRecorder(
         stream,
         mimeType ? { mimeType } : undefined
       );
@@ -2534,14 +2563,10 @@ const EmployeePanel = () => {
       recorder.onstop = () => {
         const finalMimeType = recorder.mimeType || mimeType || "audio/webm";
         const extension = finalMimeType.includes("mp4") ? "m4a" : "webm";
-        const audioBlob = new Blob(audioChunksRef.current, {
-          type: finalMimeType,
-        });
-
-        const audioFile = new File(
-          [audioBlob],
+        const audioFile = createAudioFile(
+          audioChunksRef.current,
           `audio-${Date.now()}.${extension}`,
-          { type: finalMimeType }
+          finalMimeType
         );
 
         setChatFiles((prev) => [...prev, audioFile]);
@@ -6228,7 +6253,7 @@ touch-manipulation
                 animate={{ opacity: 1, y: 0, scale: 1 }}
                 exit={{ opacity: 0, y: 40, scale: 0.98 }}
                 onClick={(e) => e.stopPropagation()}
-                className="relative w-full sm:max-w-lg h-[100dvh] sm:h-[75vh] max-h-[100dvh] rounded-none sm:rounded-3xl bg-card shadow-2xl border border-border flex flex-col overflow-hidden"
+                className="mobile-full-height relative w-full sm:h-[75vh] sm:max-h-[75vh] sm:max-w-lg rounded-none border border-border bg-card shadow-2xl sm:rounded-3xl flex flex-col overflow-hidden"
               >
                 <div className="flex items-center justify-between border-b border-border p-4">
                   <div>

@@ -221,6 +221,12 @@ const isValidCpf = (cpf: string) => {
   );
 };
 
+const normalizeTextForPermission = (value?: string | null) =>
+  String(value || "")
+    .normalize("NFD")
+    .replace(/[\u0300-\u036f]/g, "")
+    .toLowerCase();
+
 const sendEmployeeVerificationEmailInBackground = (employee: {
   id: number;
   name: string;
@@ -318,11 +324,9 @@ const requireAdminRequest = async (
     });
 
     const isAdministrativeDepartment =
-      user?.employee?.department
-        ?.normalize("NFD")
-        .replace(/\p{Diacritic}/gu, "")
-        .toLowerCase()
-        .includes("administrativo") ?? false;
+      normalizeTextForPermission(user?.employee?.department).includes(
+        "administrativo"
+      );
 
     if (
       !user ||
@@ -2432,11 +2436,9 @@ router.post("/admin-login", async (req, res) => {
     }
 
     const isAdministrativeDepartment =
-      user.employee?.department
-        ?.normalize("NFD")
-        .replace(/\p{Diacritic}/gu, "")
-        .toLowerCase()
-        .includes("administrativo") ?? false;
+      normalizeTextForPermission(user.employee?.department).includes(
+        "administrativo"
+      );
 
     if (!isAdministrativeDepartment) {
       return res.status(403).json({
