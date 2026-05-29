@@ -6,7 +6,8 @@ import { Shield } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { BrandLogo } from "@/components/BrandLogo";
-import { brandPreset } from "@/config/brand";
+import { useBranding } from "@/config/brand";
+import { useToast } from "@/hooks/use-toast";
 
 const AdminLogin = () => {
   const [user, setUser] = useState("");
@@ -15,10 +16,35 @@ const AdminLogin = () => {
   const [loading, setLoading] = useState(false);
   const { loginAdmin } = useAuth();
   const navigate = useNavigate();
+  const { brandPreset } = useBranding();
+  const { toast } = useToast();
 
   useEffect(() => {
+    const sessionExpired = sessionStorage.getItem("sessionExpired");
+    const expiredRole = sessionStorage.getItem("sessionExpiredRole");
+    const storedForcedLogoutMessage = sessionStorage.getItem("adminForcedLogout");
+
+    if (sessionExpired === "true" && expiredRole === "admin") {
+      toast({
+        title: "Sessão expirada",
+        description:
+          "Sua sessão administrativa expirou por inatividade. Faça login novamente para continuar.",
+        variant: "destructive",
+      });
+    }
+
+    if (storedForcedLogoutMessage) {
+      toast({
+        title: "Sessão encerrada",
+        description: storedForcedLogoutMessage,
+        variant: "destructive",
+      });
+    }
+
     sessionStorage.removeItem("sessionExpired");
-  }, []);
+    sessionStorage.removeItem("sessionExpiredRole");
+    sessionStorage.removeItem("adminForcedLogout");
+  }, [toast]);
 
   const handleSubmit = async (
     e: React.FormEvent

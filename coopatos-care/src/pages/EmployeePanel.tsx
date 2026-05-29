@@ -42,7 +42,7 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
 import { BrandLogo } from "@/components/BrandLogo";
-import { brandPreset } from "@/config/brand";
+import { useBranding } from "@/config/brand";
 import {
   Select,
   SelectContent,
@@ -424,6 +424,7 @@ const AudioMessage = ({ url, apiUrl }: { url: string; apiUrl: string }) => {
 
 const EmployeePanel = () => {
   const employee = JSON.parse(localStorage.getItem("employee") || "{}");
+  const { brandPreset } = useBranding();
   const API_URL =
     window.location.hostname === "localhost" ||
       window.location.hostname === "127.0.0.1"
@@ -447,7 +448,6 @@ const EmployeePanel = () => {
   const [unreadCounts, setUnreadCounts] = useState<Record<number, number>>({});
   const [address, setAddress] = useState("");
   const [editAddress, setEditAddress] = useState("");
-  const INACTIVITY_LIMIT = 15 * 60 * 1000; // 15 minutos temporario para testar inatividade
   const messagesContainerRef = useRef<HTMLDivElement | null>(null);
   const previousMessagesLengthRef = useRef(0);
   const sendingMessageRef = useRef(false);
@@ -698,7 +698,10 @@ const EmployeePanel = () => {
       reconnectionAttempts: 5,
       query: {
         employeeId: employee.id,
-        sessionToken: localStorage.getItem("employeeSessionToken") || "",
+        sessionToken:
+          sessionStorage.getItem("employeeSessionToken") ||
+          localStorage.getItem("employeeSessionToken") ||
+          "",
       },
     });
 
@@ -771,13 +774,20 @@ const EmployeePanel = () => {
       reason?: string;
       sessionToken?: string;
     }) => {
-      const currentToken = localStorage.getItem("employeeSessionToken");
+      const currentToken =
+        sessionStorage.getItem("employeeSessionToken") ||
+        localStorage.getItem("employeeSessionToken");
 
       if (data.sessionToken && data.sessionToken === currentToken) return;
 
+      sessionStorage.setItem(
+        "employeeForcedLogout",
+        data.reason || "Sua conta foi acessada em outro dispositivo ou guia."
+      );
       localStorage.removeItem("lastActivityAt");
       localStorage.removeItem("employee");
       localStorage.removeItem("employeeSessionToken");
+      sessionStorage.removeItem("employeeSessionToken");
       localStorage.removeItem("welcomeShown");
 
       logout();
@@ -869,7 +879,7 @@ const EmployeePanel = () => {
         description: "Login realizado com sucesso.",
         className:
           "bg-secondary text-secondary-foreground border-secondary",
-        duration: 1800,
+        duration: 3000,
       });
 
       localStorage.setItem("welcomeShown", "true");
@@ -3238,70 +3248,6 @@ const EmployeePanel = () => {
     }
   };
 
-  useEffect(() => {
-    const updateLastActivity = () => {
-      localStorage.setItem("lastActivityAt", String(Date.now()));
-      localStorage.setItem("lastActivity", String(Date.now()));
-    };
-
-    const checkInactivity = () => {
-      const lastActivityAt = Number(
-        localStorage.getItem("lastActivityAt") ||
-        localStorage.getItem("lastActivity") ||
-        0
-      );
-
-      if (!lastActivityAt) {
-        updateLastActivity();
-        return;
-      }
-
-      const inactiveTime = Date.now() - lastActivityAt;
-
-      if (inactiveTime > INACTIVITY_LIMIT) {
-        localStorage.removeItem("welcomeShown");
-        localStorage.removeItem("employee");
-        localStorage.removeItem("employeeSessionToken");
-        logout("timeout");
-        navigate("/", { replace: true });
-      }
-    };
-
-    const handleUserActivity = () => {
-      updateLastActivity();
-    };
-
-    updateLastActivity();
-
-    window.addEventListener("click", handleUserActivity);
-    window.addEventListener("keydown", handleUserActivity);
-    window.addEventListener("touchstart", handleUserActivity);
-    window.addEventListener("scroll", handleUserActivity);
-
-    window.addEventListener("focus", checkInactivity);
-    const handleVisibilityChange = () => {
-      if (!document.hidden) {
-        checkInactivity();
-      }
-    };
-
-    document.addEventListener("visibilitychange", handleVisibilityChange);
-
-    const interval = window.setInterval(checkInactivity, 10 * 1000);
-
-    return () => {
-      window.removeEventListener("click", handleUserActivity);
-      window.removeEventListener("keydown", handleUserActivity);
-      window.removeEventListener("touchstart", handleUserActivity);
-      window.removeEventListener("scroll", handleUserActivity);
-
-      window.removeEventListener("focus", checkInactivity);
-      document.removeEventListener("visibilitychange", handleVisibilityChange);
-      window.clearInterval(interval);
-    };
-  }, [logout, navigate]);
-
-
   // =========================
   // Logout
   // =========================
@@ -3310,6 +3256,7 @@ const EmployeePanel = () => {
     localStorage.removeItem("welcomeShown");
     localStorage.removeItem("employee");
     localStorage.removeItem("employeeSessionToken");
+    sessionStorage.removeItem("employeeSessionToken");
 
     logout();
 
@@ -3325,6 +3272,7 @@ const EmployeePanel = () => {
       if (!employeeData?.id) return;
 
       const localToken =
+        sessionStorage.getItem("employeeSessionToken") ||
         localStorage.getItem("employeeSessionToken");
 
       const response = await fetch(
@@ -3337,6 +3285,10 @@ const EmployeePanel = () => {
         data.activeSessionToken &&
         data.activeSessionToken !== localToken
       ) {
+        sessionStorage.setItem(
+          "employeeForcedLogout",
+          "Sua conta foi acessada em outro dispositivo."
+        );
         toast({
           title: "Sessão encerrada",
           description:

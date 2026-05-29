@@ -48,6 +48,8 @@ As cores do frontend são aplicadas como CSS variables no carregamento da aplica
 
 Ao trocar a logo, coloque o arquivo em `public/` e atualize `logoSrc`/`faviconSrc`. Para e-mails, use uma URL pública em `logoUrl`, porque clientes de e-mail não acessam arquivos locais do projeto.
 
+Também existe personalização visual pelo painel administrativo em `Configurações > Personalização`. Ela permite alterar nome do sistema, nome curto, organização, título administrativo, slogan, logo e cores principais, aplica a mudança no login, no painel administrativo e no painel do funcionário, salva no navegador e oferece botão para restaurar o padrão Coopatos. Para uma versão multiempresa real, o próximo passo é persistir esse preset no banco e carregar por domínio/tenant.
+
 ## Funcionalidades Já Presentes
 
 - Login de funcionário por matrícula e CPF.
@@ -84,11 +86,16 @@ Ao trocar a logo, coloque o arquivo em `public/` e atualize `logoSrc`/`faviconSr
 - Admin: cadastro de funcionário com CPF e telefone mascarados, limite de caracteres, validações de CPF/e-mail/telefone, e-mail obrigatório e envio assíncrono da validação logo após criar/alterar e-mail.
 - Admin: exportações CSV para planilhas de funcionários, chamados e auditoria.
 - Admin: auditoria inicial de cadastro/edição/desativação de funcionários, envio de validação e criação/edição de chamados.
-- Admin: aba de indicadores iniciada com visão executiva, evolução mensal, distribuição por status, prioridade, categorias, produtividade individual e produtividade por departamento.
+- Admin: aba de indicadores com filtros por categoria, status, pessoa, período e busca/local, cards clicáveis para abrir chamados filtrados, visão executiva, evolução mensal, status, prioridade, categorias, produtividade individual, produtividade por departamento, recorrência de locais, idade média pendente, críticos pendentes e exportação PDF configurável.
 - Admin: CRUD inicial de departamentos com criação/edição em modal, cor de identificação, ativação/desativação, busca, contadores e auditoria.
 - Admin: rotas `/admin/*` protegidas no backend por sessão administrativa e departamento administrativo, não apenas pelo bloqueio visual do frontend.
 - Funcionário: criação/edição de chamados com prioridade, finalização do próprio chamado e ordenação de "Meus Reportes" com pendentes primeiro, por prioridade e depois data.
 - Admin: login administrativo apenas por e-mail, usuários com filtros por status/perfil/departamento, auditoria visual antes do download CSV e mudança rápida de departamento de funcionários.
+- Admin: navegação principal simplificada para apresentação com Indicadores, Chamados, Mapa e Configurações; Funcionários, Usuários, Departamentos, Auditoria/Planilhas e Personalização ficam agrupados dentro de Configurações.
+- Admin: aba Mapa separada com filtros próprios, pins/heatmap e atalho para criar chamado.
+- Admin: Personalização whitelabel visual com prévia, aplicação imediata e restauração do preset original.
+- Sessão: inatividade centralizada em 15 minutos, aviso específico no login administrativo e comparação de token por aba usando `sessionStorage` para impedir que uma nova sessão no mesmo navegador mantenha a aba antiga ativa.
+- Admin: exportação de chamados em CSV com personalização de colunas e respeitando os filtros atuais de categoria, pessoa, status, período e local/busca.
 
 ## Ambiente
 

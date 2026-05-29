@@ -1,4 +1,4 @@
-import { brandPreset } from "@/config/brand";
+import { useBranding } from "@/config/brand";
 
 type BrandLogoProps = {
   className?: string;
@@ -8,12 +8,16 @@ type BrandLogoProps = {
 export const BrandLogo = ({
   className = "",
   imageClassName = "",
-}: BrandLogoProps) => (
-  <div className={className}>
-    <img
-      src={brandPreset.logoSrc}
-      alt={`Logo ${brandPreset.organizationName}`}
-      className={imageClassName}
-    />
-  </div>
-);
+}: BrandLogoProps) => {
+  const { brandPreset } = useBranding();
+
+  return (
+    <div className={className}>
+      <img
+        src={brandPreset.logoSrc}
+        alt={`Logo ${brandPreset.organizationName}`}
+        className={imageClassName}
+      />
+    </div>
+  );
+};

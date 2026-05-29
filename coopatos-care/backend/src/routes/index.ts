@@ -531,6 +531,43 @@ router.get("/employee-session/:id", async (req, res) => {
   }
 });
 
+router.get("/admin-session/:id", async (req, res) => {
+  try {
+    const id = Number(req.params.id);
+
+    const user = await prisma.user.findFirst({
+      where: {
+        id,
+        deletedAt: null,
+        role: "ADMIN",
+      },
+      include: {
+        employee: true,
+      },
+    });
+
+    if (!user || !user.employee) {
+      return res.status(404).json({
+        error: "Sessão administrativa não encontrada.",
+      });
+    }
+
+    return res.json({
+      activeSessionToken: user.employee.activeSessionToken || null,
+      isAdministrativeDepartment:
+        normalizeTextForPermission(user.employee.department).includes(
+          "administrativo"
+        ),
+    });
+  } catch (error) {
+    console.error(error);
+
+    return res.status(500).json({
+      error: "Erro ao verificar sessão administrativa.",
+    });
+  }
+});
+
 
 router.get("/", (req, res) => {
   return res.json({
@@ -2467,6 +2504,12 @@ router.post("/admin-login", async (req, res) => {
         data: {
           activeSessionToken: adminSessionToken,
         },
+      });
+
+      io.to(`employee-${user.employeeId}`).emit("force-logout", {
+        reason: "Sua conta administrativa foi acessada em outro dispositivo ou guia.",
+        sessionToken: adminSessionToken,
+        role: "admin",
       });
     }
 

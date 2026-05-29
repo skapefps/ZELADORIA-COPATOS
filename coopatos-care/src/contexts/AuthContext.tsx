@@ -7,8 +7,11 @@ import React, {
 } from "react";
 
 const API_URL =
-  import.meta.env.VITE_API_URL ||
-  "http://localhost:3333";
+  window.location.hostname === "localhost" ||
+    window.location.hostname === "127.0.0.1"
+    ? "http://localhost:3333"
+    : import.meta.env.VITE_API_URL ||
+    "https://zeladoria-coopatos-api.onrender.com";
 
 interface AuthState {
   isAuthenticated: boolean;
@@ -28,7 +31,7 @@ interface AuthContextType extends AuthState {
 
 const AuthContext = createContext<AuthContextType | null>(null);
 
-const INACTIVITY_LIMIT = 1 * 60 * 1000; // 1 minuto temporario para testar inatividade
+const INACTIVITY_LIMIT = 15 * 60 * 1000;
 
 export const useAuth = () => {
   const ctx = useContext(AuthContext);
@@ -60,6 +63,10 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
 
     localStorage.setItem("auth", JSON.stringify(newAuth));
     localStorage.setItem("lastActivity", String(Date.now()));
+    sessionStorage.setItem(
+      "employeeSessionToken",
+      localStorage.getItem("employeeSessionToken") || ""
+    );
 
     setAuth(newAuth);
   };
@@ -110,6 +117,10 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
         "adminSessionToken",
         data.adminSessionToken
       );
+      sessionStorage.setItem(
+        "adminSessionToken",
+        data.adminSessionToken
+      );
 
       localStorage.setItem(
         "adminWelcomeShown",
@@ -136,14 +147,20 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
     localStorage.removeItem("admin");
     localStorage.removeItem("employeeSessionToken");
     localStorage.removeItem("adminSessionToken");
+    sessionStorage.removeItem("employeeSessionToken");
+    sessionStorage.removeItem("adminSessionToken");
     localStorage.removeItem("lastActivity");
     localStorage.removeItem("welcomeShown");
     localStorage.removeItem("adminWelcomeShown");
 
     if (reason === "timeout") {
       sessionStorage.setItem("sessionExpired", "true");
+      if (auth.role) {
+        sessionStorage.setItem("sessionExpiredRole", auth.role);
+      }
     } else {
       sessionStorage.removeItem("sessionExpired");
+      sessionStorage.removeItem("sessionExpiredRole");
     }
 
     setAuth({

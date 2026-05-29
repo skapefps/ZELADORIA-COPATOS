@@ -18,7 +18,6 @@ import {
   Mail,
   MapPin,
   Navigation,
-  List,
   Droplets,
   Zap,
   Mountain,
@@ -67,16 +66,27 @@ import {
 } from "@/components/ui/select";
 import { Input } from "@/components/ui/input";
 import { BrandLogo } from "@/components/BrandLogo";
-import { brandPreset } from "@/config/brand";
+import {
+  defaultBrandPreset,
+  hexToHslString,
+  hslStringToHex,
+  useBranding,
+} from "@/config/brand";
 import DashboardMaps from "@/components/DashboardMaps";
 
 type AdminSection =
   | "analytics"
   | "reports"
+  | "maps"
+  | "settings";
+
+type SettingsTab =
+  | "home"
+  | "personalization"
   | "employees"
   | "users"
   | "departments"
-  | "settings";
+  | "audit";
 
 type AdminReport = {
   id: number;
@@ -206,6 +216,41 @@ type ReportForm = {
   longitude: string;
 };
 
+type BrandForm = {
+  appName: string;
+  shortName: string;
+  organizationName: string;
+  adminTitle: string;
+  tagline: string;
+  logoSrc: string;
+  primary: string;
+  secondary: string;
+  background: string;
+};
+
+type ReportExportColumn =
+  | "id"
+  | "title"
+  | "category"
+  | "status"
+  | "priority"
+  | "employee"
+  | "participants"
+  | "address"
+  | "referencePoint"
+  | "createdAt"
+  | "description";
+
+type AnalyticsExportSection =
+  | "summary"
+  | "status"
+  | "priority"
+  | "categories"
+  | "employees"
+  | "departments"
+  | "monthly"
+  | "locations";
+
 const emptyEmployeeForm: EmployeeForm = {
   registrationNumber: "",
   name: "",
@@ -236,6 +281,18 @@ const emptyReportForm: ReportForm = {
   latitude: "",
   longitude: "",
 };
+
+const createBrandForm = (preset = defaultBrandPreset): BrandForm => ({
+  appName: preset.appName,
+  shortName: preset.shortName,
+  organizationName: preset.organizationName,
+  adminTitle: preset.adminTitle,
+  tagline: preset.tagline,
+  logoSrc: preset.logoSrc,
+  primary: hslStringToHex(preset.colors.primary),
+  secondary: hslStringToHex(preset.colors.secondary),
+  background: hslStringToHex(preset.colors.background),
+});
 
 const MAX_FILE_SIZE = 100 * 1024 * 1024;
 
@@ -365,10 +422,61 @@ const chartPalette = [
   "#0f766e",
 ];
 
+const reportExportColumns: {
+  id: ReportExportColumn;
+  label: string;
+  getValue: (report: AdminReport) => string | number;
+}[] = [
+  { id: "id", label: "ID", getValue: (report) => report.id },
+  { id: "title", label: "Título", getValue: (report) => report.title || "" },
+  { id: "category", label: "Categoria", getValue: (report) => report.category.name },
+  { id: "status", label: "Status", getValue: (report) => report.status.name },
+  { id: "priority", label: "Prioridade", getValue: (report) => priorityLabel(report.priority) },
+  { id: "employee", label: "Aberto por", getValue: (report) => report.employee?.name || "" },
+  {
+    id: "participants",
+    label: "Atribuídos",
+    getValue: (report) =>
+      report.participants?.map((participant) => participant.employee.name).join("; ") || "",
+  },
+  { id: "address", label: "Endereço", getValue: (report) => report.address || "" },
+  {
+    id: "referencePoint",
+    label: "Ponto de referência",
+    getValue: (report) => report.referencePoint || "",
+  },
+  {
+    id: "createdAt",
+    label: "Criado em",
+    getValue: (report) => new Date(report.createdAt).toLocaleString("pt-BR"),
+  },
+  {
+    id: "description",
+    label: "Descrição",
+    getValue: (report) => report.description || "",
+  },
+];
+
+const analyticsExportSections: { id: AnalyticsExportSection; label: string }[] = [
+  { id: "summary", label: "Resumo executivo" },
+  { id: "status", label: "Status" },
+  { id: "priority", label: "Prioridades" },
+  { id: "categories", label: "Categorias" },
+  { id: "employees", label: "Produção individual" },
+  { id: "departments", label: "Departamentos" },
+  { id: "monthly", label: "Evolução mensal" },
+  { id: "locations", label: "Locais recorrentes" },
+];
+
 const Dashboard = () => {
   const { logout } = useAuth();
   const navigate = useNavigate();
   const { toast } = useToast();
+  const {
+    brandPreset,
+    saveBrandPreset: persistBrandPreset,
+    resetBrandPreset: restoreBrandPreset,
+  } = useBranding();
 
   const [reports, setReports] = useState<AdminReport[]>([]);
   const [loadingReports, setLoadingReports] = useState(false);
@@ -406,8 +514,11 @@ const Dashboard = () => {
   const [statuses, setStatuses] = useState<{ id: number; name: string }[]>([]);
 
   const [adminSection, setAdminSection] = useState<AdminSection>("reports");
+  const [settingsTab, setSettingsTab] = useState<SettingsTab>("home");
+  const [brandForm, setBrandForm] = useState<BrandForm>(() =>
+    createBrandForm(brandPreset)
+  );
 
-  const [view, setView] = useState<"list" | "maps">("list");
   const [filterCategory, setFilterCategory] = useState("all");
   const [filterStatus, setFilterStatus] = useState("all");
   const [filterEmployee, setFilterEmployee] = useState("all");
@@ -435,6 +546,24 @@ const Dashboard = () => {
   const [geocodingReport, setGeocodingReport] = useState(false);
   const [reportCep, setReportCep] = useState("");
   const [uploadingReportMedia, setUploadingReportMedia] = useState(false);
+  const [showAnalyticsExportModal, setShowAnalyticsExportModal] = useState(false);
+  const [showReportExportModal, setShowReportExportModal] = useState(false);
+  const [selectedAnalyticsSections, setSelectedAnalyticsSections] = useState<
+    AnalyticsExportSection[]
+  >(analyticsExportSections.map((section) => section.id));
+  const [selectedReportColumns, setSelectedReportColumns] = useState<
+    ReportExportColumn[]
+  >([
+    "id",
+    "title",
+    "category",
+    "status",
+    "priority",
+    "employee",
+    "participants",
+    "address",
+    "createdAt",
+  ]);
 
   const admin = JSON.parse(localStorage.getItem("admin") || "{}");
   const adminHeaders = (extra?: Record<string, string>) => ({
@@ -457,7 +586,7 @@ const Dashboard = () => {
         title: `✓ Bem-vindo, ${admin.employee?.name || admin.email}!`,
         description: "Acesso administrativo realizado com sucesso.",
         className: "bg-secondary text-secondary-foreground border-secondary",
-        duration: 1200,
+        duration: 3000,
       });
 
       localStorage.setItem("adminWelcomeShown", "true");
@@ -568,9 +697,28 @@ const Dashboard = () => {
   }, []);
 
   useEffect(() => {
+    const currentAdmin = JSON.parse(localStorage.getItem("admin") || "{}");
+    const employeeId = currentAdmin?.employee?.id;
+
     const socket = io(API_URL, {
       transports: ["websocket", "polling"],
+      query: employeeId
+        ? {
+          employeeId,
+          sessionToken:
+            sessionStorage.getItem("adminSessionToken") ||
+            localStorage.getItem("adminSessionToken") ||
+            "",
+        }
+        : undefined,
     });
+
+    const finishAdminSession = (message: string) => {
+      sessionStorage.setItem("adminForcedLogout", message);
+      logout();
+      sessionStorage.setItem("adminForcedLogout", message);
+      navigate("/admin/login", { replace: true });
+    };
 
     socket.on("employee-verification-updated", (employee: AdminEmployee) => {
       setEmployees((prev) =>
@@ -582,10 +730,113 @@ const Dashboard = () => {
       });
     });
 
+    socket.on(
+      "force-logout",
+      (data: { reason?: string; sessionToken?: string; role?: string }) => {
+        const currentToken =
+          sessionStorage.getItem("adminSessionToken") ||
+          localStorage.getItem("adminSessionToken");
+
+        if (data.role && data.role !== "admin") return;
+        if (data.sessionToken && data.sessionToken === currentToken) return;
+
+        finishAdminSession(
+          data.reason || "Sua conta administrativa foi acessada em outro local."
+        );
+      }
+    );
+
     return () => {
       socket.disconnect();
     };
-  }, [toast]);
+  }, [logout, navigate, toast]);
+
+  useEffect(() => {
+    const validateAdminSession = async () => {
+      try {
+        const currentAdmin = JSON.parse(localStorage.getItem("admin") || "{}");
+        const localToken =
+          sessionStorage.getItem("adminSessionToken") ||
+          localStorage.getItem("adminSessionToken");
+
+        if (!currentAdmin?.id || !localToken) return;
+
+        const response = await fetch(`${API_URL}/admin-session/${currentAdmin.id}`);
+        const data = await response.json();
+
+        if (
+          !response.ok ||
+          !data.isAdministrativeDepartment ||
+          (data.activeSessionToken && data.activeSessionToken !== localToken)
+        ) {
+          sessionStorage.setItem(
+            "adminForcedLogout",
+            "Sua sessão administrativa foi encerrada ou aberta em outro dispositivo."
+          );
+          logout();
+          sessionStorage.setItem(
+            "adminForcedLogout",
+            "Sua sessão administrativa foi encerrada ou aberta em outro dispositivo."
+          );
+          navigate("/admin/login", { replace: true });
+        }
+      } catch (error) {
+        console.error(error);
+      }
+    };
+
+    validateAdminSession();
+    const interval = window.setInterval(validateAdminSession, 10000);
+
+    return () => window.clearInterval(interval);
+  }, [logout, navigate]);
+
+  useEffect(() => {
+    setBrandForm(createBrandForm(brandPreset));
+  }, [brandPreset]);
+
+  const saveBrandCustomization = () => {
+    const nextPreset = {
+      ...brandPreset,
+      appName: brandForm.appName.trim() || defaultBrandPreset.appName,
+      shortName: brandForm.shortName.trim() || defaultBrandPreset.shortName,
+      organizationName:
+        brandForm.organizationName.trim() || defaultBrandPreset.organizationName,
+      adminTitle: brandForm.adminTitle.trim() || defaultBrandPreset.adminTitle,
+      tagline: brandForm.tagline.trim() || defaultBrandPreset.tagline,
+      logoSrc: brandForm.logoSrc.trim() || defaultBrandPreset.logoSrc,
+      faviconSrc: brandForm.logoSrc.trim() || defaultBrandPreset.faviconSrc,
+      colors: {
+        ...brandPreset.colors,
+        background: hexToHslString(brandForm.background),
+        card: hexToHslString("#ffffff"),
+        primary: hexToHslString(brandForm.primary),
+        ring: hexToHslString(brandForm.primary),
+        sidebarBackground: hexToHslString(brandForm.primary),
+        sidebarBorder: hexToHslString(brandForm.primary),
+        secondary: hexToHslString(brandForm.secondary),
+        sidebarPrimary: hexToHslString(brandForm.secondary),
+        accent: hexToHslString(brandForm.secondary),
+      },
+    };
+
+    persistBrandPreset(nextPreset);
+    toast({
+      title: "Personalização aplicada",
+      description: "Nome, logo e cores foram atualizados no site.",
+      duration: 3000,
+    });
+  };
+
+  const resetBrandCustomization = () => {
+    const defaultPreset = restoreBrandPreset();
+    setBrandForm(createBrandForm(defaultPreset));
+    toast({
+      title: "Personalização restaurada",
+      description: "O padrão original da Coopatos voltou a ser usado.",
+      duration: 3000,
+    });
+  };
 
   const getVerificationCooldown = (employee: AdminEmployee) => {
     if (!employee.emailVerificationSentAt) return 0;
@@ -675,13 +926,13 @@ const Dashboard = () => {
 
   const stats = useMemo(
     () => ({
-      total: reports.length,
-      open: reports.filter((r) => r.status.name === "ABERTO").length,
-      inProgress: reports.filter((r) => r.status.name === "EM_ANDAMENTO")
+      total: filtered.length,
+      open: filtered.filter((r) => r.status.name === "ABERTO").length,
+      inProgress: filtered.filter((r) => r.status.name === "EM_ANDAMENTO")
         .length,
-      done: reports.filter((r) => r.status.name === "FINALIZADO").length,
+      done: filtered.filter((r) => r.status.name === "FINALIZADO").length,
     }),
-    [reports]
+    [filtered]
   );
 
   const filteredEmployees = useMemo(() => {
@@ -798,38 +1049,56 @@ const Dashboard = () => {
   );
 
   const analytics = useMemo(() => {
-    const completedReports = reports.filter(
+    const sourceReports = filtered;
+    const completedReports = sourceReports.filter(
       (report) => report.status.name === "FINALIZADO"
     );
-    const pendingReports = reports.filter(
+    const pendingReports = sourceReports.filter(
       (report) => report.status.name !== "FINALIZADO"
     );
-    const completionRate = reports.length
-      ? Math.round((completedReports.length / reports.length) * 100)
+    const completionRate = sourceReports.length
+      ? Math.round((completedReports.length / sourceReports.length) * 100)
+      : 0;
+    const openCriticalReports = sourceReports.filter(
+      (report) => report.status.name !== "FINALIZADO" && report.priority === "CRITICA"
+    );
+    const reportsWithMedia = sourceReports.filter(
+      (report) => (report.images?.length || 0) > 0
+    );
+    const averageAgeDays = pendingReports.length
+      ? Math.round(
+        pendingReports.reduce(
+          (total, report) =>
+            total +
+            (Date.now() - new Date(report.createdAt).getTime()) /
+            (1000 * 60 * 60 * 24),
+          0
+        ) / pendingReports.length
+      )
       : 0;
 
     const statusData = statuses.map((status, index) => ({
       name: status.name.replace(/_/g, " "),
-      value: reports.filter((report) => report.status.id === status.id).length,
+      value: sourceReports.filter((report) => report.status.id === status.id).length,
       color: status.color || chartPalette[index % chartPalette.length],
     }));
 
     const priorityData = priorityOptions.map((priority, index) => ({
       name: priority.label,
-      value: reports.filter((report) => report.priority === priority.value).length,
+      value: sourceReports.filter((report) => report.priority === priority.value).length,
       color: chartPalette[index % chartPalette.length],
     }));
 
     const categoryData = categories
       .map((category, index) => ({
         name: category.name,
-        value: reports.filter((report) => report.category.id === category.id).length,
+        value: sourceReports.filter((report) => report.category.id === category.id).length,
         color: chartPalette[index % chartPalette.length],
       }))
       .filter((item) => item.value > 0);
 
     const monthlyMap = new Map<string, { month: string; abertos: number; finalizados: number }>();
-    reports.forEach((report) => {
+    sourceReports.forEach((report) => {
       const date = new Date(report.createdAt);
       const month = `${String(date.getMonth() + 1).padStart(2, "0")}/${String(
         date.getFullYear()
@@ -849,7 +1118,7 @@ const Dashboard = () => {
 
     const employeeData = employees
       .map((employee) => {
-        const assigned = reports.filter(
+        const assigned = sourceReports.filter(
           (report) =>
             report.employee?.id === employee.id ||
             report.participants?.some(
@@ -875,7 +1144,7 @@ const Dashboard = () => {
           (employee) => employee.department === department
         );
         const teamIds = new Set(team.map((employee) => employee.id));
-        const assigned = reports.filter(
+        const assigned = sourceReports.filter(
           (report) =>
             teamIds.has(report.employee?.id) ||
             report.participants?.some((participant) =>
@@ -896,18 +1165,33 @@ const Dashboard = () => {
       .sort((a, b) => b.chamados - a.chamados)
       .slice(0, 8);
 
+    const locationMap = new Map<string, number>();
+    sourceReports.forEach((report) => {
+      const location =
+        report.referencePoint || report.address || "Local não informado";
+      locationMap.set(location, (locationMap.get(location) || 0) + 1);
+    });
+    const locationData = Array.from(locationMap.entries())
+      .map(([name, value]) => ({ name, value }))
+      .sort((a, b) => b.value - a.value)
+      .slice(0, 8);
+
     return {
       completedReports,
       pendingReports,
+      openCriticalReports,
+      reportsWithMedia,
       completionRate,
+      averageAgeDays,
       statusData,
       priorityData,
       categoryData,
       monthlyData,
       employeeData,
       departmentData,
+      locationData,
     };
-  }, [categories, departmentOptions, employees, reports, statuses]);
+  }, [categories, departmentOptions, employees, filtered, statuses]);
 
   const loadEmployees = async () => {
     setLoadingEmployees(true);
@@ -1500,6 +1784,206 @@ const Dashboard = () => {
         variant: "destructive",
       });
     }
+  };
+
+  const escapeClientCsvValue = (value: unknown) => {
+    const text = value == null ? "" : String(value);
+    return `"${text.replace(/"/g, '""')}"`;
+  };
+
+  const exportFilteredReportsCsv = () => {
+    if (selectedReportColumns.length === 0) {
+      toast({
+        title: "Selecione ao menos uma coluna",
+        variant: "destructive",
+      });
+      return;
+    }
+
+    const columns = reportExportColumns.filter((column) =>
+      selectedReportColumns.includes(column.id)
+    );
+    const csv = [
+      columns.map((column) => escapeClientCsvValue(column.label)).join(","),
+      ...filtered.map((report) =>
+        columns.map((column) => escapeClientCsvValue(column.getValue(report))).join(",")
+      ),
+    ].join("\n");
+    const blob = new Blob([`\uFEFF${csv}`], {
+      type: "text/csv;charset=utf-8;",
+    });
+    const url = URL.createObjectURL(blob);
+    const link = document.createElement("a");
+
+    link.href = url;
+    link.download = `chamados-filtrados-${new Date()
+      .toISOString()
+      .slice(0, 10)}.csv`;
+    document.body.appendChild(link);
+    link.click();
+    link.remove();
+    URL.revokeObjectURL(url);
+    setShowReportExportModal(false);
+  };
+
+  const toggleReportExportColumn = (column: ReportExportColumn) => {
+    setSelectedReportColumns((prev) =>
+      prev.includes(column)
+        ? prev.filter((item) => item !== column)
+        : [...prev, column]
+    );
+  };
+
+  const toggleAnalyticsExportSection = (section: AnalyticsExportSection) => {
+    setSelectedAnalyticsSections((prev) =>
+      prev.includes(section)
+        ? prev.filter((item) => item !== section)
+        : [...prev, section]
+    );
+  };
+
+  const openReportsByStatus = (statusName?: string) => {
+    if (!statusName) {
+      setFilterStatus("all");
+    } else {
+      const status = statuses.find((item) => item.name === statusName);
+      setFilterStatus(status ? String(status.id) : "all");
+    }
+
+    setAdminSection("reports");
+  };
+
+  const formatFiltersForExport = () => {
+    const category =
+      filterCategory === "all"
+        ? "Todas"
+        : categories.find((item) => String(item.id) === filterCategory)?.name ||
+        "Selecionada";
+    const status =
+      filterStatus === "all"
+        ? "Todos"
+        : statuses.find((item) => String(item.id) === filterStatus)?.name ||
+        "Selecionado";
+    const employee =
+      filterEmployee === "all"
+        ? "Todos"
+        : employees.find((item) => String(item.id) === filterEmployee)?.name ||
+        "Selecionado";
+    const period =
+      filterPeriod === "custom"
+        ? `${filterStartDate || "início"} até ${filterEndDate || "hoje"}`
+        : filterPeriod === "all"
+          ? "Todo período"
+          : `Últimos ${filterPeriod} dias`;
+
+    return { category, status, employee, period };
+  };
+
+  const renderPrintList = (items: { name: string; value: number }[]) =>
+    items.length
+      ? items
+        .map(
+          (item) => `
+            <div class="row">
+              <span>${item.name}</span>
+              <strong>${item.value}</strong>
+            </div>
+          `
+        )
+        .join("")
+      : `<p class="empty">Sem dados para este filtro.</p>`;
+
+  const exportAnalyticsPdf = () => {
+    if (selectedAnalyticsSections.length === 0) {
+      toast({
+        title: "Selecione ao menos um indicador",
+        variant: "destructive",
+      });
+      return;
+    }
+
+    const filters = formatFiltersForExport();
+    const printWindow = window.open("", "_blank", "width=1100,height=800");
+
+    if (!printWindow) {
+      toast({
+        title: "Popup bloqueado",
+        description: "Libere popups para gerar o PDF.",
+        variant: "destructive",
+      });
+      return;
+    }
+
+    const section = (id: AnalyticsExportSection, html: string) =>
+      selectedAnalyticsSections.includes(id) ? html : "";
+
+    printWindow.document.write(`
+      <!doctype html>
+      <html lang="pt-BR">
+        <head>
+          <meta charset="utf-8" />
+          <title>Indicadores - ${brandPreset.appName}</title>
+          <style>
+            * { box-sizing: border-box; }
+            body { margin: 0; padding: 32px; font-family: Arial, sans-serif; color: #1f3557; background: #f4f7fb; }
+            header { display: flex; align-items: center; gap: 16px; margin-bottom: 24px; }
+            header img { width: 76px; height: 76px; object-fit: contain; }
+            h1 { margin: 0; font-size: 28px; }
+            h2 { margin: 0 0 12px; font-size: 18px; }
+            .muted { color: #62708a; font-size: 13px; }
+            .filters { display: grid; grid-template-columns: repeat(4, 1fr); gap: 10px; margin-bottom: 20px; }
+            .filter, .card, .panel { background: #fff; border: 1px solid #dbe3ef; border-radius: 16px; padding: 14px; }
+            .grid { display: grid; grid-template-columns: repeat(4, 1fr); gap: 12px; margin-bottom: 16px; }
+            .two { display: grid; grid-template-columns: repeat(2, 1fr); gap: 14px; margin-bottom: 16px; }
+            .card small { display: block; color: #62708a; text-transform: uppercase; font-size: 11px; }
+            .card strong { display: block; margin-top: 8px; font-size: 30px; color: #1f3557; }
+            .row { display: flex; justify-content: space-between; gap: 12px; padding: 9px 0; border-bottom: 1px solid #edf1f7; font-size: 13px; }
+            .row:last-child { border-bottom: 0; }
+            .empty { color: #62708a; font-size: 13px; }
+            @media print { body { background: #fff; padding: 20px; } .panel, .card, .filter { break-inside: avoid; } }
+          </style>
+        </head>
+        <body>
+          <header>
+            <img src="${brandPreset.logoSrc}" alt="" />
+            <div>
+              <h1>Indicadores de chamados</h1>
+              <div class="muted">${brandPreset.organizationName} • ${new Date().toLocaleString("pt-BR")}</div>
+            </div>
+          </header>
+          <section class="filters">
+            <div class="filter"><strong>Categoria</strong><br /><span class="muted">${filters.category}</span></div>
+            <div class="filter"><strong>Status</strong><br /><span class="muted">${filters.status}</span></div>
+            <div class="filter"><strong>Funcionário</strong><br /><span class="muted">${filters.employee}</span></div>
+            <div class="filter"><strong>Período</strong><br /><span class="muted">${filters.period}</span></div>
+          </section>
+          ${section(
+      "summary",
+      `<section class="grid">
+              <div class="card"><small>Total filtrado</small><strong>${filtered.length}</strong></div>
+              <div class="card"><small>Conclusão</small><strong>${analytics.completionRate}%</strong></div>
+              <div class="card"><small>Pendentes críticos</small><strong>${analytics.openCriticalReports.length}</strong></div>
+              <div class="card"><small>Idade média pendente</small><strong>${analytics.averageAgeDays}d</strong></div>
+            </section>`
+    )}
+          <section class="two">
+            ${section("status", `<div class="panel"><h2>Status</h2>${renderPrintList(analytics.statusData)}</div>`)}
+            ${section("priority", `<div class="panel"><h2>Prioridades</h2>${renderPrintList(analytics.priorityData)}</div>`)}
+            ${section("categories", `<div class="panel"><h2>Categorias</h2>${renderPrintList(analytics.categoryData)}</div>`)}
+            ${section("locations", `<div class="panel"><h2>Locais recorrentes</h2>${renderPrintList(analytics.locationData)}</div>`)}
+            ${section("employees", `<div class="panel"><h2>Produção individual</h2>${renderPrintList(analytics.employeeData.map((item) => ({ name: item.name, value: item.total })))}</div>`)}
+            ${section("departments", `<div class="panel"><h2>Departamentos</h2>${renderPrintList(analytics.departmentData.map((item) => ({ name: item.name, value: item.chamados })))}</div>`)}
+            ${section("monthly", `<div class="panel"><h2>Evolução mensal</h2>${renderPrintList(analytics.monthlyData.map((item) => ({ name: item.month, value: item.abertos })))}</div>`)}
+          </section>
+        </body>
+      </html>
+    `);
+    printWindow.document.close();
+    printWindow.focus();
+    window.setTimeout(() => {
+      printWindow.print();
+    }, 400);
+    setShowAnalyticsExportModal(false);
   };
 
   const formatVerificationSentAt = (value?: string | null) => {
@@ -2111,20 +2595,18 @@ const Dashboard = () => {
   const adminMenu = [
     { id: "analytics", label: "Indicadores", icon: BarChart3 },
     { id: "reports", label: "Chamados", icon: ClipboardList },
-    { id: "employees", label: "Funcionários", icon: Users },
-    { id: "users", label: "Usuários", icon: UserCog },
-    { id: "departments", label: "Departamentos", icon: Building2 },
+    { id: "maps", label: "Mapa", icon: MapIcon },
     { id: "settings", label: "Configurações", icon: Settings },
   ] as const;
 
-  const sectionTitle = {
-    analytics: "Indicadores",
-    reports: "Chamados",
-    employees: "Funcionários",
-    users: "Usuários",
-    departments: "Departamentos",
-    settings: "Configurações",
-  }[adminSection];
+  const settingsMenu = [
+    { id: "home", label: "Resumo", icon: Settings },
+    { id: "personalization", label: "Personalização", icon: Pencil },
+    { id: "employees", label: "Funcionários", icon: Users },
+    { id: "users", label: "Usuários", icon: UserCog },
+    { id: "departments", label: "Departamentos", icon: Building2 },
+    { id: "audit", label: "Auditoria", icon: History },
+  ] as const;
 
   return (
     <div className="min-h-screen overflow-x-hidden bg-background">
@@ -2194,29 +2676,199 @@ const Dashboard = () => {
       </div>
 
       <main className="mx-auto w-full max-w-7xl p-4 lg:p-6">
+        {adminSection === "settings" && (
+          <div className="mb-5 rounded-2xl border border-border bg-card p-3 shadow-sm">
+            <div className="flex gap-2 overflow-x-auto pb-1">
+              {settingsMenu.map((item) => {
+                const Icon = item.icon;
+                const active = settingsTab === item.id;
+
+                return (
+                  <button
+                    key={item.id}
+                    type="button"
+                    onClick={() => setSettingsTab(item.id)}
+                    className={`flex shrink-0 items-center gap-2 rounded-xl px-3 py-2 text-sm font-medium transition-all ${active
+                        ? "bg-primary text-primary-foreground shadow-sm"
+                        : "text-muted-foreground hover:bg-muted hover:text-foreground"
+                      }`}
+                  >
+                    <Icon className="h-4 w-4" />
+                    {item.label}
+                  </button>
+                );
+              })}
+            </div>
+          </div>
+        )}
+
         {adminSection === "analytics" ? (
           <div className="space-y-5">
+            <div className="rounded-2xl border border-border bg-card p-4 shadow-sm">
+              <div className="mb-4 flex flex-col gap-3 lg:flex-row lg:items-center lg:justify-between">
+                <div>
+                  <p className="text-lg font-bold">Indicadores</p>
+                  <p className="text-sm text-muted-foreground">
+                    Gráficos e métricas usam os filtros abaixo.
+                  </p>
+                </div>
+                <Button
+                  type="button"
+                  variant="outline"
+                  onClick={() => setShowAnalyticsExportModal(true)}
+                  className="gap-2"
+                >
+                  <Download className="h-4 w-4" />
+                  Exportar PDF
+                </Button>
+              </div>
+
+              <div className="grid gap-2 sm:grid-cols-2 xl:grid-cols-5">
+                <Select value={filterCategory} onValueChange={setFilterCategory}>
+                  <SelectTrigger>
+                    <SelectValue placeholder="Categoria" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="all">Todas categorias</SelectItem>
+                    {categories.map((category) => (
+                      <SelectItem key={category.id} value={String(category.id)}>
+                        {category.name}
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+
+                <Select value={filterStatus} onValueChange={setFilterStatus}>
+                  <SelectTrigger>
+                    <SelectValue placeholder="Status" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="all">Todos status</SelectItem>
+                    {statuses.map((status) => (
+                      <SelectItem key={status.id} value={String(status.id)}>
+                        {status.name}
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+
+                <Select value={filterEmployee} onValueChange={setFilterEmployee}>
+                  <SelectTrigger>
+                    <SelectValue placeholder="Pessoa" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="all">Todas pessoas</SelectItem>
+                    {assignedEmployeeOptions.map((employee) => (
+                      <SelectItem key={employee.id} value={String(employee.id)}>
+                        {employee.name}
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+
+                <Select value={filterPeriod} onValueChange={setFilterPeriod}>
+                  <SelectTrigger>
+                    <SelectValue placeholder="Período" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="all">Todo período</SelectItem>
+                    <SelectItem value="7">Últimos 7 dias</SelectItem>
+                    <SelectItem value="30">Últimos 30 dias</SelectItem>
+                    <SelectItem value="90">Últimos 90 dias</SelectItem>
+                    <SelectItem value="180">Últimos 180 dias</SelectItem>
+                    <SelectItem value="365">Últimos 365 dias</SelectItem>
+                    <SelectItem value="custom">Período personalizado</SelectItem>
+                  </SelectContent>
+                </Select>
+
+                <Input
+                  value={filterLocation}
+                  onChange={(event) => setFilterLocation(event.target.value)}
+                  placeholder="Local, descrição ou ID..."
+                />
+              </div>
+
+              {filterPeriod === "custom" && (
+                <div className="mt-2 grid gap-2 sm:grid-cols-2 lg:w-[420px]">
+                  <Input
+                    type="date"
+                    value={filterStartDate}
+                    onChange={(event) => setFilterStartDate(event.target.value)}
+                  />
+                  <Input
+                    type="date"
+                    value={filterEndDate}
+                    onChange={(event) => setFilterEndDate(event.target.value)}
+                  />
+                </div>
+              )}
+            </div>
+
             <div className="grid gap-3 md:grid-cols-2 xl:grid-cols-4">
               {[
                 {
                   label: "Chamados totais",
-                  value: reports.length,
+                  value: filtered.length,
                   detail: `${filtered.length} no filtro atual`,
+                  action: () => openReportsByStatus(),
                 },
                 {
                   label: "Concluídos",
                   value: analytics.completedReports.length,
                   detail: `${analytics.completionRate}% de conclusão`,
+                  action: () => openReportsByStatus("FINALIZADO"),
                 },
                 {
                   label: "Pendentes",
                   value: analytics.pendingReports.length,
                   detail: "Abertos, análise ou andamento",
+                  action: () => openReportsByStatus("ABERTO"),
                 },
                 {
-                  label: "Equipe ativa",
-                  value: employeeStats.active,
-                  detail: `${departmentStats.active} departamentos ativos`,
+                  label: "Críticos pendentes",
+                  value: analytics.openCriticalReports.length,
+                  detail: "Prioridade crítica ainda não finalizada",
+                  action: () => {
+                    setFilterStatus("all");
+                    setAdminSection("reports");
+                  },
+                },
+              ].map((item) => (
+                <button
+                  key={item.label}
+                  type="button"
+                  onClick={item.action}
+                  className="rounded-2xl border border-border bg-card p-4 text-left shadow-sm transition hover:-translate-y-0.5 hover:border-secondary/50 hover:shadow-md"
+                >
+                  <p className="text-xs font-medium uppercase tracking-wide text-muted-foreground">
+                    {item.label}
+                  </p>
+                  <p className="mt-2 text-3xl font-bold text-primary">
+                    {item.value}
+                  </p>
+                  <p className="mt-1 text-xs text-muted-foreground">
+                    {item.detail}
+                  </p>
+                </button>
+              ))}
+            </div>
+
+            <div className="grid gap-3 md:grid-cols-3">
+              {[
+                {
+                  label: "Idade média pendente",
+                  value: `${analytics.averageAgeDays}d`,
+                  detail: "Tempo médio dos chamados ainda abertos",
+                },
+                {
+                  label: "Com mídia",
+                  value: analytics.reportsWithMedia.length,
+                  detail: "Chamados filtrados com foto, vídeo ou anexo",
+                },
+                {
+                  label: "Locais recorrentes",
+                  value: analytics.locationData.length,
+                  detail: "Pontos com registros agrupados no filtro",
                 },
               ].map((item) => (
                 <div
@@ -2364,7 +3016,7 @@ const Dashboard = () => {
                           style={{
                             width: `${Math.max(
                               8,
-                              (item.value / Math.max(1, reports.length)) * 100
+                              (item.value / Math.max(1, filtered.length)) * 100
                             )}%`,
                             backgroundColor: item.color,
                           }}
@@ -2394,31 +3046,72 @@ const Dashboard = () => {
                 </div>
               </div>
             </div>
+
+            <div className="rounded-2xl border border-border bg-card p-4 shadow-sm">
+              <p className="text-sm font-semibold">Locais com recorrência</p>
+              <div className="mt-4 grid gap-3 md:grid-cols-2">
+                {analytics.locationData.length === 0 ? (
+                  <p className="text-sm text-muted-foreground">
+                    Sem dados de local para os filtros atuais.
+                  </p>
+                ) : (
+                  analytics.locationData.map((item) => (
+                    <div key={item.name}>
+                      <div className="mb-1 flex items-center justify-between gap-3 text-sm">
+                        <span className="truncate">{item.name}</span>
+                        <span className="font-semibold">{item.value}</span>
+                      </div>
+                      <div className="h-2 rounded-full bg-muted">
+                        <div
+                          className="h-2 rounded-full bg-secondary"
+                          style={{
+                            width: `${Math.max(
+                              8,
+                              (item.value / Math.max(1, filtered.length)) * 100
+                            )}%`,
+                          }}
+                        />
+                      </div>
+                    </div>
+                  ))
+                )}
+              </div>
+            </div>
           </div>
         ) : adminSection === "reports" ? (
           <>
             <div className="mb-6 grid grid-cols-2 gap-3 lg:grid-cols-4">
               {[
-                { label: "Total", value: stats.total, color: "text-primary" },
+                {
+                  label: "Total",
+                  value: stats.total,
+                  color: "text-primary",
+                  action: () => openReportsByStatus(),
+                },
                 {
                   label: "Abertos",
                   value: stats.open,
                   color: "text-red-700",
+                  action: () => openReportsByStatus("ABERTO"),
                 },
                 {
                   label: "Em andamento",
                   value: stats.inProgress,
                   color: "text-blue-700",
+                  action: () => openReportsByStatus("EM_ANDAMENTO"),
                 },
                 {
                   label: "Finalizados",
                   value: stats.done,
                   color: "text-green-700",
+                  action: () => openReportsByStatus("FINALIZADO"),
                 },
               ].map((s) => (
-                <div
+                <button
                   key={s.label}
-                  className="rounded-2xl border border-border bg-card p-4 shadow-sm transition-all hover:-translate-y-0.5 hover:shadow-md"
+                  type="button"
+                  onClick={s.action}
+                  className="rounded-2xl border border-border bg-card p-4 text-left shadow-sm transition-all hover:-translate-y-0.5 hover:border-secondary/50 hover:shadow-md"
                 >
                   <p className="mb-1 text-xs text-muted-foreground">
                     {s.label}
@@ -2426,33 +3119,12 @@ const Dashboard = () => {
                   <p className={`text-2xl font-bold ${s.color}`}>
                     {s.value}
                   </p>
-                </div>
+                </button>
               ))}
             </div>
 
             <div className="mb-4 flex min-w-0 flex-col gap-3 lg:flex-row">
-              <div className="grid grid-cols-2 gap-2 sm:flex sm:flex-wrap">
-                <Button
-                  variant={view === "list" ? "default" : "outline"}
-                  size="sm"
-                  onClick={() => setView("list")}
-                  className={`justify-center ${view === "list" ? "bg-primary text-primary-foreground" : ""
-                    }`}
-                >
-                  <List className="mr-1 h-4 w-4" />
-                  Lista
-                </Button>
-
-                <Button
-                  variant={view === "maps" ? "default" : "outline"}
-                  size="sm"
-                  onClick={() => setView("maps")}
-                  className={`justify-center ${view === "maps" ? "bg-primary text-primary-foreground" : ""
-                    }`}
-                >
-                  <MapIcon className="mr-1 h-4 w-4" />
-                  Mapas
-                </Button>
+              <div className="grid grid-cols-1 gap-2 sm:flex sm:flex-wrap">
                 <Button
                   type="button"
                   size="sm"
@@ -2464,23 +3136,13 @@ const Dashboard = () => {
                 </Button>
                 <Button
                   type="button"
-                  variant="outline"
                   size="sm"
-                  onClick={() => exportAdminCsv("reports")}
+                  variant="outline"
+                  onClick={() => setShowReportExportModal(true)}
                   className="justify-center gap-1"
                 >
                   <FileSpreadsheet className="h-4 w-4" />
-                  Planilha
-                </Button>
-                <Button
-                  type="button"
-                  variant="outline"
-                  size="sm"
-                  onClick={openAuditLogs}
-                  className="justify-center gap-1"
-                >
-                  <History className="h-4 w-4" />
-                  Auditoria
+                  Exportar
                 </Button>
               </div>
 
@@ -2580,7 +3242,7 @@ const Dashboard = () => {
               <div className="rounded-2xl border border-border bg-card p-6 text-sm text-muted-foreground">
                 Carregando chamados...
               </div>
-            ) : view === "list" ? (
+            ) : (
               <div className="space-y-2">
                 <p className="mb-2 text-xs text-muted-foreground">
                   {filtered.length} ocorrência(s) encontradas
@@ -2684,18 +3346,88 @@ const Dashboard = () => {
                   </motion.div>
                 ))}
               </div>
-            ) : (
-              <DashboardMaps
-                reports={filtered}
-                onSelectReport={(report) => {
-                  setDetailImageIndex(0);
-                  setAssignEmployeeIds([]);
-                  setSelectedReport(report);
-                }}
-              />
             )}
           </>
-        ) : adminSection === "employees" ? (
+        ) : adminSection === "maps" ? (
+          <div className="space-y-4">
+            <div className="flex flex-col gap-3 rounded-2xl border border-border bg-card p-4 shadow-sm lg:flex-row lg:items-center lg:justify-between">
+              <div>
+                <p className="text-sm font-semibold">Mapa operacional</p>
+                <p className="text-xs text-muted-foreground">
+                  Pins de chamados e mapa de calor com os mesmos filtros da lista.
+                </p>
+              </div>
+              <Button
+                type="button"
+                onClick={openNewReportModal}
+                className="gap-2 bg-secondary text-secondary-foreground hover:bg-secondary/90"
+              >
+                <Plus className="h-4 w-4" />
+                Novo chamado
+              </Button>
+            </div>
+
+            <div className="grid min-w-0 grid-cols-1 gap-2 rounded-2xl border border-border bg-card p-4 shadow-sm sm:grid-cols-2 lg:flex lg:flex-wrap">
+              <Select value={filterCategory} onValueChange={setFilterCategory}>
+                <SelectTrigger className="h-9 w-full text-sm lg:w-[180px]">
+                  <SelectValue placeholder="Categoria" />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="all">Todas categorias</SelectItem>
+                  {categories.map((category) => (
+                    <SelectItem key={category.id} value={String(category.id)}>
+                      {category.name}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+
+              <Select value={filterStatus} onValueChange={setFilterStatus}>
+                <SelectTrigger className="h-9 w-full text-sm lg:w-[170px]">
+                  <SelectValue placeholder="Status" />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="all">Todos status</SelectItem>
+                  {statuses.map((status) => (
+                    <SelectItem key={status.id} value={String(status.id)}>
+                      {status.name}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+
+              <Select value={filterEmployee} onValueChange={setFilterEmployee}>
+                <SelectTrigger className="h-9 w-full text-sm lg:w-[220px]">
+                  <SelectValue placeholder="Funcionário" />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="all">Todos funcionários</SelectItem>
+                  {assignedEmployeeOptions.map((employee) => (
+                    <SelectItem key={employee.id} value={String(employee.id)}>
+                      {employee.name}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+
+              <Input
+                placeholder="Buscar local ou chamado..."
+                value={filterLocation}
+                onChange={(event) => setFilterLocation(event.target.value)}
+                className="h-9 w-full text-sm lg:w-[280px]"
+              />
+            </div>
+
+            <DashboardMaps
+              reports={filtered}
+              onSelectReport={(report) => {
+                setDetailImageIndex(0);
+                setAssignEmployeeIds([]);
+                setSelectedReport(report);
+              }}
+            />
+          </div>
+        ) : adminSection === "settings" && settingsTab === "employees" ? (
           <div className="space-y-5">
             <div className="grid grid-cols-2 gap-3 lg:grid-cols-4">
               {[
@@ -2899,7 +3631,7 @@ const Dashboard = () => {
                 </div>
             </div>
           </div>
-        ) : adminSection === "users" ? (
+        ) : adminSection === "settings" && settingsTab === "users" ? (
           <div className="space-y-5">
             <div className="rounded-2xl border border-border bg-card shadow-sm">
               <div className="flex flex-col gap-3 border-b border-border p-4">
@@ -3041,7 +3773,7 @@ const Dashboard = () => {
               </div>
             </div>
           </div>
-        ) : adminSection === "departments" ? (
+        ) : adminSection === "settings" && settingsTab === "departments" ? (
           <div className="space-y-5">
             <div className="grid gap-3 md:grid-cols-2 xl:grid-cols-4">
               {[
@@ -3249,12 +3981,223 @@ const Dashboard = () => {
               </div>
             </div>
           </div>
+        ) : adminSection === "settings" && settingsTab === "personalization" ? (
+          <div className="grid gap-5 xl:grid-cols-[1fr_0.8fr]">
+            <div className="rounded-2xl border border-border bg-card p-5 shadow-sm">
+              <div className="mb-5">
+                <p className="text-lg font-bold">Personalização whitelabel</p>
+                <p className="text-sm text-muted-foreground">
+                  Altere nome, logo e cores principais. A mudança aparece no login,
+                  painel administrativo e área do funcionário.
+                </p>
+              </div>
+
+              <div className="grid gap-4 sm:grid-cols-2">
+                {[
+                  ["appName", "Nome do sistema"],
+                  ["shortName", "Nome curto"],
+                  ["organizationName", "Organização"],
+                  ["adminTitle", "Título administrativo"],
+                  ["tagline", "Frase do login"],
+                  ["logoSrc", "URL/caminho da logo"],
+                ].map(([key, label]) => (
+                  <label key={key} className="space-y-1.5 text-sm font-medium">
+                    {label}
+                    <Input
+                      value={brandForm[key as keyof BrandForm]}
+                      onChange={(event) =>
+                        setBrandForm((prev) => ({
+                          ...prev,
+                          [key]: event.target.value,
+                        }))
+                      }
+                    />
+                  </label>
+                ))}
+              </div>
+
+              <div className="mt-5 grid gap-3 sm:grid-cols-3">
+                {[
+                  ["primary", "Cor principal"],
+                  ["secondary", "Cor de destaque"],
+                  ["background", "Fundo"],
+                ].map(([key, label]) => (
+                  <label
+                    key={key}
+                    className="rounded-2xl border border-border bg-background p-3 text-sm font-medium"
+                  >
+                    {label}
+                    <div className="mt-3 flex items-center gap-3">
+                      <input
+                        type="color"
+                        value={brandForm[key as keyof BrandForm]}
+                        onChange={(event) =>
+                          setBrandForm((prev) => ({
+                            ...prev,
+                            [key]: event.target.value,
+                          }))
+                        }
+                        className="h-10 w-12 rounded-lg border border-border bg-transparent"
+                      />
+                      <Input
+                        value={brandForm[key as keyof BrandForm]}
+                        onChange={(event) =>
+                          setBrandForm((prev) => ({
+                            ...prev,
+                            [key]: event.target.value,
+                          }))
+                        }
+                        className="h-10"
+                      />
+                    </div>
+                  </label>
+                ))}
+              </div>
+
+              <div className="mt-6 flex flex-col gap-2 sm:flex-row">
+                <Button
+                  type="button"
+                  onClick={saveBrandCustomization}
+                  className="gap-2"
+                >
+                  <Save className="h-4 w-4" />
+                  Aplicar personalização
+                </Button>
+                <Button
+                  type="button"
+                  variant="outline"
+                  onClick={resetBrandCustomization}
+                  className="gap-2"
+                >
+                  <RotateCcw className="h-4 w-4" />
+                  Restaurar padrão
+                </Button>
+              </div>
+            </div>
+
+            <div className="rounded-2xl border border-border bg-card p-5 shadow-sm">
+              <p className="text-sm font-semibold">Prévia rápida</p>
+              <div
+                className="mt-4 rounded-3xl p-5 text-white shadow-lg"
+                style={{ backgroundColor: brandForm.primary }}
+              >
+                <div className="flex items-center gap-3">
+                  <img
+                    src={brandForm.logoSrc || defaultBrandPreset.logoSrc}
+                    alt=""
+                    className="h-16 w-16 rounded-2xl bg-white/10 object-contain p-1"
+                  />
+                  <div>
+                    <p className="text-xl font-bold">{brandForm.shortName}</p>
+                    <p className="text-sm text-white/75">
+                      {brandForm.adminTitle} • {brandForm.organizationName}
+                    </p>
+                  </div>
+                </div>
+                <div
+                  className="mt-5 inline-flex rounded-full px-4 py-2 text-sm font-semibold"
+                  style={{ backgroundColor: brandForm.secondary }}
+                >
+                  {brandForm.tagline || "Sempre presente!"}
+                </div>
+              </div>
+              <p className="mt-4 text-xs text-muted-foreground">
+                Nesta versão a personalização fica salva neste navegador. Para
+                produção multiempresa, o próximo passo é persistir o preset no banco.
+              </p>
+            </div>
+          </div>
+        ) : adminSection === "settings" && settingsTab === "audit" ? (
+          <div className="grid gap-4 lg:grid-cols-4">
+            <button
+              type="button"
+              onClick={() => setShowAnalyticsExportModal(true)}
+              className="rounded-2xl border border-border bg-card p-5 text-left shadow-sm transition hover:-translate-y-0.5 hover:shadow-md"
+            >
+              <BarChart3 className="mb-3 h-6 w-6 text-primary" />
+              <p className="font-semibold">PDF de indicadores</p>
+              <p className="mt-1 text-sm text-muted-foreground">
+                Escolha quais blocos entram no relatório visual.
+              </p>
+            </button>
+            <button
+              type="button"
+              onClick={openAuditLogs}
+              className="rounded-2xl border border-border bg-card p-5 text-left shadow-sm transition hover:-translate-y-0.5 hover:shadow-md"
+            >
+              <History className="mb-3 h-6 w-6 text-primary" />
+              <p className="font-semibold">Visualizar auditoria</p>
+              <p className="mt-1 text-sm text-muted-foreground">
+                Veja ações, edições, atribuições e alterações registradas.
+              </p>
+            </button>
+            <button
+              type="button"
+              onClick={() => exportAdminCsv("audit")}
+              className="rounded-2xl border border-border bg-card p-5 text-left shadow-sm transition hover:-translate-y-0.5 hover:shadow-md"
+            >
+              <Download className="mb-3 h-6 w-6 text-primary" />
+              <p className="font-semibold">Baixar auditoria</p>
+              <p className="mt-1 text-sm text-muted-foreground">
+                Exporte os registros para planilha CSV.
+              </p>
+            </button>
+            <button
+              type="button"
+              onClick={() => setShowReportExportModal(true)}
+              className="rounded-2xl border border-border bg-card p-5 text-left shadow-sm transition hover:-translate-y-0.5 hover:shadow-md"
+            >
+              <FileSpreadsheet className="mb-3 h-6 w-6 text-primary" />
+              <p className="font-semibold">Planilha de chamados</p>
+              <p className="mt-1 text-sm text-muted-foreground">
+                Exporte chamados filtrados por categoria, pessoa, status, local e período.
+              </p>
+            </button>
+          </div>
         ) : (
-          <div className="rounded-2xl border border-border bg-card p-6 shadow-sm">
-            <p className="text-lg font-semibold">{sectionTitle}</p>
-            <p className="mt-1 text-sm text-muted-foreground">
-              Essa área será conectada ao banco nos próximos passos.
-            </p>
+          <div className="space-y-5">
+            <div className="rounded-2xl border border-border bg-card p-6 shadow-sm">
+              <p className="text-lg font-bold">Configurações administrativas</p>
+              <p className="mt-1 text-sm text-muted-foreground">
+                Áreas de gestão ficam aqui para o painel abrir limpo em Chamados
+                e Mapa durante a apresentação.
+              </p>
+            </div>
+
+            <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-3">
+              {settingsMenu
+                .filter((item) => item.id !== "home")
+                .map((item) => {
+                  const Icon = item.icon;
+
+                  return (
+                    <button
+                      key={item.id}
+                      type="button"
+                      onClick={() => setSettingsTab(item.id)}
+                      className="group rounded-2xl border border-border bg-card p-5 text-left shadow-sm transition hover:-translate-y-0.5 hover:border-secondary/50 hover:shadow-md"
+                    >
+                      <div className="mb-4 flex h-11 w-11 items-center justify-center rounded-2xl bg-primary/10 text-primary transition group-hover:scale-105">
+                        <Icon className="h-5 w-5" />
+                      </div>
+                      <p className="font-semibold">{item.label}</p>
+                      <p className="mt-1 text-sm text-muted-foreground">
+                        {item.id === "personalization"
+                          ? "Nome, logo, cores e reversão para o padrão."
+                          : item.id === "analytics"
+                            ? "Gráficos de produtividade e indicadores."
+                            : item.id === "employees"
+                              ? "Cadastro, validação, filtros e status."
+                              : item.id === "users"
+                                ? "Acessos, perfis e usuários desativados."
+                                : item.id === "departments"
+                                  ? "Departamentos, vínculos e equipes."
+                                  : "Visualizar e baixar registros do sistema."}
+                      </p>
+                    </button>
+                  );
+                })}
+            </div>
           </div>
         )}
       </main>
@@ -4438,6 +5381,158 @@ const Dashboard = () => {
       </AnimatePresence>
 
       <AnimatePresence>
+        {showAnalyticsExportModal && (
+          <motion.div
+            className="fixed inset-0 z-[10000] flex items-end justify-center bg-black/60 p-0 sm:items-center sm:p-4"
+            initial={{ opacity: 0 }}
+            animate={{ opacity: 1 }}
+            exit={{ opacity: 0 }}
+            onClick={() => setShowAnalyticsExportModal(false)}
+          >
+            <motion.div
+              initial={{ opacity: 0, y: 36, scale: 0.98 }}
+              animate={{ opacity: 1, y: 0, scale: 1 }}
+              exit={{ opacity: 0, y: 36, scale: 0.98 }}
+              onClick={(event) => event.stopPropagation()}
+              className="w-full max-w-2xl rounded-t-3xl border border-border bg-card p-5 shadow-2xl sm:rounded-3xl"
+            >
+              <div className="mb-4 flex items-start justify-between gap-3">
+                <div>
+                  <h2 className="text-lg font-bold">Exportar indicadores em PDF</h2>
+                  <p className="text-sm text-muted-foreground">
+                    Marque os blocos que devem aparecer no relatório.
+                  </p>
+                </div>
+                <button
+                  type="button"
+                  onClick={() => setShowAnalyticsExportModal(false)}
+                  className="flex h-9 w-9 items-center justify-center rounded-full bg-muted text-muted-foreground hover:text-foreground"
+                >
+                  <X className="h-4 w-4" />
+                </button>
+              </div>
+
+              <div className="grid gap-2 sm:grid-cols-2">
+                {analyticsExportSections.map((section) => (
+                  <label
+                    key={section.id}
+                    className="flex cursor-pointer items-center gap-3 rounded-2xl border border-border bg-background p-3 text-sm transition hover:border-secondary/60"
+                  >
+                    <input
+                      type="checkbox"
+                      checked={selectedAnalyticsSections.includes(section.id)}
+                      onChange={() => toggleAnalyticsExportSection(section.id)}
+                      className="h-4 w-4 accent-primary"
+                    />
+                    <span>{section.label}</span>
+                  </label>
+                ))}
+              </div>
+
+              <div className="mt-5 flex flex-col gap-2 sm:flex-row sm:justify-end">
+                <Button
+                  type="button"
+                  variant="outline"
+                  onClick={() =>
+                    setSelectedAnalyticsSections(
+                      analyticsExportSections.map((section) => section.id)
+                    )
+                  }
+                >
+                  Marcar todos
+                </Button>
+                <Button type="button" onClick={exportAnalyticsPdf} className="gap-2">
+                  <Download className="h-4 w-4" />
+                  Gerar PDF
+                </Button>
+              </div>
+            </motion.div>
+          </motion.div>
+        )}
+
+        {showReportExportModal && (
+          <motion.div
+            className="fixed inset-0 z-[10000] flex items-end justify-center bg-black/60 p-0 sm:items-center sm:p-4"
+            initial={{ opacity: 0 }}
+            animate={{ opacity: 1 }}
+            exit={{ opacity: 0 }}
+            onClick={() => setShowReportExportModal(false)}
+          >
+            <motion.div
+              initial={{ opacity: 0, y: 36, scale: 0.98 }}
+              animate={{ opacity: 1, y: 0, scale: 1 }}
+              exit={{ opacity: 0, y: 36, scale: 0.98 }}
+              onClick={(event) => event.stopPropagation()}
+              className="w-full max-w-3xl rounded-t-3xl border border-border bg-card p-5 shadow-2xl sm:rounded-3xl"
+            >
+              <div className="mb-4 flex items-start justify-between gap-3">
+                <div>
+                  <h2 className="text-lg font-bold">Exportar chamados filtrados</h2>
+                  <p className="text-sm text-muted-foreground">
+                    Serão exportados {filtered.length} chamado(s) usando categoria,
+                    pessoa, status, período e busca atuais.
+                  </p>
+                </div>
+                <button
+                  type="button"
+                  onClick={() => setShowReportExportModal(false)}
+                  className="flex h-9 w-9 items-center justify-center rounded-full bg-muted text-muted-foreground hover:text-foreground"
+                >
+                  <X className="h-4 w-4" />
+                </button>
+              </div>
+
+              <div className="mb-4 grid gap-2 rounded-2xl border border-border bg-background p-3 text-xs text-muted-foreground sm:grid-cols-4">
+                {Object.entries(formatFiltersForExport()).map(([key, value]) => (
+                  <div key={key}>
+                    <span className="font-semibold text-foreground">{key}</span>
+                    <p className="truncate">{value}</p>
+                  </div>
+                ))}
+              </div>
+
+              <div className="grid gap-2 sm:grid-cols-2 lg:grid-cols-3">
+                {reportExportColumns.map((column) => (
+                  <label
+                    key={column.id}
+                    className="flex cursor-pointer items-center gap-3 rounded-2xl border border-border bg-background p-3 text-sm transition hover:border-secondary/60"
+                  >
+                    <input
+                      type="checkbox"
+                      checked={selectedReportColumns.includes(column.id)}
+                      onChange={() => toggleReportExportColumn(column.id)}
+                      className="h-4 w-4 accent-primary"
+                    />
+                    <span>{column.label}</span>
+                  </label>
+                ))}
+              </div>
+
+              <div className="mt-5 flex flex-col gap-2 sm:flex-row sm:justify-end">
+                <Button
+                  type="button"
+                  variant="outline"
+                  onClick={() =>
+                    setSelectedReportColumns(
+                      reportExportColumns.map((column) => column.id)
+                    )
+                  }
+                >
+                  Marcar todos
+                </Button>
+                <Button
+                  type="button"
+                  onClick={exportFilteredReportsCsv}
+                  className="gap-2"
+                >
+                  <FileSpreadsheet className="h-4 w-4" />
+                  Baixar CSV
+                </Button>
+              </div>
+            </motion.div>
+          </motion.div>
+        )}
+
         {expandedMedia && (
           <motion.div
             className="fixed inset-0 z-[12000] flex items-center justify-center bg-black/90 p-4"

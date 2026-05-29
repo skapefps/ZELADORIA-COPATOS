@@ -3,7 +3,7 @@ import { Link, useParams } from "react-router-dom";
 import { CheckCircle, Loader2, XCircle } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { BrandLogo } from "@/components/BrandLogo";
-import { brandPreset } from "@/config/brand";
+import { useBranding } from "@/config/brand";
 
 const API_URL =
   window.location.hostname === "localhost" ||
@@ -14,6 +14,7 @@ const API_URL =
 
 const VerifyEmployeeEmail = () => {
   const { token } = useParams();
+  const { brandPreset } = useBranding();
   const [status, setStatus] = useState<"loading" | "success" | "error">(
     "loading"
   );

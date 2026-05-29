@@ -7,7 +7,7 @@ import { useToast } from "@/hooks/use-toast";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { BrandLogo } from "@/components/BrandLogo";
-import { brandPreset } from "@/config/brand";
+import { useBranding } from "@/config/brand";
 
 const API_URL =
   window.location.hostname === "localhost" ||
@@ -23,7 +23,6 @@ const EmployeeLogin = () => {
     window.location.hostname === "www.zeladoriacoopatos.com.br";
 
   const [matricula, setMatricula] = useState("");
-  const [showTimeoutModal, setShowTimeoutModal] = useState(false);
   const [error, setError] = useState("");
   const [cpf, setCpf] = useState("");
   const [loading, setLoading] = useState(false);
@@ -36,6 +35,7 @@ const EmployeeLogin = () => {
   const { loginEmployee } = useAuth();
   const navigate = useNavigate();
   const { toast } = useToast();
+  const { brandPreset } = useBranding();
 
 
   useEffect(() => {
@@ -103,12 +103,30 @@ const EmployeeLogin = () => {
 
   useEffect(() => {
     const sessionExpired = sessionStorage.getItem("sessionExpired");
+    const expiredRole = sessionStorage.getItem("sessionExpiredRole");
+    const storedForcedLogoutMessage = sessionStorage.getItem("employeeForcedLogout");
 
-    if (sessionExpired === "true") {
-      setShowTimeoutModal(true);
-      sessionStorage.removeItem("sessionExpired");
+    if (sessionExpired === "true" && (!expiredRole || expiredRole === "employee")) {
+      toast({
+        title: "Sessão expirada",
+        description:
+          "Você foi desconectado por inatividade. Faça login novamente para continuar.",
+        variant: "destructive",
+      });
     }
-  }, []);
+
+    if (storedForcedLogoutMessage) {
+      toast({
+        title: "Sessão encerrada",
+        description: storedForcedLogoutMessage,
+        variant: "destructive",
+      });
+    }
+
+    sessionStorage.removeItem("sessionExpired");
+    sessionStorage.removeItem("sessionExpiredRole");
+    sessionStorage.removeItem("employeeForcedLogout");
+  }, [toast]);
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -148,6 +166,10 @@ const EmployeeLogin = () => {
       localStorage.setItem("employee", JSON.stringify(data.employee));
 
       localStorage.setItem(
+        "employeeSessionToken",
+        data.sessionToken || ""
+      );
+      sessionStorage.setItem(
         "employeeSessionToken",
         data.sessionToken || ""
       );
@@ -301,33 +323,6 @@ const EmployeeLogin = () => {
           </button>
         </div>
       </motion.div>
-      {showTimeoutModal && (
-        <div className="fixed inset-0 z-[9998] bg-black/50 flex items-center justify-center p-4">
-          <div className="bg-card rounded-2xl p-6 w-full max-w-sm shadow-2xl border border-border">
-            <div className="text-center">
-              <div className="mx-auto mb-4 flex h-12 w-12 items-center justify-center rounded-full bg-yellow-100">
-                <Shield className="w-6 h-6 text-yellow-600" />
-              </div>
-
-              <h3 className="text-lg font-semibold mb-2">
-                Sessão expirada
-              </h3>
-
-              <p className="text-sm text-muted-foreground mb-6">
-                Você foi desconectado por inatividade. Faça login novamente para continuar.
-              </p>
-            </div>
-
-            <Button
-              className="w-full bg-secondary hover:bg-secondary/90 text-secondary-foreground font-semibold"
-              onClick={() => setShowTimeoutModal(false)}
-            >
-              OK
-            </Button>
-          </div>
-        </div>
-      )}
-
       <AnimatePresence>
         {showRecovery && (
           <>
