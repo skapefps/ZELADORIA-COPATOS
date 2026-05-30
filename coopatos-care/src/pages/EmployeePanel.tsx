@@ -253,6 +253,7 @@ type PrivateMessage = {
   publicId?: string | null;
   resourceType?: string | null;
   createdAt: string;
+  readByEmployeeIds?: number[];
   sender?: {
     id: number;
     name: string;
@@ -504,6 +505,10 @@ const EmployeePanel = () => {
   const [currentPrivateSearchIndex, setCurrentPrivateSearchIndex] = useState(0);
   const privateMessageRefs = useRef<Record<number, HTMLDivElement | null>>({});
   const [sendingPrivateMessage, setSendingPrivateMessage] = useState(false);
+  const privateConversationRef = useRef<PrivateConversation | null>(null);
+  const showPrivateChatModalRef = useRef(false);
+  const selectedReportRef = useRef<Report | null>(null);
+  const showMessagesModalRef = useRef(false);
   const [teamEmployees, setTeamEmployees] = useState<EmployeeOption[]>([]);
   const [teamSearch, setTeamSearch] = useState("");
   const [teamDepartmentFilter, setTeamDepartmentFilter] = useState("all");
@@ -628,6 +633,26 @@ const EmployeePanel = () => {
       console.error(error);
     }
   };
+
+  const getStoredEmployee = () => {
+    return JSON.parse(localStorage.getItem("employee") || "{}");
+  };
+
+  useEffect(() => {
+    privateConversationRef.current = privateConversation;
+  }, [privateConversation]);
+
+  useEffect(() => {
+    showPrivateChatModalRef.current = showPrivateChatModal;
+  }, [showPrivateChatModal]);
+
+  useEffect(() => {
+    selectedReportRef.current = selectedReport;
+  }, [selectedReport]);
+
+  useEffect(() => {
+    showMessagesModalRef.current = showMessagesModal;
+  }, [showMessagesModal]);
   useEffect(() => {
     const updateWidth = () => {
       setIsMobileTabs(window.innerWidth < 768);
@@ -734,12 +759,14 @@ const EmployeePanel = () => {
     socket.on("notification-created", handleNotificationCreated);
 
     const handlePrivateMessage = (message: PrivateMessage) => {
+      const activeConversation = privateConversationRef.current;
+
       setPrivateMessages((prev) => {
         if (prev.some((msg) => msg.id === message.id)) return prev;
 
         if (
-          privateConversation &&
-          message.conversationId === privateConversation.id
+          activeConversation &&
+          message.conversationId === activeConversation.id
         ) {
           return [...prev, message];
         }
@@ -748,7 +775,14 @@ const EmployeePanel = () => {
       });
 
       setTimeout(() => {
-        scrollPrivateMessagesToBottom();
+        if (
+          activeConversation &&
+          message.conversationId === activeConversation.id &&
+          showPrivateChatModalRef.current
+        ) {
+          scrollPrivateMessagesToBottom();
+          markPrivateMessagesAsRead(message.conversationId);
+        }
       }, 100);
     };
 
@@ -769,6 +803,44 @@ const EmployeePanel = () => {
 
     socket.on("private-message-updated", handlePrivateMessageUpdated);
     socket.on("private-message-deleted", handlePrivateMessageDeleted);
+
+    const handlePrivateMessagesRead = ({
+      employeeId,
+      lastReadMessageId,
+    }: {
+      employeeId: number;
+      lastReadMessageId: number | null;
+    }) => {
+      setPrivateMessages((prev) =>
+        prev.map((msg) => ({
+          ...msg,
+          readByEmployeeIds:
+            lastReadMessageId && msg.id <= lastReadMessageId
+              ? Array.from(
+                new Set([...(msg.readByEmployeeIds || []), employeeId])
+              )
+              : msg.readByEmployeeIds,
+        }))
+      );
+    };
+
+    socket.on("private-messages-read", handlePrivateMessagesRead);
+
+    const handleReportMessageNotification = (message: ReportMessage) => {
+      const currentReport = selectedReportRef.current;
+      const isCurrentOpenReport =
+        showMessagesModalRef.current && currentReport?.id === message.reportId;
+
+      if (isCurrentOpenReport) return;
+
+      setUnreadCounts((prev) => ({
+        ...prev,
+        [message.reportId]: (prev[message.reportId] || 0) + 1,
+      }));
+    };
+
+    socket.on("report-message-notification", handleReportMessageNotification);
+
 
     const handleForceLogout = (data: {
       reason?: string;
@@ -809,6 +881,8 @@ const EmployeePanel = () => {
       socket.off("private-message", handlePrivateMessage);
       socket.off("private-message-updated", handlePrivateMessageUpdated);
       socket.off("private-message-deleted", handlePrivateMessageDeleted);
+      socket.off("private-messages-read", handlePrivateMessagesRead);
+      socket.off("report-message-notification", handleReportMessageNotification);
       socket.off("force-logout", handleForceLogout);
     };
   }, []);
@@ -1352,7 +1426,7 @@ const EmployeePanel = () => {
   }, []);
 
   const markMessagesAsRead = async (reportId: number) => {
-    const employee = JSON.parse(localStorage.getItem("employee") || "{}");
+    const employee = getStoredEmployee();
 
     if (!employee.id) return;
 
@@ -1371,6 +1445,26 @@ const EmployeePanel = () => {
         ...prev,
         [reportId]: 0,
       }));
+    } catch (error) {
+      console.error(error);
+    }
+  };
+
+  const markPrivateMessagesAsRead = async (conversationId: number) => {
+    const employee = getStoredEmployee();
+
+    if (!employee.id) return;
+
+    try {
+      await fetch(`${API_URL}/private-conversations/${conversationId}/mark-read`, {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify({
+          employeeId: employee.id,
+        }),
+      });
     } catch (error) {
       console.error(error);
     }
@@ -1500,11 +1594,27 @@ const EmployeePanel = () => {
       lastMessageIdRef.current = message.id;
 
       if (message.senderId !== employee.id) {
-        if (isNearBottomRef.current) {
-          markMessagesAsRead(selectedReport.id);
+        const isCurrentOpenReport =
+          selectedReport?.id === message.reportId && showMessagesModal;
+
+        if (isCurrentOpenReport && isNearBottomRef.current) {
+          markMessagesAsRead(message.reportId);
+
+          setUnreadCounts((prev) => ({
+            ...prev,
+            [message.reportId]: 0,
+          }));
+
           jumpMessagesToBottom();
         } else {
-          setNewMessagesCount((prev) => prev + 1);
+          setUnreadCounts((prev) => ({
+            ...prev,
+            [message.reportId]: (prev[message.reportId] || 0) + 1,
+          }));
+
+          if (isCurrentOpenReport) {
+            setNewMessagesCount((prev) => prev + 1);
+          }
         }
       }
     });
@@ -1631,10 +1741,13 @@ const EmployeePanel = () => {
       }
 
       setPrivateConversation(data);
+      privateConversationRef.current = data;
       setShowTeamPanel(false);
       setShowPrivateChatModal(true);
+      showPrivateChatModalRef.current = true;
 
       await loadPrivateMessages(data.id);
+      await markPrivateMessagesAsRead(data.id);
 
       setTimeout(() => {
         scrollPrivateMessagesToBottom();
@@ -1743,6 +1856,17 @@ const EmployeePanel = () => {
     setSendingPrivateMessage(true);
 
     try {
+      const currentEmployee = getStoredEmployee();
+
+      if (!currentEmployee.id) {
+        toast({
+          title: "Sessão inválida",
+          description: "Entre novamente para enviar mensagens.",
+          variant: "destructive",
+        });
+        return;
+      }
+
       const mediaItems = privateChatFiles.length
         ? await Promise.all(
           privateChatFiles.map((file) => uploadImageToCloudinary(file))
@@ -1756,7 +1880,7 @@ const EmployeePanel = () => {
             "Content-Type": "application/json",
           },
           body: JSON.stringify({
-            senderId: employee.id,
+            senderId: currentEmployee.id,
             message: privateMessageText.trim() || "",
             mediaItems,
             replyToMessageId: replyingToPrivateMessage?.id || null,
@@ -1966,8 +2090,10 @@ const EmployeePanel = () => {
     }
 
     setShowPrivateChatModal(false);
+    showPrivateChatModalRef.current = false;
     clearPrivateMessageSelection();
     setPrivateConversation(null);
+    privateConversationRef.current = null;
     setPrivateMessages([]);
     setPrivateMessageText("");
   };
@@ -3491,12 +3617,21 @@ const EmployeePanel = () => {
       const isMine = msg.senderId === employee.id;
 
       return (
-        <div
+        <motion.div
           key={msg.id}
           ref={(el) => {
             messageRefs.current[msg.id] = el;
           }}
-          className={`relative flex ${isMine ? "justify-end" : "justify-start"}`}
+          drag="x"
+          dragConstraints={{ left: -90, right: 90 }}
+          dragElastic={0.16}
+          dragSnapToOrigin
+          onDragEnd={(_, info) => {
+            if (Math.abs(info.offset.x) > 70) {
+              setReplyingTo(msg);
+            }
+          }}
+          className={`relative flex touch-pan-y ${isMine ? "justify-end" : "justify-start"}`}
           onContextMenu={(e) => {
             e.preventDefault();
             setMessageMenuId(msg.id);
@@ -3691,7 +3826,7 @@ const EmployeePanel = () => {
               </motion.div>
             )}
           </div>
-        </div>
+        </motion.div>
       );
     });
   };
@@ -5558,12 +5693,17 @@ const EmployeePanel = () => {
                       </Button>
 
                       {showEmojiPicker && (
-                        <div className="absolute bottom-14 left-0 z-[9999]">
+                        <div
+                          className="fixed bottom-24 left-4 z-[9999] max-w-[calc(100vw-2rem)] overflow-hidden rounded-2xl border border-border bg-card shadow-2xl sm:left-auto sm:right-6"
+                          onPointerDown={(e) => e.stopPropagation()}
+                        >
                           <EmojiPicker
                             onEmojiClick={(emojiData) => {
                               setNewMessage((prev) => prev + emojiData.emoji);
                             }}
                             theme={Theme.LIGHT}
+                            width={Math.min(340, window.innerWidth - 32)}
+                            height={420}
                             lazyLoadEmojis
                           />
                         </div>
@@ -6615,12 +6755,22 @@ touch-manipulation
                                 )
                               )}
 
-                              <p className="mt-1 text-[10px] opacity-60 text-right">
-                                {new Date(msg.createdAt).toLocaleTimeString("pt-BR", {
-                                  hour: "2-digit",
-                                  minute: "2-digit",
-                                })}
-                              </p>
+                              <div className="mt-1 flex items-center justify-end gap-1 text-[10px] opacity-60">
+                                <span>
+                                  {new Date(msg.createdAt).toLocaleTimeString("pt-BR", {
+                                    hour: "2-digit",
+                                    minute: "2-digit",
+                                  })}
+                                </span>
+
+                                {isMine && (
+                                  msg.readByEmployeeIds?.some((id) => id !== employee.id) ? (
+                                    <CheckCheck className="h-3.5 w-3.5 text-blue-500" />
+                                  ) : (
+                                    <Check className="h-3.5 w-3.5" />
+                                  )
+                                )}
+                              </div>
                             </div>
                           </motion.div>
                         </div>
@@ -6797,24 +6947,20 @@ touch-manipulation
                       </Button>
 
                       {showPrivateEmojiPicker && (
-                        <motion.div
-                          initial={{ opacity: 0, y: 10, scale: 0.96 }}
-                          animate={{ opacity: 1, y: 0, scale: 1 }}
-                          transition={{ duration: 0.16, ease: "easeOut" }}
-                          className="fixed inset-x-2 bottom-[calc(4.75rem+env(safe-area-inset-bottom))] z-[9300] mx-auto flex max-w-[350px] justify-center overflow-hidden rounded-2xl shadow-2xl sm:absolute sm:bottom-12 sm:left-auto sm:right-0 sm:inset-x-auto"
+                        <div
+                          className="fixed bottom-24 left-4 z-[99999] max-w-[calc(100vw-2rem)] overflow-hidden rounded-2xl border border-border bg-card shadow-2xl sm:left-auto sm:right-6"
+                          onPointerDown={(e) => e.stopPropagation()}
                         >
-                          <div className="max-w-full overflow-hidden rounded-2xl">
-                            <EmojiPicker
-                              width="100%"
-                              height={360}
-                              theme={Theme.LIGHT}
-                              onEmojiClick={(emojiData) => {
-                                setPrivateMessageText((prev) => prev + emojiData.emoji);
-                                setShowPrivateEmojiPicker(false);
-                              }}
-                            />
-                          </div>
-                        </motion.div>
+                          <EmojiPicker
+                            theme={Theme.LIGHT}
+                            width={Math.min(340, window.innerWidth - 32)}
+                            height={420}
+                            onEmojiClick={(emojiData) => {
+                              setPrivateMessageText((prev) => prev + emojiData.emoji);
+                              setShowPrivateEmojiPicker(false);
+                            }}
+                          />
+                        </div>
                       )}
                     </div>
 

@@ -2882,7 +2882,28 @@ router.get("/private-conversations/:conversationId/messages", async (req, res) =
       },
     });
 
-    return res.json(messages);
+    const reads = await prisma.privateMessageRead.findMany({
+      where: {
+        conversationId,
+      },
+      select: {
+        employeeId: true,
+        lastReadMessageId: true,
+      },
+    });
+
+    const messagesWithReads = messages.map((message) => ({
+      ...message,
+      readByEmployeeIds: reads
+        .filter(
+          (read) =>
+            read.lastReadMessageId &&
+            read.lastReadMessageId >= message.id
+        )
+        .map((read) => read.employeeId),
+    }));
+
+    return res.json(messagesWithReads);
   } catch (error) {
     console.error(error);
     return res.status(500).json({
@@ -3024,6 +3045,13 @@ router.post("/private-conversations/:conversationId/messages", async (req, res) 
       newMessage
     );
 
+    for (const participant of conversation.participants) {
+      io.to(`employee-${participant.employeeId}`).emit(
+        "private-message",
+        newMessage
+      );
+    }
+
     return res.status(201).json(newMessage);
   } catch (error) {
     console.error(error);
@@ -3135,6 +3163,60 @@ router.delete("/private-conversations/:conversationId/messages/:messageId", asyn
     console.error(error);
     return res.status(500).json({
       error: "Erro ao apagar mensagem privada.",
+    });
+  }
+});
+
+router.post("/private-conversations/:conversationId/mark-read", async (req, res) => {
+  try {
+    const conversationId = Number(req.params.conversationId);
+    const { employeeId } = req.body;
+
+    if (!employeeId) {
+      return res.status(400).json({
+        error: "Funcionário é obrigatório.",
+      });
+    }
+
+    const lastMessage = await prisma.privateMessage.findFirst({
+      where: {
+        conversationId,
+      },
+      orderBy: {
+        id: "desc",
+      },
+    });
+
+    await prisma.privateMessageRead.upsert({
+      where: {
+        conversationId_employeeId: {
+          conversationId,
+          employeeId: Number(employeeId),
+        },
+      },
+      update: {
+        lastReadMessageId: lastMessage?.id || null,
+      },
+      create: {
+        conversationId,
+        employeeId: Number(employeeId),
+        lastReadMessageId: lastMessage?.id || null,
+      },
+    });
+
+    io.to(`private-conversation-${conversationId}`).emit("private-messages-read", {
+      conversationId,
+      employeeId: Number(employeeId),
+      lastReadMessageId: lastMessage?.id || null,
+    });
+
+    return res.json({
+      message: "Conversa privada marcada como lida.",
+    });
+  } catch (error) {
+    console.error(error);
+    return res.status(500).json({
+      error: "Erro ao marcar conversa privada como lida.",
     });
   }
 });
@@ -3254,6 +3336,11 @@ router.post("/reports/:id/messages", async (req, res) => {
       reportId,
       messageId: newMessage.id,
     });
+
+    io.to(`employee-${participant.employeeId}`).emit(
+      "report-message-notification",
+      newMessage
+    );
   }
 
   io.to(`report-${reportId}`).emit("new-message", newMessage);

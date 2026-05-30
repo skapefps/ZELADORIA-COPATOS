@@ -212,7 +212,17 @@ Eventos relevantes citados no projeto:
 - `private-message`
 - `private-message-updated`
 - `private-message-deleted`
+- `private-messages-read`
+- `report-message-notification`
 - `force-logout`
+
+## Alterações Recentes
+
+- Chat privado: adicionada leitura real com `PrivateMessageRead`, rota de `mark-read`, check azul e atualização em tempo real por Socket.IO.
+- Chat privado: corrigido listener com estado antigo da conversa, evitando falha em imagens, emojis e mensagens chegando sem atualizar a tela.
+- Chat de chamados: adicionada notificação em tempo real por funcionário para manter o balão de mensagens não lidas atualizado.
+- Conversas: mensagens do chamado agora também aceitam arrastar para responder, seguindo o comportamento do chat privado.
+- UI responsiva: emoji picker reposicionado para não cortar no desktop/mobile e base da página ajustada para manter rolagem suave.
 
 ## Pendências e Roadmap
 
@@ -220,7 +230,6 @@ Antes de mexer nesses itens, verificar se já foram implementados no código atu
 
 ### Alta prioridade
 
-- Corrigir/validar check azul de leitura no chat.
 - Reduzir polling e depender mais de Socket.IO.
 - Evitar duplicação de mensagens em envios repetidos.
 - Melhorar menu de mensagem no mobile usando seta em vez de long press.
