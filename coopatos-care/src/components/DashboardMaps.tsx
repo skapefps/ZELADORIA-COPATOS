@@ -1,11 +1,12 @@
 import React, { useState, useEffect, useRef } from "react";
 import { Flame, MapPin } from "lucide-react";
 
-type MapReport = {
+export type MapReport = {
   id: number;
   title?: string | null;
   description?: string | null;
   referencePoint?: string | null;
+  priority?: string | null;
   address?: string | null;
   latitude?: number | null;
   longitude?: number | null;
@@ -17,7 +18,27 @@ type MapReport = {
   status: {
     id: number;
     name: string;
+    color?: string | null;
   };
+  employee: {
+    id: number;
+    name: string;
+    department?: string | null;
+  };
+  participants?: {
+    id: number;
+    employeeId: number;
+    employee: {
+      id: number;
+      name: string;
+      department?: string | null;
+    };
+  }[];
+  images?: {
+    id: number;
+    imageUrl: string;
+    resourceType?: string | null;
+  }[];
 };
 
 const CATEGORY_WEIGHTS: Record<string, number> = {
@@ -30,6 +51,48 @@ const CATEGORY_WEIGHTS: Record<string, number> = {
   Outro: 1,
 };
 
+type LeafletLayer = {
+  addTo: (map: LeafletMap) => LeafletLayer;
+};
+
+type LeafletLayerGroup = LeafletLayer & {
+  addLayer: (layer: LeafletLayer) => void;
+};
+
+type LeafletMarker = LeafletLayer & {
+  bindPopup: (content: string) => LeafletMarker;
+  on: (eventName: "click", callback: () => void) => void;
+};
+
+type LeafletMap = {
+  setView: (center: [number, number], zoom: number) => LeafletMap;
+  addLayer: (layer: LeafletLayer) => void;
+  remove: () => void;
+};
+
+type LeafletApi = {
+  map: (element: HTMLElement) => LeafletMap;
+  tileLayer: (url: string, options: { attribution: string }) => LeafletLayer;
+  marker: (coordinates: [number, number]) => LeafletMarker;
+  layerGroup: () => LeafletLayerGroup;
+  markerClusterGroup?: () => LeafletLayerGroup;
+  heatLayer?: (
+    points: [number, number, number][],
+    options: {
+      radius: number;
+      blur: number;
+      maxZoom: number;
+      gradient: Record<number, string>;
+    }
+  ) => LeafletLayer;
+};
+
+declare global {
+  interface Window {
+    L?: LeafletApi;
+  }
+}
+
 // We use basic Leaflet without React wrappers for simplicity with plugins
 const DashboardMaps = ({
   reports,
@@ -40,7 +103,7 @@ const DashboardMaps = ({
 }) => {
   const [mapTab, setMapTab] = useState<"heat" | "markers">("markers");
   const mapContainerRef = useRef<HTMLDivElement>(null);
-  const mapRef = useRef<any>(null);
+  const mapRef = useRef<LeafletMap | null>(null);
   const onSelectReportRef = useRef(onSelectReport);
 
   useEffect(() => {
@@ -56,11 +119,15 @@ const DashboardMaps = ({
       mapRef.current = null;
     }
 
-    const L = (window as any).L;
+    const L = window.L;
     if (!L) return;
 
     const reportsWithLocation = reports.filter(
-      (report) => report.latitude && report.longitude
+      (
+        report
+      ): report is MapReport & { latitude: number; longitude: number } =>
+        typeof report.latitude === "number" &&
+        typeof report.longitude === "number"
     );
     const center: [number, number] = reportsWithLocation[0]
       ? [reportsWithLocation[0].latitude!, reportsWithLocation[0].longitude!]
@@ -89,13 +156,13 @@ const DashboardMaps = ({
       map.addLayer(markers);
     } else {
       // Heatmap
-      if ((L as any).heatLayer) {
+      if (L.heatLayer) {
         const points = reportsWithLocation.map((r) => [
           r.latitude,
           r.longitude,
           (CATEGORY_WEIGHTS[r.category.name] || 1) / 5,
-        ]);
-        (L as any).heatLayer(points, {
+        ] as [number, number, number]);
+        L.heatLayer(points, {
           radius: 30,
           blur: 20,
           maxZoom: 17,

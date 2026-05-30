@@ -3154,7 +3154,7 @@ const EmployeePanel = () => {
         lat: null,
         lng: null,
       };
-      let imageUrl = null;
+      const imageUrl = null;
 
       console.log("URL da imagem enviada:", imageUrl);
 

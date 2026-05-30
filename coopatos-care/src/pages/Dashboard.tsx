@@ -1,4 +1,4 @@
-import React, { useEffect, useMemo, useState } from "react";
+import React, { useCallback, useEffect, useMemo, useState } from "react";
 import { useAuth } from "@/contexts/AuthContext";
 import { useNavigate } from "react-router-dom";
 import { io } from "socket.io-client";
@@ -88,6 +88,26 @@ type SettingsTab =
   | "departments"
   | "audit";
 
+type NominatimAddress = {
+  address?: {
+    road?: string;
+    pedestrian?: string;
+    suburb?: string;
+    neighbourhood?: string;
+    city_district?: string;
+    city?: string;
+    town?: string;
+    village?: string;
+    state?: string;
+  };
+};
+
+type AdminStatus = {
+  id: number;
+  name: string;
+  color?: string | null;
+};
+
 type AdminReport = {
   id: number;
   title?: string | null;
@@ -102,11 +122,7 @@ type AdminReport = {
     id: number;
     name: string;
   };
-  status: {
-    id: number;
-    name: string;
-    color?: string | null;
-  };
+  status: AdminStatus;
   employee: {
     id: number;
     name: string;
@@ -587,7 +603,7 @@ const Dashboard = () => {
   const [savingEmployee, setSavingEmployee] = useState(false);
   const [uploadingAvatar, setUploadingAvatar] = useState(false);
   const [categories, setCategories] = useState<{ id: number; name: string }[]>([]);
-  const [statuses, setStatuses] = useState<{ id: number; name: string }[]>([]);
+  const [statuses, setStatuses] = useState<AdminStatus[]>([]);
 
   const [adminSection, setAdminSection] = useState<AdminSection>("reports");
   const [settingsTab, setSettingsTab] = useState<SettingsTab>("home");
@@ -648,12 +664,15 @@ const Dashboard = () => {
     "createdAt",
   ]);
 
-  const admin = JSON.parse(localStorage.getItem("admin") || "{}");
-  const adminHeaders = (extra?: Record<string, string>) => ({
+  const admin = useMemo(
+    () => JSON.parse(localStorage.getItem("admin") || "{}"),
+    []
+  );
+  const adminHeaders = useCallback((extra?: Record<string, string>) => ({
     "X-Admin-Id": String(admin?.id || ""),
     "X-Admin-Session-Token": localStorage.getItem("adminSessionToken") || "",
     ...extra,
-  });
+  }), [admin?.id]);
 
   useEffect(() => {
     const auth = JSON.parse(localStorage.getItem("auth") || "{}");
@@ -674,7 +693,7 @@ const Dashboard = () => {
 
       localStorage.setItem("adminWelcomeShown", "true");
     }
-  }, [navigate, toast]);
+  }, [admin.email, admin.employee?.name, navigate, toast]);
 
   useEffect(() => {
     const loadAdminData = async () => {
@@ -722,7 +741,7 @@ const Dashboard = () => {
 
         setReports(asArray<AdminReport>(reportsData));
         setCategories(asArray<{ id: number; name: string }>(categoriesData));
-        setStatuses(asArray<{ id: number; name: string }>(statusesData));
+        setStatuses(asArray<AdminStatus>(statusesData));
         setEmployees(asArray<AdminEmployee>(employeesData));
         setDepartments(asArray<AdminDepartment>(departmentsData));
         setUsers(asArray<AdminUser>(usersData));
@@ -769,7 +788,7 @@ const Dashboard = () => {
     };
 
     loadAdminData();
-  }, [toast]);
+  }, [adminHeaders, toast]);
 
   useEffect(() => {
     const interval = window.setInterval(() => {
@@ -2374,7 +2393,7 @@ const Dashboard = () => {
     );
   };
 
-  const formatAddressFromNominatim = (data: any) => {
+  const formatAddressFromNominatim = (data: NominatimAddress) => {
     const road = data.address?.road || data.address?.pedestrian || "";
     const suburb =
       data.address?.suburb ||
@@ -4585,15 +4604,13 @@ const Dashboard = () => {
                       <p className="mt-1 text-sm text-muted-foreground">
                         {item.id === "personalization"
                           ? "Nome, logo, cores e reversão para o padrão."
-                          : item.id === "analytics"
-                            ? "Gráficos de produtividade e indicadores."
-                            : item.id === "employees"
-                              ? "Cadastro, validação, filtros e status."
-                              : item.id === "users"
-                                ? "Acessos, perfis e usuários desativados."
-                                : item.id === "departments"
-                                  ? "Departamentos, vínculos e equipes."
-                                  : "Visualizar e baixar registros do sistema."}
+                          : item.id === "employees"
+                            ? "Cadastro, validação, filtros e status."
+                            : item.id === "users"
+                              ? "Acessos, perfis e usuários desativados."
+                              : item.id === "departments"
+                                ? "Departamentos, vínculos e equipes."
+                                : "Visualizar e baixar registros do sistema."}
                       </p>
                     </button>
                   );
