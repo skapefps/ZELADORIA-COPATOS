@@ -76,6 +76,12 @@ export const brandPreset = defaultBrandPreset;
 
 const BRAND_STORAGE_KEY = "coopatos-brand-preset";
 const BRAND_CHANGE_EVENT = "coopatos-brand-change";
+const API_URL =
+  window.location.hostname === "localhost" ||
+    window.location.hostname === "127.0.0.1"
+    ? "http://localhost:3333"
+    : import.meta.env.VITE_API_URL ||
+    "https://zeladoria-coopatos-api.onrender.com";
 
 const colorVariables: Record<keyof BrandColors, string> = {
   background: "--background",
@@ -119,7 +125,7 @@ export const applyBrandPreset = (preset = brandPreset) => {
   }
 };
 
-const mergeBrandPreset = (preset?: Partial<BrandPreset> | null): BrandPreset => ({
+export const mergeBrandPreset = (preset?: Partial<BrandPreset> | null): BrandPreset => ({
   ...defaultBrandPreset,
   ...(preset || {}),
   colors: {
@@ -143,6 +149,19 @@ export const saveBrandPreset = (preset: BrandPreset) => {
   applyBrandPreset(merged);
   window.dispatchEvent(new CustomEvent(BRAND_CHANGE_EVENT, { detail: merged }));
   return merged;
+};
+
+export const syncBrandPresetFromServer = async () => {
+  try {
+    const response = await fetch(`${API_URL}/brand-settings`);
+    const data = await response.json();
+
+    if (!response.ok || !data?.preset) return getStoredBrandPreset();
+
+    return saveBrandPreset(mergeBrandPreset(data.preset));
+  } catch {
+    return getStoredBrandPreset();
+  }
 };
 
 export const resetBrandPreset = () => {

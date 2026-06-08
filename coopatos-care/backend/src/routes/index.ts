@@ -6,7 +6,7 @@ import crypto from "crypto";
 import nodemailer from "nodemailer";
 import bcrypt from "bcryptjs";
 import { v2 as cloudinary } from "cloudinary";
-import { brandPreset } from "../config/brand.js";
+import { brandPreset as defaultServerBrandPreset } from "../config/brand.js";
 import { AsyncLocalStorage } from "node:async_hooks";
 
 const router = Router();
@@ -173,6 +173,41 @@ const publicApiUrl =
   process.env.API_URL ||
   "https://zeladoria-coopatos-api.onrender.com";
 const VERIFICATION_COOLDOWN_SECONDS = 120;
+const brandPreset = defaultServerBrandPreset;
+
+const mergeServerBrandPreset = (preset?: any) => ({
+  ...defaultServerBrandPreset,
+  ...(preset || {}),
+  logoUrl:
+    preset?.logoUrl ||
+    preset?.logoSrc ||
+    defaultServerBrandPreset.logoUrl,
+  colors: {
+    ...defaultServerBrandPreset.colors,
+    ...(preset?.colors || {}),
+  },
+});
+
+const getServerBrandPreset = async () => {
+  try {
+    const settings = await prisma.brandSetting.findUnique({
+      where: {
+        id: 1,
+      },
+    });
+
+    return mergeServerBrandPreset(settings?.preset);
+  } catch (error) {
+    console.error("Erro ao carregar whitelabel:", error);
+    return defaultServerBrandPreset;
+  }
+};
+
+const toCssColor = (value: string, fallback: string) => {
+  if (!value) return fallback;
+  if (value.startsWith("#") || value.startsWith("rgb")) return value;
+  return `hsl(${value})`;
+};
 
 const adminEmployeeSelect = {
   id: true,
@@ -371,6 +406,19 @@ const sendEmployeeVerificationEmail = async (
 ) => {
   if (!employee.email || !employee.emailVerificationToken) return;
 
+  const brandPreset = await getServerBrandPreset();
+  const primaryColor = toCssColor(
+    brandPreset.colors.primary,
+    defaultServerBrandPreset.colors.primary
+  );
+  const secondaryColor = toCssColor(
+    brandPreset.colors.secondary,
+    defaultServerBrandPreset.colors.secondary
+  );
+  const emailBackground = toCssColor(
+    brandPreset.colors.emailBackground,
+    defaultServerBrandPreset.colors.emailBackground
+  );
   const verificationUrl = `${publicAppUrl}/validar-email/${employee.emailVerificationToken}`;
 
   await mailTransporter.sendMail({
@@ -378,9 +426,9 @@ const sendEmployeeVerificationEmail = async (
     to: employee.email,
     subject: `Valide seu acesso - ${brandPreset.appName}`,
     html: `
-      <div style="font-family: Arial, sans-serif; background:${brandPreset.colors.emailBackground}; padding:28px;">
+      <div style="font-family: Arial, sans-serif; background:${emailBackground}; padding:28px;">
         <div style="max-width:620px; margin:0 auto; background:#ffffff; border-radius:18px; overflow:hidden; border:1px solid #e5e7eb;">
-          <div style="background:${brandPreset.colors.primary}; padding:24px; text-align:center;">
+          <div style="background:${primaryColor}; padding:24px; text-align:center;">
             <h1 style="color:#ffffff; margin:0; font-size:22px;">${brandPreset.appName}</h1>
             <p style="color:#d1fae5; margin:6px 0 0; font-size:14px;">Validação de cadastro</p>
           </div>
@@ -390,7 +438,7 @@ const sendEmployeeVerificationEmail = async (
               Seu cadastro foi criado/atualizado no ${brandPreset.appName}. Para liberar o acesso, valide seu e-mail no botão abaixo.
             </p>
             <p style="text-align:center; margin:28px 0;">
-              <a href="${verificationUrl}" style="display:inline-block; background:${brandPreset.colors.secondary}; color:#ffffff; text-decoration:none; padding:14px 22px; border-radius:12px; font-weight:700;">
+              <a href="${verificationUrl}" style="display:inline-block; background:${secondaryColor}; color:#ffffff; text-decoration:none; padding:14px 22px; border-radius:12px; font-weight:700;">
                 Validar acesso
               </a>
             </p>
@@ -750,7 +798,63 @@ router.get("/employees", async (req, res) => {
   return res.json(employees);
 });
 
+router.get("/brand-settings", async (_req, res) => {
+  const preset = await getServerBrandPreset();
+
+  return res.json({
+    preset,
+  });
+});
+
 router.use("/admin", requireAdminRequest);
+
+router.put("/admin/brand-settings", async (req, res) => {
+  try {
+    const preset = mergeServerBrandPreset(req.body?.preset);
+    const logo = String(preset.logoSrc || preset.logoUrl || "");
+
+    if (!logo) {
+      return res.status(400).json({
+        error: "Informe uma logo PNG para salvar a personalização.",
+      });
+    }
+
+    if (!logo.toLowerCase().includes(".png")) {
+      return res.status(400).json({
+        error: "A logo precisa ser PNG.",
+      });
+    }
+
+    const settings = await prisma.brandSetting.upsert({
+      where: {
+        id: 1,
+      },
+      update: {
+        preset,
+      },
+      create: {
+        id: 1,
+        preset,
+      },
+    });
+
+    await createAuditLog({
+      action: "BRAND_UPDATED",
+      entityType: "BRAND_SETTING",
+      entityId: settings.id,
+      summary: `Personalização whitelabel atualizada para ${preset.appName}.`,
+    });
+
+    return res.json({
+      preset: mergeServerBrandPreset(settings.preset),
+    });
+  } catch (error) {
+    console.error("Erro ao salvar whitelabel:", error);
+    return res.status(500).json({
+      error: "Erro ao salvar personalização.",
+    });
+  }
+});
 
 router.get("/admin/employees", async (_req, res) => {
   try {

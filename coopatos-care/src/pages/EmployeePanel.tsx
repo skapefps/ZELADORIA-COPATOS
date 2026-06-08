@@ -3582,7 +3582,7 @@ const EmployeePanel = () => {
 
       toast({
         title: "Chamado finalizado",
-        description: "Ele foi movido para o final da lista de meus reportes.",
+        description: "O chamado foi movido para o final da lista de meus reportes.",
       });
     } catch (error) {
       console.error(error);

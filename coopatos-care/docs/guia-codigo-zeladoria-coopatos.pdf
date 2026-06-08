@@ -1,0 +1,731 @@
+%PDF-1.4
+%ту╧╙
+1 0 obj
+<< /Type /Catalog /Pages 2 0 R >>
+endobj
+2 0 obj
+<< /Type /Pages /Kids [6 0 R 8 0 R 10 0 R 12 0 R 14 0 R 16 0 R 18 0 R 20 0 R 22 0 R 24 0 R 26 0 R 28 0 R] /Count 12 >>
+endobj
+3 0 obj
+<< /Type /Font /Subtype /Type1 /BaseFont /Helvetica /Encoding /WinAnsiEncoding >>
+endobj
+4 0 obj
+<< /Type /Font /Subtype /Type1 /BaseFont /Helvetica-Bold /Encoding /WinAnsiEncoding >>
+endobj
+5 0 obj
+<< /Length 2434 >>
+stream
+0.965 0.975 0.990 rg
+0.0 0.0 842.0 595.0 re f
+0.120 0.220 0.380 rg
+0.0 577.0 842.0 18.0 re f
+0.120 0.220 0.380 rg
+0.0 0.0 842.0 595.0 re f
+0.560 0.720 0.080 rg
+0.0 0.0 842.0 110.0 re f
+BT /F2 32 Tf 1.000 1.000 1.000 rg 58.0 430.0 Td (Guia tecnico do codigo) Tj ET
+BT /F2 24 Tf 0.900 0.960 1.000 rg 58.0 392.0 Td (Zeladoria Coopatos) Tj ET
+BT /F1 12 Tf 0.900 0.960 1.000 rg 58.0 350.0 Td (Resumo didatico para apresentar ao professor: arquitetura, dependencias, arquivos, fluxos e perguntas comuns.) Tj ET
+1.000 1.000 1.000 rg
+0.790 0.840 0.900 RG 0.8 w
+58.0 170.0 210.0 110.0 re B
+0.560 0.720 0.080 rg
+58.0 273.0 210.0 7.0 re f
+BT /F2 11 Tf 0.120 0.220 0.380 rg 70.0 256.0 Td (Objetivo do sistema) Tj ET
+BT /F1 8.5 Tf 0.240 0.310 0.420 rg 70.0 238.0 Td (Registrar, acompanhar e resolver) Tj ET
+BT /F1 8.5 Tf 0.240 0.310 0.420 rg 70.0 227.0 Td (chamados de zeladoria com midias,) Tj ET
+BT /F1 8.5 Tf 0.240 0.310 0.420 rg 70.0 216.0 Td (localizacao, chat, notificacoes e) Tj ET
+BT /F1 8.5 Tf 0.240 0.310 0.420 rg 70.0 205.0 Td (painel administrativo.) Tj ET
+1.000 1.000 1.000 rg
+0.790 0.840 0.900 RG 0.8 w
+310.0 170.0 210.0 110.0 re B
+0.230 0.450 0.750 rg
+310.0 273.0 210.0 7.0 re f
+BT /F2 11 Tf 0.120 0.220 0.380 rg 322.0 256.0 Td (Publico) Tj ET
+BT /F1 8.5 Tf 0.240 0.310 0.420 rg 322.0 238.0 Td (Funcionarios abrem e acompanham) Tj ET
+BT /F1 8.5 Tf 0.240 0.310 0.420 rg 322.0 227.0 Td (chamados. Administradores) Tj ET
+BT /F1 8.5 Tf 0.240 0.310 0.420 rg 322.0 216.0 Td (gerenciam equipe, chamados,) Tj ET
+BT /F1 8.5 Tf 0.240 0.310 0.420 rg 322.0 205.0 Td (indicadores, mapa e auditoria.) Tj ET
+1.000 1.000 1.000 rg
+0.790 0.840 0.900 RG 0.8 w
+562.0 170.0 210.0 110.0 re B
+0.860 0.420 0.140 rg
+562.0 273.0 210.0 7.0 re f
+BT /F2 11 Tf 0.120 0.220 0.380 rg 574.0 256.0 Td (Stack central) Tj ET
+BT /F1 8.5 Tf 0.240 0.310 0.420 rg 574.0 238.0 Td (React + Vite no frontend, Express) Tj ET
+BT /F1 8.5 Tf 0.240 0.310 0.420 rg 574.0 227.0 Td (no backend, Prisma/PostgreSQL no) Tj ET
+BT /F1 8.5 Tf 0.240 0.310 0.420 rg 574.0 216.0 Td (banco e Socket.IO para tempo) Tj ET
+BT /F1 8.5 Tf 0.240 0.310 0.420 rg 574.0 205.0 Td (real.) Tj ET
+BT /F1 9 Tf 1.000 1.000 1.000 rg 58.0 86.0 Td (Gerado em 08/06/2026 16:10) Tj ET
+0.750 0.800 0.880 RG 0.5 w 42.0 30.0 m 800.0 30.0 l S
+BT /F1 8 Tf 0.350 0.430 0.550 rg 42.0 18.0 Td (Zeladoria Coopatos - guia rapido para apresentacao tecnica) Tj ET
+BT /F1 8 Tf 0.350 0.430 0.550 rg 760.0 18.0 Td (Pag. 1) Tj ET
+endstream
+endobj
+6 0 obj
+<< /Type /Page /Parent 2 0 R /MediaBox [0 0 842 595] /Resources << /Font << /F1 3 0 R /F2 4 0 R >> >> /Contents 5 0 R >>
+endobj
+7 0 obj
+<< /Length 4169 >>
+stream
+0.965 0.975 0.990 rg
+0.0 0.0 842.0 595.0 re f
+0.120 0.220 0.380 rg
+0.0 577.0 842.0 18.0 re f
+BT /F2 18 Tf 0.120 0.220 0.380 rg 42.0 553.0 Td (1. Arquitetura geral) Tj ET
+BT /F1 10 Tf 0.160 0.220 0.320 rg 42.0 525.0 Td (A aplicacao e dividida em frontend, backend, banco de dados e servicos externos. O frontend mostra as telas e) Tj ET
+BT /F1 10 Tf 0.160 0.220 0.320 rg 42.0 512.0 Td (chama a API. O backend valida regras, grava no banco e dispara eventos em tempo real. O banco guarda usuarios,) Tj ET
+BT /F1 10 Tf 0.160 0.220 0.320 rg 42.0 499.0 Td (chamados, mensagens, notificacoes, auditoria e midias.) Tj ET
+1.000 1.000 1.000 rg
+0.790 0.840 0.900 RG 0.8 w
+45.0 330.0 150.0 88.0 re B
+0.230 0.450 0.750 rg
+45.0 411.0 150.0 7.0 re f
+BT /F2 11 Tf 0.120 0.220 0.380 rg 57.0 394.0 Td (Frontend) Tj ET
+BT /F1 8.5 Tf 0.240 0.310 0.420 rg 57.0 376.0 Td (React, Vite, Tailwind.) Tj ET
+BT /F1 8.5 Tf 0.240 0.310 0.420 rg 57.0 365.0 Td (Telas em src/pages e) Tj ET
+BT /F1 8.5 Tf 0.240 0.310 0.420 rg 57.0 354.0 Td (componentes em) Tj ET
+BT /F1 8.5 Tf 0.240 0.310 0.420 rg 57.0 343.0 Td (src/components.) Tj ET
+1.000 1.000 1.000 rg
+0.790 0.840 0.900 RG 0.8 w
+245.0 330.0 150.0 88.0 re B
+0.120 0.220 0.380 rg
+245.0 411.0 150.0 7.0 re f
+BT /F2 11 Tf 0.120 0.220 0.380 rg 257.0 394.0 Td (API Backend) Tj ET
+BT /F1 8.5 Tf 0.240 0.310 0.420 rg 257.0 376.0 Td (Express em backend/src/) Tj ET
+BT /F1 8.5 Tf 0.240 0.310 0.420 rg 257.0 365.0 Td (routes/index.ts.) Tj ET
+BT /F1 8.5 Tf 0.240 0.310 0.420 rg 257.0 354.0 Td (Regras, uploads,) Tj ET
+BT /F1 8.5 Tf 0.240 0.310 0.420 rg 257.0 343.0 Td (emails, sessoes.) Tj ET
+1.000 1.000 1.000 rg
+0.790 0.840 0.900 RG 0.8 w
+445.0 330.0 150.0 88.0 re B
+0.560 0.720 0.080 rg
+445.0 411.0 150.0 7.0 re f
+BT /F2 11 Tf 0.120 0.220 0.380 rg 457.0 394.0 Td (Banco) Tj ET
+BT /F1 8.5 Tf 0.240 0.310 0.420 rg 457.0 376.0 Td (Prisma +) Tj ET
+BT /F1 8.5 Tf 0.240 0.310 0.420 rg 457.0 365.0 Td (PostgreSQL/Neon.) Tj ET
+BT /F1 8.5 Tf 0.240 0.310 0.420 rg 457.0 354.0 Td (Modelos em) Tj ET
+BT /F1 8.5 Tf 0.240 0.310 0.420 rg 457.0 343.0 Td (prisma/schema.prisma.) Tj ET
+1.000 1.000 1.000 rg
+0.790 0.840 0.900 RG 0.8 w
+645.0 330.0 150.0 88.0 re B
+0.860 0.420 0.140 rg
+645.0 411.0 150.0 7.0 re f
+BT /F2 11 Tf 0.120 0.220 0.380 rg 657.0 394.0 Td (Servicos) Tj ET
+BT /F1 8.5 Tf 0.240 0.310 0.420 rg 657.0 376.0 Td (Cloudinary,) Tj ET
+BT /F1 8.5 Tf 0.240 0.310 0.420 rg 657.0 365.0 Td (Nodemailer/SMTP,) Tj ET
+BT /F1 8.5 Tf 0.240 0.310 0.420 rg 657.0 354.0 Td (Vercel, Render,) Tj ET
+BT /F1 8.5 Tf 0.240 0.310 0.420 rg 657.0 343.0 Td (Socket.IO.) Tj ET
+0.560 0.720 0.080 RG 2 w 195.0 374.0 m 245.0 374.0 l S
+0.560 0.720 0.080 RG 2 w 395.0 374.0 m 445.0 374.0 l S
+0.560 0.720 0.080 RG 2 w 595.0 374.0 m 645.0 374.0 l S
+BT /F2 14 Tf 0.120 0.220 0.380 rg 42.0 482.0 Td (Arquivos para citar) Tj ET
+BT /F2 10 Tf 0.560 0.720 0.080 rg 42.0 462.0 Td (Х) Tj ET
+BT /F1 9.5 Tf 0.180 0.250 0.360 rg 56.0 462.0 Td (src/App.tsx: define as rotas principais e protecoes de funcionario/admin.) Tj ET
+BT /F2 10 Tf 0.560 0.720 0.080 rg 42.0 447.0 Td (Х) Tj ET
+BT /F1 9.5 Tf 0.180 0.250 0.360 rg 56.0 447.0 Td (src/pages/EmployeePanel.tsx: painel do funcionario, chamados, chats e notificacoes.) Tj ET
+BT /F2 10 Tf 0.560 0.720 0.080 rg 42.0 432.0 Td (Х) Tj ET
+BT /F1 9.5 Tf 0.180 0.250 0.360 rg 56.0 432.0 Td (src/pages/Dashboard.tsx: painel administrativo, indicadores, mapa, CRUDs e exportacoes.) Tj ET
+BT /F2 10 Tf 0.560 0.720 0.080 rg 42.0 417.0 Td (Х) Tj ET
+BT /F1 9.5 Tf 0.180 0.250 0.360 rg 56.0 417.0 Td (backend/src/routes/index.ts: rotas da API, regras de negocio, uploads, emails e auditoria.) Tj ET
+BT /F2 10 Tf 0.560 0.720 0.080 rg 42.0 402.0 Td (Х) Tj ET
+BT /F1 9.5 Tf 0.180 0.250 0.360 rg 56.0 402.0 Td (backend/src/server.ts: cria Express, HTTP server e Socket.IO.) Tj ET
+BT /F2 10 Tf 0.560 0.720 0.080 rg 42.0 387.0 Td (Х) Tj ET
+BT /F1 9.5 Tf 0.180 0.250 0.360 rg 56.0 387.0 Td (prisma/schema.prisma: estrutura do banco de dados.) Tj ET
+0.750 0.800 0.880 RG 0.5 w 42.0 30.0 m 800.0 30.0 l S
+BT /F1 8 Tf 0.350 0.430 0.550 rg 42.0 18.0 Td (Zeladoria Coopatos - guia rapido para apresentacao tecnica) Tj ET
+BT /F1 8 Tf 0.350 0.430 0.550 rg 760.0 18.0 Td (Pag. 2) Tj ET
+endstream
+endobj
+8 0 obj
+<< /Type /Page /Parent 2 0 R /MediaBox [0 0 842 595] /Resources << /Font << /F1 3 0 R /F2 4 0 R >> >> /Contents 7 0 R >>
+endobj
+9 0 obj
+<< /Length 4913 >>
+stream
+0.965 0.975 0.990 rg
+0.0 0.0 842.0 595.0 re f
+0.120 0.220 0.380 rg
+0.0 577.0 842.0 18.0 re f
+BT /F2 18 Tf 0.120 0.220 0.380 rg 42.0 553.0 Td (2. Dependencias principais) Tj ET
+BT /F1 10 Tf 0.160 0.220 0.320 rg 42.0 525.0 Td (Na apresentacao, foque nas tecnologias importantes. Existem varias libs de UI, mas estas sao as que explicam a) Tj ET
+BT /F1 10 Tf 0.160 0.220 0.320 rg 42.0 512.0 Td (arquitetura e as funcionalidades principais.) Tj ET
+1.000 1.000 1.000 rg
+0.790 0.840 0.900 RG 0.8 w
+45.0 420.0 220.0 88.0 re B
+0.230 0.450 0.750 rg
+45.0 501.0 220.0 7.0 re f
+BT /F2 11 Tf 0.120 0.220 0.380 rg 57.0 484.0 Td (React + TypeScript + Vite) Tj ET
+BT /F1 8.5 Tf 0.240 0.310 0.420 rg 57.0 466.0 Td (Interface web, componentes e build) Tj ET
+BT /F1 8.5 Tf 0.240 0.310 0.420 rg 57.0 455.0 Td (do frontend. Local: src/main.tsx,) Tj ET
+BT /F1 8.5 Tf 0.240 0.310 0.420 rg 57.0 444.0 Td (src/App.tsx e src/pages.) Tj ET
+1.000 1.000 1.000 rg
+0.790 0.840 0.900 RG 0.8 w
+310.0 420.0 220.0 88.0 re B
+0.560 0.720 0.080 rg
+310.0 501.0 220.0 7.0 re f
+BT /F2 11 Tf 0.120 0.220 0.380 rg 322.0 484.0 Td (Tailwind + shadcn/Radix) Tj ET
+BT /F1 8.5 Tf 0.240 0.310 0.420 rg 322.0 466.0 Td (Estilo visual, modais, inputs,) Tj ET
+BT /F1 8.5 Tf 0.240 0.310 0.420 rg 322.0 455.0 Td (selects, botoes e toasts. Local:) Tj ET
+BT /F1 8.5 Tf 0.240 0.310 0.420 rg 322.0 444.0 Td (src/components/ui e src/index.css.) Tj ET
+1.000 1.000 1.000 rg
+0.790 0.840 0.900 RG 0.8 w
+575.0 420.0 220.0 88.0 re B
+0.860 0.420 0.140 rg
+575.0 501.0 220.0 7.0 re f
+BT /F2 11 Tf 0.120 0.220 0.380 rg 587.0 484.0 Td (Node + Express) Tj ET
+BT /F1 8.5 Tf 0.240 0.310 0.420 rg 587.0 466.0 Td (API HTTP do sistema. Local:) Tj ET
+BT /F1 8.5 Tf 0.240 0.310 0.420 rg 587.0 455.0 Td (backend/src/server.ts e) Tj ET
+BT /F1 8.5 Tf 0.240 0.310 0.420 rg 587.0 444.0 Td (backend/src/routes/index.ts.) Tj ET
+1.000 1.000 1.000 rg
+0.790 0.840 0.900 RG 0.8 w
+45.0 300.0 220.0 88.0 re B
+0.230 0.450 0.750 rg
+45.0 381.0 220.0 7.0 re f
+BT /F2 11 Tf 0.120 0.220 0.380 rg 57.0 364.0 Td (Prisma + PostgreSQL/Neon) Tj ET
+BT /F1 8.5 Tf 0.240 0.310 0.420 rg 57.0 346.0 Td (ORM e banco relacional. Local:) Tj ET
+BT /F1 8.5 Tf 0.240 0.310 0.420 rg 57.0 335.0 Td (prisma/schema.prisma e) Tj ET
+BT /F1 8.5 Tf 0.240 0.310 0.420 rg 57.0 324.0 Td (backend/src/prisma/client.ts.) Tj ET
+1.000 1.000 1.000 rg
+0.790 0.840 0.900 RG 0.8 w
+310.0 300.0 220.0 88.0 re B
+0.560 0.720 0.080 rg
+310.0 381.0 220.0 7.0 re f
+BT /F2 11 Tf 0.120 0.220 0.380 rg 322.0 364.0 Td (Socket.IO) Tj ET
+BT /F1 8.5 Tf 0.240 0.310 0.420 rg 322.0 346.0 Td (Tempo real: chats, notificacoes,) Tj ET
+BT /F1 8.5 Tf 0.240 0.310 0.420 rg 322.0 335.0 Td (presenca e logout forcado. Local:) Tj ET
+BT /F1 8.5 Tf 0.240 0.310 0.420 rg 322.0 324.0 Td (server.ts, EmployeePanel.tsx e) Tj ET
+BT /F1 8.5 Tf 0.240 0.310 0.420 rg 322.0 313.0 Td (Dashboard.tsx.) Tj ET
+1.000 1.000 1.000 rg
+0.790 0.840 0.900 RG 0.8 w
+575.0 300.0 220.0 88.0 re B
+0.860 0.420 0.140 rg
+575.0 381.0 220.0 7.0 re f
+BT /F2 11 Tf 0.120 0.220 0.380 rg 587.0 364.0 Td (Cloudinary) Tj ET
+BT /F1 8.5 Tf 0.240 0.310 0.420 rg 587.0 346.0 Td (Upload/armazenamento de fotos,) Tj ET
+BT /F1 8.5 Tf 0.240 0.310 0.420 rg 587.0 335.0 Td (videos e audios. Local:) Tj ET
+BT /F1 8.5 Tf 0.240 0.310 0.420 rg 587.0 324.0 Td (EmployeePanel.tsx, Dashboard.tsx e) Tj ET
+BT /F1 8.5 Tf 0.240 0.310 0.420 rg 587.0 313.0 Td (routes/index.ts.) Tj ET
+1.000 1.000 1.000 rg
+0.790 0.840 0.900 RG 0.8 w
+45.0 180.0 220.0 88.0 re B
+0.230 0.450 0.750 rg
+45.0 261.0 220.0 7.0 re f
+BT /F2 11 Tf 0.120 0.220 0.380 rg 57.0 244.0 Td (Nodemailer) Tj ET
+BT /F1 8.5 Tf 0.240 0.310 0.420 rg 57.0 226.0 Td (Emails de validacao e recuperacao.) Tj ET
+BT /F1 8.5 Tf 0.240 0.310 0.420 rg 57.0 215.0 Td (Local:) Tj ET
+BT /F1 8.5 Tf 0.240 0.310 0.420 rg 57.0 204.0 Td (backend/src/routes/index.ts.) Tj ET
+1.000 1.000 1.000 rg
+0.790 0.840 0.900 RG 0.8 w
+310.0 180.0 220.0 88.0 re B
+0.560 0.720 0.080 rg
+310.0 261.0 220.0 7.0 re f
+BT /F2 11 Tf 0.120 0.220 0.380 rg 322.0 244.0 Td (Leaflet + OpenStreetMap) Tj ET
+BT /F1 8.5 Tf 0.240 0.310 0.420 rg 322.0 226.0 Td (Mapa com pins e mapa de calor.) Tj ET
+BT /F1 8.5 Tf 0.240 0.310 0.420 rg 322.0 215.0 Td (Local:) Tj ET
+BT /F1 8.5 Tf 0.240 0.310 0.420 rg 322.0 204.0 Td (src/components/DashboardMaps.tsx.) Tj ET
+1.000 1.000 1.000 rg
+0.790 0.840 0.900 RG 0.8 w
+575.0 180.0 220.0 88.0 re B
+0.860 0.420 0.140 rg
+575.0 261.0 220.0 7.0 re f
+BT /F2 11 Tf 0.120 0.220 0.380 rg 587.0 244.0 Td (Recharts) Tj ET
+BT /F1 8.5 Tf 0.240 0.310 0.420 rg 587.0 226.0 Td (Graficos e indicadores) Tj ET
+BT /F1 8.5 Tf 0.240 0.310 0.420 rg 587.0 215.0 Td (administrativos. Local:) Tj ET
+BT /F1 8.5 Tf 0.240 0.310 0.420 rg 587.0 204.0 Td (src/pages/Dashboard.tsx.) Tj ET
+0.750 0.800 0.880 RG 0.5 w 42.0 30.0 m 800.0 30.0 l S
+BT /F1 8 Tf 0.350 0.430 0.550 rg 42.0 18.0 Td (Zeladoria Coopatos - guia rapido para apresentacao tecnica) Tj ET
+BT /F1 8 Tf 0.350 0.430 0.550 rg 760.0 18.0 Td (Pag. 3) Tj ET
+endstream
+endobj
+10 0 obj
+<< /Type /Page /Parent 2 0 R /MediaBox [0 0 842 595] /Resources << /Font << /F1 3 0 R /F2 4 0 R >> >> /Contents 9 0 R >>
+endobj
+11 0 obj
+<< /Length 2593 >>
+stream
+0.965 0.975 0.990 rg
+0.0 0.0 842.0 595.0 re f
+0.120 0.220 0.380 rg
+0.0 577.0 842.0 18.0 re f
+BT /F2 18 Tf 0.120 0.220 0.380 rg 42.0 553.0 Td (3. Frontend: telas e rotas) Tj ET
+BT /F1 10 Tf 0.160 0.220 0.320 rg 42.0 525.0 Td (O frontend e uma SPA. O React Router decide qual tela abrir. As telas protegidas usam AuthContext para conferir) Tj ET
+BT /F1 10 Tf 0.160 0.220 0.320 rg 42.0 512.0 Td (se o usuario esta autenticado e se e funcionario ou administrador.) Tj ET
+0.080 0.130 0.200 rg
+0.080 0.130 0.200 RG 0.5 w
+42.0 406.0 758.0 89.0 re B
+BT /F2 9 Tf 0.860 0.930 1.000 rg 54.0 479.0 Td (src/App.tsx) Tj ET
+BT /F1 8.2 Tf 0.910 0.960 0.880 rg 54.0 463.0 Td (Route path="/" -> EmployeeLogin) Tj ET
+BT /F1 8.2 Tf 0.910 0.960 0.880 rg 54.0 450.0 Td (Route path="/admin/login" -> AdminLogin) Tj ET
+BT /F1 8.2 Tf 0.910 0.960 0.880 rg 54.0 437.0 Td (Route path="/funcionario" -> ProtectedEmployee + EmployeePanel) Tj ET
+BT /F1 8.2 Tf 0.910 0.960 0.880 rg 54.0 424.0 Td (Route path="/dashboard" -> ProtectedAdmin + Dashboard) Tj ET
+BT /F1 8.2 Tf 0.910 0.960 0.880 rg 54.0 411.0 Td (Route path="/validar-email/:token" -> VerifyEmployeeEmail) Tj ET
+BT /F2 14 Tf 0.120 0.220 0.380 rg 42.0 392.0 Td (Como explicar) Tj ET
+BT /F2 10 Tf 0.560 0.720 0.080 rg 42.0 372.0 Td (Х) Tj ET
+BT /F1 9.5 Tf 0.180 0.250 0.360 rg 56.0 372.0 Td (EmployeeLogin.tsx faz login por matricula e CPF e salva os dados da sessao.) Tj ET
+BT /F2 10 Tf 0.560 0.720 0.080 rg 42.0 357.0 Td (Х) Tj ET
+BT /F1 9.5 Tf 0.180 0.250 0.360 rg 56.0 357.0 Td (AdminLogin.tsx faz login administrativo por email e senha.) Tj ET
+BT /F2 10 Tf 0.560 0.720 0.080 rg 42.0 342.0 Td (Х) Tj ET
+BT /F1 9.5 Tf 0.180 0.250 0.360 rg 56.0 342.0 Td (EmployeePanel.tsx concentra o fluxo do funcionario: criar chamado, listar reportes, chat, privado,) Tj ET
+BT /F1 9.5 Tf 0.180 0.250 0.360 rg 56.0 329.0 Td (notificacoes e midias.) Tj ET
+BT /F2 10 Tf 0.560 0.720 0.080 rg 42.0 314.0 Td (Х) Tj ET
+BT /F1 9.5 Tf 0.180 0.250 0.360 rg 56.0 314.0 Td (Dashboard.tsx concentra o admin: indicadores, chamados, mapa, funcionarios, usuarios, departamentos,) Tj ET
+BT /F1 9.5 Tf 0.180 0.250 0.360 rg 56.0 301.0 Td (auditoria e whitelabel.) Tj ET
+BT /F2 10 Tf 0.560 0.720 0.080 rg 42.0 286.0 Td (Х) Tj ET
+BT /F1 9.5 Tf 0.180 0.250 0.360 rg 56.0 286.0 Td (AuthContext.tsx centraliza login, logout, inatividade e persistencia no navegador.) Tj ET
+0.750 0.800 0.880 RG 0.5 w 42.0 30.0 m 800.0 30.0 l S
+BT /F1 8 Tf 0.350 0.430 0.550 rg 42.0 18.0 Td (Zeladoria Coopatos - guia rapido para apresentacao tecnica) Tj ET
+BT /F1 8 Tf 0.350 0.430 0.550 rg 760.0 18.0 Td (Pag. 4) Tj ET
+endstream
+endobj
+12 0 obj
+<< /Type /Page /Parent 2 0 R /MediaBox [0 0 842 595] /Resources << /Font << /F1 3 0 R /F2 4 0 R >> >> /Contents 11 0 R >>
+endobj
+13 0 obj
+<< /Length 2957 >>
+stream
+0.965 0.975 0.990 rg
+0.0 0.0 842.0 595.0 re f
+0.120 0.220 0.380 rg
+0.0 577.0 842.0 18.0 re f
+BT /F2 18 Tf 0.120 0.220 0.380 rg 42.0 553.0 Td (4. Backend/API: onde ficam as regras) Tj ET
+BT /F1 10 Tf 0.160 0.220 0.320 rg 42.0 525.0 Td (O backend e um servidor Express. Quase todas as rotas estao em backend/src/routes/index.ts. Ele recebe) Tj ET
+BT /F1 10 Tf 0.160 0.220 0.320 rg 42.0 512.0 Td (requisicoes do frontend, usa Prisma para consultar/gravar no banco, integra servicos externos e emite eventos) Tj ET
+BT /F1 10 Tf 0.160 0.220 0.320 rg 42.0 499.0 Td (Socket.IO quando precisa atualizar a tela em tempo real.) Tj ET
+0.080 0.130 0.200 rg
+0.080 0.130 0.200 RG 0.5 w
+42.0 393.0 758.0 89.0 re B
+BT /F2 9 Tf 0.860 0.930 1.000 rg 54.0 466.0 Td (backend/src/server.ts) Tj ET
+BT /F1 8.2 Tf 0.910 0.960 0.880 rg 54.0 450.0 Td (const app = express\(\)) Tj ET
+BT /F1 8.2 Tf 0.910 0.960 0.880 rg 54.0 437.0 Td (const server = http.createServer\(app\)) Tj ET
+BT /F1 8.2 Tf 0.910 0.960 0.880 rg 54.0 424.0 Td (export const io = new Server\(server, { cors: ... }\)) Tj ET
+BT /F1 8.2 Tf 0.910 0.960 0.880 rg 54.0 411.0 Td (socket.join\(`employee-${employeeId}`\)) Tj ET
+BT /F1 8.2 Tf 0.910 0.960 0.880 rg 54.0 398.0 Td (socket.on\("join-report", reportId => socket.join\(`report-${reportId}`\)\)) Tj ET
+BT /F2 14 Tf 0.120 0.220 0.380 rg 42.0 379.0 Td (Rotas importantes para citar) Tj ET
+BT /F2 10 Tf 0.560 0.720 0.080 rg 42.0 359.0 Td (Х) Tj ET
+BT /F1 9.5 Tf 0.180 0.250 0.360 rg 56.0 359.0 Td (POST /employee-login: login do funcionario.) Tj ET
+BT /F2 10 Tf 0.560 0.720 0.080 rg 42.0 344.0 Td (Х) Tj ET
+BT /F1 9.5 Tf 0.180 0.250 0.360 rg 56.0 344.0 Td (POST /admin-login: login administrativo.) Tj ET
+BT /F2 10 Tf 0.560 0.720 0.080 rg 42.0 329.0 Td (Х) Tj ET
+BT /F1 9.5 Tf 0.180 0.250 0.360 rg 56.0 329.0 Td (GET/POST/PATCH/DELETE /reports: listagem, criacao, edicao e exclusao de chamados.) Tj ET
+BT /F2 10 Tf 0.560 0.720 0.080 rg 42.0 314.0 Td (Х) Tj ET
+BT /F1 9.5 Tf 0.180 0.250 0.360 rg 56.0 314.0 Td (/reports/:id/messages: chat do chamado.) Tj ET
+BT /F2 10 Tf 0.560 0.720 0.080 rg 42.0 299.0 Td (Х) Tj ET
+BT /F1 9.5 Tf 0.180 0.250 0.360 rg 56.0 299.0 Td (/private-conversations: chat privado.) Tj ET
+BT /F2 10 Tf 0.560 0.720 0.080 rg 42.0 284.0 Td (Х) Tj ET
+BT /F1 9.5 Tf 0.180 0.250 0.360 rg 56.0 284.0 Td (/notifications/:employeeId: notificacoes.) Tj ET
+BT /F2 10 Tf 0.560 0.720 0.080 rg 42.0 269.0 Td (Х) Tj ET
+BT /F1 9.5 Tf 0.180 0.250 0.360 rg 56.0 269.0 Td (/admin/employees, /admin/departments, /admin/users: CRUDs administrativos.) Tj ET
+BT /F2 10 Tf 0.560 0.720 0.080 rg 42.0 254.0 Td (Х) Tj ET
+BT /F1 9.5 Tf 0.180 0.250 0.360 rg 56.0 254.0 Td (/admin/audit-logs e /admin/exports/:type: auditoria e exportacoes.) Tj ET
+0.750 0.800 0.880 RG 0.5 w 42.0 30.0 m 800.0 30.0 l S
+BT /F1 8 Tf 0.350 0.430 0.550 rg 42.0 18.0 Td (Zeladoria Coopatos - guia rapido para apresentacao tecnica) Tj ET
+BT /F1 8 Tf 0.350 0.430 0.550 rg 760.0 18.0 Td (Pag. 5) Tj ET
+endstream
+endobj
+14 0 obj
+<< /Type /Page /Parent 2 0 R /MediaBox [0 0 842 595] /Resources << /Font << /F1 3 0 R /F2 4 0 R >> >> /Contents 13 0 R >>
+endobj
+15 0 obj
+<< /Length 3870 >>
+stream
+0.965 0.975 0.990 rg
+0.0 0.0 842.0 595.0 re f
+0.120 0.220 0.380 rg
+0.0 577.0 842.0 18.0 re f
+BT /F2 18 Tf 0.120 0.220 0.380 rg 42.0 553.0 Td (5. Banco de dados: modelos principais) Tj ET
+BT /F1 10 Tf 0.160 0.220 0.320 rg 42.0 525.0 Td (O Prisma define as tabelas e relacionamentos. Se o professor perguntar onde estao as tabelas, a resposta e) Tj ET
+BT /F1 10 Tf 0.160 0.220 0.320 rg 42.0 512.0 Td (prisma/schema.prisma. As migrations ficam em prisma/migrations.) Tj ET
+1.000 1.000 1.000 rg
+0.790 0.840 0.900 RG 0.8 w
+45.0 420.0 220.0 72.0 re B
+0.120 0.220 0.380 rg
+45.0 485.0 220.0 7.0 re f
+BT /F2 11 Tf 0.120 0.220 0.380 rg 57.0 468.0 Td (Employee) Tj ET
+BT /F1 8.5 Tf 0.240 0.310 0.420 rg 57.0 450.0 Td (Funcionario: matricula, CPF,) Tj ET
+BT /F1 8.5 Tf 0.240 0.310 0.420 rg 57.0 439.0 Td (email, departamento, foto, sessao) Tj ET
+BT /F1 8.5 Tf 0.240 0.310 0.420 rg 57.0 428.0 Td (ativa.) Tj ET
+1.000 1.000 1.000 rg
+0.790 0.840 0.900 RG 0.8 w
+310.0 420.0 220.0 72.0 re B
+0.560 0.720 0.080 rg
+310.0 485.0 220.0 7.0 re f
+BT /F2 11 Tf 0.120 0.220 0.380 rg 322.0 468.0 Td (User) Tj ET
+BT /F1 8.5 Tf 0.240 0.310 0.420 rg 322.0 450.0 Td (Usuario administrativo e permissao) Tj ET
+BT /F1 8.5 Tf 0.240 0.310 0.420 rg 322.0 439.0 Td (de acesso.) Tj ET
+1.000 1.000 1.000 rg
+0.790 0.840 0.900 RG 0.8 w
+575.0 420.0 220.0 72.0 re B
+0.230 0.450 0.750 rg
+575.0 485.0 220.0 7.0 re f
+BT /F2 11 Tf 0.120 0.220 0.380 rg 587.0 468.0 Td (Report) Tj ET
+BT /F1 8.5 Tf 0.240 0.310 0.420 rg 587.0 450.0 Td (Chamado principal: categoria,) Tj ET
+BT /F1 8.5 Tf 0.240 0.310 0.420 rg 587.0 439.0 Td (status, prioridade, localizacao e) Tj ET
+BT /F1 8.5 Tf 0.240 0.310 0.420 rg 587.0 428.0 Td (dono.) Tj ET
+1.000 1.000 1.000 rg
+0.790 0.840 0.900 RG 0.8 w
+45.0 330.0 220.0 72.0 re B
+0.120 0.220 0.380 rg
+45.0 395.0 220.0 7.0 re f
+BT /F2 11 Tf 0.120 0.220 0.380 rg 57.0 378.0 Td (ReportImage) Tj ET
+BT /F1 8.5 Tf 0.240 0.310 0.420 rg 57.0 360.0 Td (Midias anexadas ao chamado.) Tj ET
+1.000 1.000 1.000 rg
+0.790 0.840 0.900 RG 0.8 w
+310.0 330.0 220.0 72.0 re B
+0.560 0.720 0.080 rg
+310.0 395.0 220.0 7.0 re f
+BT /F2 11 Tf 0.120 0.220 0.380 rg 322.0 378.0 Td (ReportMessage) Tj ET
+BT /F1 8.5 Tf 0.240 0.310 0.420 rg 322.0 360.0 Td (Mensagens do chat do chamado.) Tj ET
+1.000 1.000 1.000 rg
+0.790 0.840 0.900 RG 0.8 w
+575.0 330.0 220.0 72.0 re B
+0.230 0.450 0.750 rg
+575.0 395.0 220.0 7.0 re f
+BT /F2 11 Tf 0.120 0.220 0.380 rg 587.0 378.0 Td (PrivateConversation) Tj ET
+BT /F1 8.5 Tf 0.240 0.310 0.420 rg 587.0 360.0 Td (Conversa privada entre) Tj ET
+BT /F1 8.5 Tf 0.240 0.310 0.420 rg 587.0 349.0 Td (funcionarios.) Tj ET
+1.000 1.000 1.000 rg
+0.790 0.840 0.900 RG 0.8 w
+45.0 240.0 220.0 72.0 re B
+0.120 0.220 0.380 rg
+45.0 305.0 220.0 7.0 re f
+BT /F2 11 Tf 0.120 0.220 0.380 rg 57.0 288.0 Td (Notification) Tj ET
+BT /F1 8.5 Tf 0.240 0.310 0.420 rg 57.0 270.0 Td (Notificacoes de mensagens, mencoes) Tj ET
+BT /F1 8.5 Tf 0.240 0.310 0.420 rg 57.0 259.0 Td (e atribuicoes.) Tj ET
+1.000 1.000 1.000 rg
+0.790 0.840 0.900 RG 0.8 w
+310.0 240.0 220.0 72.0 re B
+0.560 0.720 0.080 rg
+310.0 305.0 220.0 7.0 re f
+BT /F2 11 Tf 0.120 0.220 0.380 rg 322.0 288.0 Td (AuditLog) Tj ET
+BT /F1 8.5 Tf 0.240 0.310 0.420 rg 322.0 270.0 Td (Registro de alteracoes) Tj ET
+BT /F1 8.5 Tf 0.240 0.310 0.420 rg 322.0 259.0 Td (administrativas.) Tj ET
+1.000 1.000 1.000 rg
+0.790 0.840 0.900 RG 0.8 w
+575.0 240.0 220.0 72.0 re B
+0.230 0.450 0.750 rg
+575.0 305.0 220.0 7.0 re f
+BT /F2 11 Tf 0.120 0.220 0.380 rg 587.0 288.0 Td (ReportNote) Tj ET
+BT /F1 8.5 Tf 0.240 0.310 0.420 rg 587.0 270.0 Td (Anotacoes/observacoes internas no) Tj ET
+BT /F1 8.5 Tf 0.240 0.310 0.420 rg 587.0 259.0 Td (chamado.) Tj ET
+0.750 0.800 0.880 RG 0.5 w 42.0 30.0 m 800.0 30.0 l S
+BT /F1 8 Tf 0.350 0.430 0.550 rg 42.0 18.0 Td (Zeladoria Coopatos - guia rapido para apresentacao tecnica) Tj ET
+BT /F1 8 Tf 0.350 0.430 0.550 rg 760.0 18.0 Td (Pag. 6) Tj ET
+endstream
+endobj
+16 0 obj
+<< /Type /Page /Parent 2 0 R /MediaBox [0 0 842 595] /Resources << /Font << /F1 3 0 R /F2 4 0 R >> >> /Contents 15 0 R >>
+endobj
+17 0 obj
+<< /Length 4475 >>
+stream
+0.965 0.975 0.990 rg
+0.0 0.0 842.0 595.0 re f
+0.120 0.220 0.380 rg
+0.0 577.0 842.0 18.0 re f
+BT /F2 18 Tf 0.120 0.220 0.380 rg 42.0 553.0 Td (6. Chats: implementacao e fluxo) Tj ET
+BT /F1 10 Tf 0.160 0.220 0.320 rg 42.0 525.0 Td (Os chats usam a mesma ideia: o frontend envia a mensagem para a API, o backend salva no banco com Prisma e) Tj ET
+BT /F1 10 Tf 0.160 0.220 0.320 rg 42.0 512.0 Td (depois emite um evento Socket.IO para os usuarios conectados receberem a mensagem em tempo real.) Tj ET
+1.000 1.000 1.000 rg
+0.790 0.840 0.900 RG 0.8 w
+45.0 360.0 145.0 82.0 re B
+0.230 0.450 0.750 rg
+45.0 435.0 145.0 7.0 re f
+BT /F2 11 Tf 0.120 0.220 0.380 rg 57.0 418.0 Td (1. Usuario envia) Tj ET
+BT /F1 8.5 Tf 0.240 0.310 0.420 rg 57.0 400.0 Td (React coleta texto,) Tj ET
+BT /F1 8.5 Tf 0.240 0.310 0.420 rg 57.0 389.0 Td (emoji, resposta e) Tj ET
+BT /F1 8.5 Tf 0.240 0.310 0.420 rg 57.0 378.0 Td (midias no) Tj ET
+BT /F1 8.5 Tf 0.240 0.310 0.420 rg 57.0 367.0 Td (EmployeePanel.tsx.) Tj ET
+1.000 1.000 1.000 rg
+0.790 0.840 0.900 RG 0.8 w
+215.0 360.0 145.0 82.0 re B
+0.120 0.220 0.380 rg
+215.0 435.0 145.0 7.0 re f
+BT /F2 11 Tf 0.120 0.220 0.380 rg 227.0 418.0 Td (2. API recebe) Tj ET
+BT /F1 8.5 Tf 0.240 0.310 0.420 rg 227.0 400.0 Td (Express recebe em) Tj ET
+BT /F1 8.5 Tf 0.240 0.310 0.420 rg 227.0 389.0 Td (/reports/:id/messages) Tj ET
+BT /F1 8.5 Tf 0.240 0.310 0.420 rg 227.0 378.0 Td (ou /private-conversatio) Tj ET
+BT /F1 8.5 Tf 0.240 0.310 0.420 rg 227.0 367.0 Td (ns/:id/messages.) Tj ET
+1.000 1.000 1.000 rg
+0.790 0.840 0.900 RG 0.8 w
+385.0 360.0 145.0 82.0 re B
+0.560 0.720 0.080 rg
+385.0 435.0 145.0 7.0 re f
+BT /F2 11 Tf 0.120 0.220 0.380 rg 397.0 418.0 Td (3. Banco grava) Tj ET
+BT /F1 8.5 Tf 0.240 0.310 0.420 rg 397.0 400.0 Td (Prisma salva mensagem,) Tj ET
+BT /F1 8.5 Tf 0.240 0.310 0.420 rg 397.0 389.0 Td (midias, mencoes e) Tj ET
+BT /F1 8.5 Tf 0.240 0.310 0.420 rg 397.0 378.0 Td (leitura no PostgreSQL.) Tj ET
+1.000 1.000 1.000 rg
+0.790 0.840 0.900 RG 0.8 w
+555.0 360.0 145.0 82.0 re B
+0.860 0.420 0.140 rg
+555.0 435.0 145.0 7.0 re f
+BT /F2 11 Tf 0.120 0.220 0.380 rg 567.0 418.0 Td (4. Socket.IO) Tj ET
+BT /F1 8.5 Tf 0.240 0.310 0.420 rg 567.0 400.0 Td (Backend emite new-) Tj ET
+BT /F1 8.5 Tf 0.240 0.310 0.420 rg 567.0 389.0 Td (message ou private-) Tj ET
+BT /F1 8.5 Tf 0.240 0.310 0.420 rg 567.0 378.0 Td (message para a sala) Tj ET
+BT /F1 8.5 Tf 0.240 0.310 0.420 rg 567.0 367.0 Td (correta.) Tj ET
+0.560 0.720 0.080 RG 2 w 190.0 402.0 m 215.0 402.0 l S
+0.560 0.720 0.080 RG 2 w 360.0 402.0 m 385.0 402.0 l S
+0.560 0.720 0.080 RG 2 w 530.0 402.0 m 555.0 402.0 l S
+BT /F2 14 Tf 0.120 0.220 0.380 rg 42.0 495.0 Td (Onde esta cada parte) Tj ET
+BT /F2 10 Tf 0.560 0.720 0.080 rg 42.0 475.0 Td (Х) Tj ET
+BT /F1 9.5 Tf 0.180 0.250 0.360 rg 56.0 475.0 Td (Frontend dos chats: src/pages/EmployeePanel.tsx.) Tj ET
+BT /F2 10 Tf 0.560 0.720 0.080 rg 42.0 460.0 Td (Х) Tj ET
+BT /F1 9.5 Tf 0.180 0.250 0.360 rg 56.0 460.0 Td (Socket.IO backend: backend/src/server.ts.) Tj ET
+BT /F2 10 Tf 0.560 0.720 0.080 rg 42.0 445.0 Td (Х) Tj ET
+BT /F1 9.5 Tf 0.180 0.250 0.360 rg 56.0 445.0 Td (Rotas de mensagens: backend/src/routes/index.ts.) Tj ET
+BT /F2 10 Tf 0.560 0.720 0.080 rg 42.0 430.0 Td (Х) Tj ET
+BT /F1 9.5 Tf 0.180 0.250 0.360 rg 56.0 430.0 Td (Modelos do banco: ReportMessage, PrivateMessage, ReportMessageRead, PrivateMessageRead, Notification.) Tj ET
+BT /F2 10 Tf 0.560 0.720 0.080 rg 42.0 415.0 Td (Х) Tj ET
+BT /F1 9.5 Tf 0.180 0.250 0.360 rg 56.0 415.0 Td (Anexos: upload para Cloudinary antes de salvar a mensagem com URL da midia.) Tj ET
+BT /F2 10 Tf 0.560 0.720 0.080 rg 42.0 400.0 Td (Х) Tj ET
+BT /F1 9.5 Tf 0.180 0.250 0.360 rg 56.0 400.0 Td (Check azul: mark-read grava ate qual mensagem foi lida e o Socket.IO avisa os outros usuarios.) Tj ET
+0.080 0.130 0.200 rg
+0.080 0.130 0.200 RG 0.5 w
+42.0 322.0 758.0 63.0 re B
+BT /F2 9 Tf 0.860 0.930 1.000 rg 54.0 369.0 Td (Eventos para mencionar) Tj ET
+BT /F1 8.2 Tf 0.910 0.960 0.880 rg 54.0 353.0 Td (join-report, leave-report, new-message, messages-read) Tj ET
+BT /F1 8.2 Tf 0.910 0.960 0.880 rg 54.0 340.0 Td (join-private-conversation, private-message, private-messages-read) Tj ET
+BT /F1 8.2 Tf 0.910 0.960 0.880 rg 54.0 327.0 Td (notification-created, force-logout) Tj ET
+0.750 0.800 0.880 RG 0.5 w 42.0 30.0 m 800.0 30.0 l S
+BT /F1 8 Tf 0.350 0.430 0.550 rg 42.0 18.0 Td (Zeladoria Coopatos - guia rapido para apresentacao tecnica) Tj ET
+BT /F1 8 Tf 0.350 0.430 0.550 rg 760.0 18.0 Td (Pag. 7) Tj ET
+endstream
+endobj
+18 0 obj
+<< /Type /Page /Parent 2 0 R /MediaBox [0 0 842 595] /Resources << /Font << /F1 3 0 R /F2 4 0 R >> >> /Contents 17 0 R >>
+endobj
+19 0 obj
+<< /Length 2610 >>
+stream
+0.965 0.975 0.990 rg
+0.0 0.0 842.0 595.0 re f
+0.120 0.220 0.380 rg
+0.0 577.0 842.0 18.0 re f
+BT /F2 18 Tf 0.120 0.220 0.380 rg 42.0 553.0 Td (7. Painel do funcionario) Tj ET
+BT /F1 10 Tf 0.160 0.220 0.320 rg 42.0 525.0 Td (O painel do funcionario esta praticamente todo em EmployeePanel.tsx. Ele tem varias funcoes porque concentra) Tj ET
+BT /F1 10 Tf 0.160 0.220 0.320 rg 42.0 512.0 Td (criacao de chamado, reportes, chat do chamado, chat privado, notificacoes, filtros, localizacao e upload.) Tj ET
+BT /F2 10 Tf 0.560 0.720 0.080 rg 42.0 495.0 Td (Х) Tj ET
+BT /F1 9.5 Tf 0.180 0.250 0.360 rg 56.0 495.0 Td (Criar chamado: formulario com titulo, categoria, prioridade, descricao, endereco/GPS e midia.) Tj ET
+BT /F2 10 Tf 0.560 0.720 0.080 rg 42.0 480.0 Td (Х) Tj ET
+BT /F1 9.5 Tf 0.180 0.250 0.360 rg 56.0 480.0 Td (Meus Reportes: lista chamados do usuario, ordena pendentes antes de finalizados e por prioridade.) Tj ET
+BT /F2 10 Tf 0.560 0.720 0.080 rg 42.0 465.0 Td (Х) Tj ET
+BT /F1 9.5 Tf 0.180 0.250 0.360 rg 56.0 465.0 Td (Reportes: mostra chamados em que o funcionario participa.) Tj ET
+BT /F2 10 Tf 0.560 0.720 0.080 rg 42.0 450.0 Td (Х) Tj ET
+BT /F1 9.5 Tf 0.180 0.250 0.360 rg 56.0 450.0 Td (Chat do chamado: conversa vinculada ao chamado, com midias, emoji, resposta e leitura.) Tj ET
+BT /F2 10 Tf 0.560 0.720 0.080 rg 42.0 435.0 Td (Х) Tj ET
+BT /F1 9.5 Tf 0.180 0.250 0.360 rg 56.0 435.0 Td (Chat privado: conversa um a um, com selecao, exclusao, resposta, midias e check azul.) Tj ET
+BT /F2 10 Tf 0.560 0.720 0.080 rg 42.0 420.0 Td (Х) Tj ET
+BT /F1 9.5 Tf 0.180 0.250 0.360 rg 56.0 420.0 Td (Notificacoes: painel mostra mencoes, mensagens privadas e atualizacoes.) Tj ET
+BT /F2 10 Tf 0.560 0.720 0.080 rg 42.0 405.0 Td (Х) Tj ET
+BT /F1 9.5 Tf 0.180 0.250 0.360 rg 56.0 405.0 Td (Inatividade e logout: AuthContext controla timeout e Socket.IO trata nova sessao em outro local.) Tj ET
+0.080 0.130 0.200 rg
+0.080 0.130 0.200 RG 0.5 w
+42.0 314.0 758.0 76.0 re B
+BT /F2 9 Tf 0.860 0.930 1.000 rg 54.0 374.0 Td (Arquivos para citar) Tj ET
+BT /F1 8.2 Tf 0.910 0.960 0.880 rg 54.0 358.0 Td (src/pages/EmployeePanel.tsx) Tj ET
+BT /F1 8.2 Tf 0.910 0.960 0.880 rg 54.0 345.0 Td (src/contexts/AuthContext.tsx) Tj ET
+BT /F1 8.2 Tf 0.910 0.960 0.880 rg 54.0 332.0 Td (backend/src/routes/index.ts) Tj ET
+BT /F1 8.2 Tf 0.910 0.960 0.880 rg 54.0 319.0 Td (prisma/schema.prisma) Tj ET
+0.750 0.800 0.880 RG 0.5 w 42.0 30.0 m 800.0 30.0 l S
+BT /F1 8 Tf 0.350 0.430 0.550 rg 42.0 18.0 Td (Zeladoria Coopatos - guia rapido para apresentacao tecnica) Tj ET
+BT /F1 8 Tf 0.350 0.430 0.550 rg 760.0 18.0 Td (Pag. 8) Tj ET
+endstream
+endobj
+20 0 obj
+<< /Type /Page /Parent 2 0 R /MediaBox [0 0 842 595] /Resources << /Font << /F1 3 0 R /F2 4 0 R >> >> /Contents 19 0 R >>
+endobj
+21 0 obj
+<< /Length 2662 >>
+stream
+0.965 0.975 0.990 rg
+0.0 0.0 842.0 595.0 re f
+0.120 0.220 0.380 rg
+0.0 577.0 842.0 18.0 re f
+BT /F2 18 Tf 0.120 0.220 0.380 rg 42.0 553.0 Td (8. Dashboard administrativo) Tj ET
+BT /F1 10 Tf 0.160 0.220 0.320 rg 42.0 525.0 Td (O Dashboard.tsx e a tela administrativa. Ele consome as rotas admin do backend, mostra dados filtrados e permite) Tj ET
+BT /F1 10 Tf 0.160 0.220 0.320 rg 42.0 512.0 Td (administrar o sistema. A area administrativa tambem e protegida: apenas usuario ligado ao departamento) Tj ET
+BT /F1 10 Tf 0.160 0.220 0.320 rg 42.0 499.0 Td (administrativo entra.) Tj ET
+BT /F2 10 Tf 0.560 0.720 0.080 rg 42.0 482.0 Td (Х) Tj ET
+BT /F1 9.5 Tf 0.180 0.250 0.360 rg 56.0 482.0 Td (Indicadores: cards, graficos e filtros proprios. Usa Recharts.) Tj ET
+BT /F2 10 Tf 0.560 0.720 0.080 rg 42.0 467.0 Td (Х) Tj ET
+BT /F1 9.5 Tf 0.180 0.250 0.360 rg 56.0 467.0 Td (Chamados: lista, filtra, cria, edita, exclui, atribui funcionarios e exporta CSV/PDF.) Tj ET
+BT /F2 10 Tf 0.560 0.720 0.080 rg 42.0 452.0 Td (Х) Tj ET
+BT /F1 9.5 Tf 0.180 0.250 0.360 rg 56.0 452.0 Td (Mapa: componente DashboardMaps.tsx com Leaflet, pins e mapa de calor.) Tj ET
+BT /F2 10 Tf 0.560 0.720 0.080 rg 42.0 437.0 Td (Х) Tj ET
+BT /F1 9.5 Tf 0.180 0.250 0.360 rg 56.0 437.0 Td (Funcionarios: CRUD em modal, foto, nascimento, departamento, validacao de email e status ativo/inativo.) Tj ET
+BT /F2 10 Tf 0.560 0.720 0.080 rg 42.0 422.0 Td (Х) Tj ET
+BT /F1 9.5 Tf 0.180 0.250 0.360 rg 56.0 422.0 Td (Usuarios e Departamentos: filtros, alteracao de departamento, ativar/desativar e auditoria.) Tj ET
+BT /F2 10 Tf 0.560 0.720 0.080 rg 42.0 407.0 Td (Х) Tj ET
+BT /F1 9.5 Tf 0.180 0.250 0.360 rg 56.0 407.0 Td (Auditoria: consulta AuditLog, mostra quem fez a alteracao e exporta relatorios.) Tj ET
+BT /F2 10 Tf 0.560 0.720 0.080 rg 42.0 392.0 Td (Х) Tj ET
+BT /F1 9.5 Tf 0.180 0.250 0.360 rg 56.0 392.0 Td (Personalizacao: muda nome, logo e cores usando src/config/brand.ts.) Tj ET
+0.080 0.130 0.200 rg
+0.080 0.130 0.200 RG 0.5 w
+42.0 301.0 758.0 76.0 re B
+BT /F2 9 Tf 0.860 0.930 1.000 rg 54.0 361.0 Td (Arquivos para citar) Tj ET
+BT /F1 8.2 Tf 0.910 0.960 0.880 rg 54.0 345.0 Td (src/pages/Dashboard.tsx) Tj ET
+BT /F1 8.2 Tf 0.910 0.960 0.880 rg 54.0 332.0 Td (src/components/DashboardMaps.tsx) Tj ET
+BT /F1 8.2 Tf 0.910 0.960 0.880 rg 54.0 319.0 Td (src/config/brand.ts) Tj ET
+BT /F1 8.2 Tf 0.910 0.960 0.880 rg 54.0 306.0 Td (backend/src/routes/index.ts) Tj ET
+0.750 0.800 0.880 RG 0.5 w 42.0 30.0 m 800.0 30.0 l S
+BT /F1 8 Tf 0.350 0.430 0.550 rg 42.0 18.0 Td (Zeladoria Coopatos - guia rapido para apresentacao tecnica) Tj ET
+BT /F1 8 Tf 0.350 0.430 0.550 rg 760.0 18.0 Td (Pag. 9) Tj ET
+endstream
+endobj
+22 0 obj
+<< /Type /Page /Parent 2 0 R /MediaBox [0 0 842 595] /Resources << /Font << /F1 3 0 R /F2 4 0 R >> >> /Contents 21 0 R >>
+endobj
+23 0 obj
+<< /Length 2174 >>
+stream
+0.965 0.975 0.990 rg
+0.0 0.0 842.0 595.0 re f
+0.120 0.220 0.380 rg
+0.0 577.0 842.0 18.0 re f
+BT /F2 18 Tf 0.120 0.220 0.380 rg 42.0 553.0 Td (9. Integracoes externas) Tj ET
+BT /F1 10 Tf 0.160 0.220 0.320 rg 42.0 525.0 Td (As integracoes sao importantes porque mostram que o sistema nao e apenas tela: ele envia arquivos, emails, usa) Tj ET
+BT /F1 10 Tf 0.160 0.220 0.320 rg 42.0 512.0 Td (mapa e tempo real.) Tj ET
+BT /F2 10 Tf 0.560 0.720 0.080 rg 42.0 495.0 Td (Х) Tj ET
+BT /F1 9.5 Tf 0.180 0.250 0.360 rg 56.0 495.0 Td (Cloudinary: O frontend envia o arquivo e recebe uma URL. A API salva essa URL no banco. Usado em) Tj ET
+BT /F1 9.5 Tf 0.180 0.250 0.360 rg 56.0 482.0 Td (chamados, chat, anotacoes e foto de perfil.) Tj ET
+BT /F2 10 Tf 0.560 0.720 0.080 rg 42.0 467.0 Td (Х) Tj ET
+BT /F1 9.5 Tf 0.180 0.250 0.360 rg 56.0 467.0 Td (Nodemailer/SMTP: Backend envia email de validacao de cadastro e recuperacao de matricula. Templates usam) Tj ET
+BT /F1 9.5 Tf 0.180 0.250 0.360 rg 56.0 454.0 Td (backend/src/config/brand.ts.) Tj ET
+BT /F2 10 Tf 0.560 0.720 0.080 rg 42.0 439.0 Td (Х) Tj ET
+BT /F1 9.5 Tf 0.180 0.250 0.360 rg 56.0 439.0 Td (Socket.IO: Mantem tempo real: chats, notificacoes, presenca online, leitura e logout forcado.) Tj ET
+BT /F2 10 Tf 0.560 0.720 0.080 rg 42.0 424.0 Td (Х) Tj ET
+BT /F1 9.5 Tf 0.180 0.250 0.360 rg 56.0 424.0 Td (Leaflet/OpenStreetMap: Mostra chamados no mapa. DashboardMaps.tsx usa coordenadas dos chamados filtrados.) Tj ET
+BT /F2 10 Tf 0.560 0.720 0.080 rg 42.0 409.0 Td (Х) Tj ET
+BT /F1 9.5 Tf 0.180 0.250 0.360 rg 56.0 409.0 Td (Vercel/Render/Neon: Frontend fica na Vercel, API no Render e banco PostgreSQL no Neon.) Tj ET
+BT /F2 10 Tf 0.560 0.720 0.080 rg 42.0 394.0 Td (Х) Tj ET
+BT /F1 9.5 Tf 0.180 0.250 0.360 rg 56.0 394.0 Td (Whitelabel: Configura nome, logo e cores. Frontend aplica variaveis CSS e backend usa o preset nos) Tj ET
+BT /F1 9.5 Tf 0.180 0.250 0.360 rg 56.0 381.0 Td (emails.) Tj ET
+0.750 0.800 0.880 RG 0.5 w 42.0 30.0 m 800.0 30.0 l S
+BT /F1 8 Tf 0.350 0.430 0.550 rg 42.0 18.0 Td (Zeladoria Coopatos - guia rapido para apresentacao tecnica) Tj ET
+BT /F1 8 Tf 0.350 0.430 0.550 rg 760.0 18.0 Td (Pag. 10) Tj ET
+endstream
+endobj
+24 0 obj
+<< /Type /Page /Parent 2 0 R /MediaBox [0 0 842 595] /Resources << /Font << /F1 3 0 R /F2 4 0 R >> >> /Contents 23 0 R >>
+endobj
+25 0 obj
+<< /Length 2509 >>
+stream
+0.965 0.975 0.990 rg
+0.0 0.0 842.0 595.0 re f
+0.120 0.220 0.380 rg
+0.0 577.0 842.0 18.0 re f
+BT /F2 18 Tf 0.120 0.220 0.380 rg 42.0 553.0 Td (10. Perguntas provaveis e respostas curtas) Tj ET
+BT /F2 10 Tf 0.120 0.220 0.380 rg 42.0 525.0 Td (P: Onde ficam as rotas?) Tj ET
+BT /F1 9.5 Tf 0.200 0.280 0.380 rg 58.0 512.0 Td (R: backend/src/routes/index.ts. O server.ts apenas cria Express e Socket.IO.) Tj ET
+BT /F2 10 Tf 0.120 0.220 0.380 rg 42.0 494.0 Td (P: Onde ficam as tabelas?) Tj ET
+BT /F1 9.5 Tf 0.200 0.280 0.380 rg 58.0 481.0 Td (R: prisma/schema.prisma. As alteracoes do banco ficam em prisma/migrations.) Tj ET
+BT /F2 10 Tf 0.120 0.220 0.380 rg 42.0 463.0 Td (P: Como o chat e em tempo real?) Tj ET
+BT /F1 9.5 Tf 0.200 0.280 0.380 rg 58.0 450.0 Td (R: A mensagem e salva pela API e o backend emite evento Socket.IO para a sala do chamado ou conversa privada.) Tj ET
+BT /F2 10 Tf 0.120 0.220 0.380 rg 42.0 432.0 Td (P: Como salva imagem/video/audio?) Tj ET
+BT /F1 9.5 Tf 0.200 0.280 0.380 rg 58.0 419.0 Td (R: O arquivo vai para Cloudinary, volta uma URL e essa URL e salva no banco.) Tj ET
+BT /F2 10 Tf 0.120 0.220 0.380 rg 42.0 401.0 Td (P: Como funciona o check azul?) Tj ET
+BT /F1 9.5 Tf 0.200 0.280 0.380 rg 58.0 388.0 Td (R: Ao abrir a conversa, o frontend chama mark-read; o backend grava a ultima mensagem lida e emite evento de leitura.) Tj ET
+BT /F2 10 Tf 0.120 0.220 0.380 rg 42.0 370.0 Td (P: Como o admin ve indicadores?) Tj ET
+BT /F1 9.5 Tf 0.200 0.280 0.380 rg 58.0 357.0 Td (R: Dashboard.tsx filtra os chamados e monta dados para Recharts.) Tj ET
+BT /F2 10 Tf 0.120 0.220 0.380 rg 42.0 339.0 Td (P: Como o mapa funciona?) Tj ET
+BT /F1 9.5 Tf 0.200 0.280 0.380 rg 58.0 326.0 Td (R: DashboardMaps.tsx usa Leaflet e coordenadas dos chamados para pins e heatmap.) Tj ET
+BT /F2 10 Tf 0.120 0.220 0.380 rg 42.0 308.0 Td (P: Como protege o admin?) Tj ET
+BT /F1 9.5 Tf 0.200 0.280 0.380 rg 58.0 295.0 Td (R: App.tsx exige role admin e departamento administrativo; backend valida sessao nas rotas /admin.) Tj ET
+BT /F2 10 Tf 0.120 0.220 0.380 rg 42.0 277.0 Td (P: Como foi feito whitelabel?) Tj ET
+BT /F1 9.5 Tf 0.200 0.280 0.380 rg 58.0 264.0 Td (R: src/config/brand.ts define preset e aplica variaveis CSS; backend/src/config/brand.ts personaliza emails.) Tj ET
+0.750 0.800 0.880 RG 0.5 w 42.0 30.0 m 800.0 30.0 l S
+BT /F1 8 Tf 0.350 0.430 0.550 rg 42.0 18.0 Td (Zeladoria Coopatos - guia rapido para apresentacao tecnica) Tj ET
+BT /F1 8 Tf 0.350 0.430 0.550 rg 760.0 18.0 Td (Pag. 11) Tj ET
+endstream
+endobj
+26 0 obj
+<< /Type /Page /Parent 2 0 R /MediaBox [0 0 842 595] /Resources << /Font << /F1 3 0 R /F2 4 0 R >> >> /Contents 25 0 R >>
+endobj
+27 0 obj
+<< /Length 3044 >>
+stream
+0.965 0.975 0.990 rg
+0.0 0.0 842.0 595.0 re f
+0.120 0.220 0.380 rg
+0.0 577.0 842.0 18.0 re f
+BT /F2 18 Tf 0.120 0.220 0.380 rg 42.0 553.0 Td (11. Cola final de apresentacao) Tj ET
+BT /F1 10 Tf 0.160 0.220 0.320 rg 42.0 525.0 Td (Use este discurso curto se precisar explicar o projeto inteiro em menos de um minuto:) Tj ET
+0.080 0.130 0.200 rg
+0.080 0.130 0.200 RG 0.5 w
+42.0 393.0 758.0 115.0 re B
+BT /F2 9 Tf 0.860 0.930 1.000 rg 54.0 492.0 Td (Discurso sugerido) Tj ET
+BT /F1 8.2 Tf 0.910 0.960 0.880 rg 54.0 476.0 Td (O projeto e uma SPA em React/TypeScript com backend Node/Express.) Tj ET
+BT /F1 8.2 Tf 0.910 0.960 0.880 rg 54.0 463.0 Td (O frontend fica em src/pages e o backend em backend/src/routes/index.ts.) Tj ET
+BT /F1 8.2 Tf 0.910 0.960 0.880 rg 54.0 450.0 Td (Os dados sao salvos em PostgreSQL/Neon usando Prisma, definido em prisma/schema.prisma.) Tj ET
+BT /F1 8.2 Tf 0.910 0.960 0.880 rg 54.0 437.0 Td (Chamados, chats, notificacoes e logout usam Socket.IO para tempo real.) Tj ET
+BT /F1 8.2 Tf 0.910 0.960 0.880 rg 54.0 424.0 Td (Uploads de midia usam Cloudinary, emails usam Nodemailer e mapas usam Leaflet.) Tj ET
+BT /F1 8.2 Tf 0.910 0.960 0.880 rg 54.0 411.0 Td (O painel admin em Dashboard.tsx gerencia chamados, funcionarios, indicadores, mapa e auditoria.) Tj ET
+BT /F1 8.2 Tf 0.910 0.960 0.880 rg 54.0 398.0 Td (O painel do funcionario em EmployeePanel.tsx cria chamados e concentra os chats.) Tj ET
+BT /F2 14 Tf 0.120 0.220 0.380 rg 42.0 379.0 Td (Dependencias para lembrar) Tj ET
+BT /F2 10 Tf 0.560 0.720 0.080 rg 42.0 359.0 Td (Х) Tj ET
+BT /F1 9.5 Tf 0.180 0.250 0.360 rg 56.0 359.0 Td (React, TypeScript, Vite) Tj ET
+BT /F2 10 Tf 0.560 0.720 0.080 rg 42.0 344.0 Td (Х) Tj ET
+BT /F1 9.5 Tf 0.180 0.250 0.360 rg 56.0 344.0 Td (Tailwind, shadcn/ui, Radix UI) Tj ET
+BT /F2 10 Tf 0.560 0.720 0.080 rg 42.0 329.0 Td (Х) Tj ET
+BT /F1 9.5 Tf 0.180 0.250 0.360 rg 56.0 329.0 Td (Node.js, Express) Tj ET
+BT /F2 10 Tf 0.560 0.720 0.080 rg 42.0 314.0 Td (Х) Tj ET
+BT /F1 9.5 Tf 0.180 0.250 0.360 rg 56.0 314.0 Td (Prisma, PostgreSQL/Neon) Tj ET
+BT /F2 10 Tf 0.560 0.720 0.080 rg 42.0 299.0 Td (Х) Tj ET
+BT /F1 9.5 Tf 0.180 0.250 0.360 rg 56.0 299.0 Td (Socket.IO) Tj ET
+BT /F2 10 Tf 0.560 0.720 0.080 rg 42.0 284.0 Td (Х) Tj ET
+BT /F1 9.5 Tf 0.180 0.250 0.360 rg 56.0 284.0 Td (Cloudinary) Tj ET
+BT /F2 10 Tf 0.560 0.720 0.080 rg 42.0 269.0 Td (Х) Tj ET
+BT /F1 9.5 Tf 0.180 0.250 0.360 rg 56.0 269.0 Td (Nodemailer) Tj ET
+BT /F2 10 Tf 0.560 0.720 0.080 rg 42.0 254.0 Td (Х) Tj ET
+BT /F1 9.5 Tf 0.180 0.250 0.360 rg 56.0 254.0 Td (Leaflet) Tj ET
+BT /F2 10 Tf 0.560 0.720 0.080 rg 42.0 239.0 Td (Х) Tj ET
+BT /F1 9.5 Tf 0.180 0.250 0.360 rg 56.0 239.0 Td (Recharts) Tj ET
+BT /F2 10 Tf 0.560 0.720 0.080 rg 42.0 224.0 Td (Х) Tj ET
+BT /F1 9.5 Tf 0.180 0.250 0.360 rg 56.0 224.0 Td (Vercel, Render) Tj ET
+0.750 0.800 0.880 RG 0.5 w 42.0 30.0 m 800.0 30.0 l S
+BT /F1 8 Tf 0.350 0.430 0.550 rg 42.0 18.0 Td (Zeladoria Coopatos - guia rapido para apresentacao tecnica) Tj ET
+BT /F1 8 Tf 0.350 0.430 0.550 rg 760.0 18.0 Td (Pag. 12) Tj ET
+endstream
+endobj
+28 0 obj
+<< /Type /Page /Parent 2 0 R /MediaBox [0 0 842 595] /Resources << /Font << /F1 3 0 R /F2 4 0 R >> >> /Contents 27 0 R >>
+endobj
+xref
+0 29
+0000000000 65535 f 
+0000000015 00000 n 
+0000000064 00000 n 
+0000000198 00000 n 
+0000000295 00000 n 
+0000000397 00000 n 
+0000002883 00000 n 
+0000003019 00000 n 
+0000007240 00000 n 
+0000007376 00000 n 
+0000012341 00000 n 
+0000012478 00000 n 
+0000015124 00000 n 
+0000015262 00000 n 
+0000018272 00000 n 
+0000018410 00000 n 
+0000022333 00000 n 
+0000022471 00000 n 
+0000026999 00000 n 
+0000027137 00000 n 
+0000029800 00000 n 
+0000029938 00000 n 
+0000032653 00000 n 
+0000032791 00000 n 
+0000035018 00000 n 
+0000035156 00000 n 
+0000037718 00000 n 
+0000037856 00000 n 
+0000040953 00000 n 
+trailer
+<< /Size 29 /Root 1 0 R >>
+startxref
+41091
+%%EOF

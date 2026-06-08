@@ -10,6 +10,7 @@ import {
   CheckCircle,
   Download,
   Expand,
+  FileVideo,
   FileSpreadsheet,
   History,
   Image as ImageIcon,
@@ -70,6 +71,7 @@ import {
   defaultBrandPreset,
   hexToHslString,
   hslStringToHex,
+  mergeBrandPreset,
   useBranding,
 } from "@/config/brand";
 import DashboardMaps from "@/components/DashboardMaps";
@@ -560,6 +562,11 @@ const filterReports = (
   );
 };
 
+const isVideoMedia = (resourceType?: string | null) => resourceType === "video";
+
+const getPrimaryReportMedia = (report: AdminReport) =>
+  report.images?.find((item) => item.imageUrl) || null;
+
 const Dashboard = () => {
   const { logout } = useAuth();
   const navigate = useNavigate();
@@ -575,6 +582,7 @@ const Dashboard = () => {
   const [employees, setEmployees] = useState<AdminEmployee[]>([]);
   const [loadingEmployees, setLoadingEmployees] = useState(false);
   const [employeeSearch, setEmployeeSearch] = useState("");
+  const [employeeStatusFilter, setEmployeeStatusFilter] = useState("active");
   const [employeeForm, setEmployeeForm] =
     useState<EmployeeForm>(emptyEmployeeForm);
   const [employeeFormErrors, setEmployeeFormErrors] =
@@ -610,6 +618,8 @@ const Dashboard = () => {
   const [brandForm, setBrandForm] = useState<BrandForm>(() =>
     createBrandForm(brandPreset)
   );
+  const [savingBrandCustomization, setSavingBrandCustomization] = useState(false);
+  const [uploadingBrandLogo, setUploadingBrandLogo] = useState(false);
 
   const [filterCategory, setFilterCategory] = useState("all");
   const [filterStatus, setFilterStatus] = useState("all");
@@ -897,7 +907,7 @@ const Dashboard = () => {
     setBrandForm(createBrandForm(brandPreset));
   }, [brandPreset]);
 
-  const saveBrandCustomization = () => {
+  const saveBrandCustomization = async () => {
     const nextPreset = {
       ...brandPreset,
       appName: brandForm.appName.trim() || defaultBrandPreset.appName,
@@ -922,22 +932,132 @@ const Dashboard = () => {
       },
     };
 
-    persistBrandPreset(nextPreset);
-    toast({
-      title: "Personalização aplicada",
-      description: "Nome, logo e cores foram atualizados no site.",
-      duration: 3000,
-    });
+    if (!nextPreset.logoSrc.toLowerCase().includes(".png")) {
+      toast({
+        title: "Logo inválida",
+        description: "Envie uma logo em PNG para aplicar o whitelabel.",
+        variant: "destructive",
+      });
+      return;
+    }
+
+    setSavingBrandCustomization(true);
+
+    try {
+      const response = await fetch(`${API_URL}/admin/brand-settings`, {
+        method: "PUT",
+        headers: adminHeaders({
+          "Content-Type": "application/json",
+        }),
+        body: JSON.stringify({ preset: nextPreset }),
+      });
+      const data = await response.json();
+
+      if (!response.ok) {
+        toast({
+          title: "Erro ao salvar whitelabel",
+          description: data.error || "Tente novamente.",
+          variant: "destructive",
+        });
+        return;
+      }
+
+      persistBrandPreset(mergeBrandPreset(data.preset || nextPreset));
+      toast({
+        title: "Personalização aplicada",
+        description: "Nome, logo e cores foram atualizados no site e no backend.",
+        duration: 3000,
+      });
+    } catch (error) {
+      console.error(error);
+      toast({
+        title: "Erro ao conectar com o servidor",
+        variant: "destructive",
+      });
+    } finally {
+      setSavingBrandCustomization(false);
+    }
   };
 
-  const resetBrandCustomization = () => {
+  const resetBrandCustomization = async () => {
     const defaultPreset = restoreBrandPreset();
     setBrandForm(createBrandForm(defaultPreset));
+
+    try {
+      await fetch(`${API_URL}/admin/brand-settings`, {
+        method: "PUT",
+        headers: adminHeaders({
+          "Content-Type": "application/json",
+        }),
+        body: JSON.stringify({ preset: defaultPreset }),
+      });
+    } catch (error) {
+      console.error(error);
+    }
+
     toast({
       title: "Personalização restaurada",
       description: "O padrão original da Coopatos voltou a ser usado.",
       duration: 3000,
     });
+  };
+
+  const uploadBrandLogo = async (file: File) => {
+    if (file.type !== "image/png") {
+      toast({
+        title: "Formato não suportado",
+        description: "A logo whitelabel precisa ser um arquivo PNG.",
+        variant: "destructive",
+      });
+      return;
+    }
+
+    setUploadingBrandLogo(true);
+
+    try {
+      const formData = new FormData();
+      formData.append("file", file);
+      formData.append(
+        "upload_preset",
+        import.meta.env.VITE_CLOUDINARY_UPLOAD_PRESET
+      );
+
+      const response = await fetch(
+        `https://api.cloudinary.com/v1_1/${import.meta.env.VITE_CLOUDINARY_CLOUD_NAME}/image/upload`,
+        {
+          method: "POST",
+          body: formData,
+        }
+      );
+      const data = await response.json();
+
+      if (!response.ok || !data.secure_url) {
+        toast({
+          title: "Erro ao enviar logo",
+          description: data.error?.message || "Tente novamente.",
+          variant: "destructive",
+        });
+        return;
+      }
+
+      setBrandForm((prev) => ({
+        ...prev,
+        logoSrc: data.secure_url,
+      }));
+      toast({
+        title: "Logo enviada",
+        description: "Clique em aplicar para salvar no backend.",
+        duration: 3000,
+      });
+    } catch (error) {
+      console.error(error);
+      toast({
+        title: "Erro ao enviar logo",
+        variant: "destructive",
+      });
+    } finally {
+      setUploadingBrandLogo(false);
+    }
   };
 
   const getVerificationCooldown = (employee: AdminEmployee) => {
@@ -1009,6 +1129,12 @@ const Dashboard = () => {
     const search = employeeSearch.toLowerCase().trim();
 
     return employees.filter((employee) => {
+      const matchesStatus =
+        employeeStatusFilter === "all" ||
+        (employeeStatusFilter === "active" && !employee.deletedAt) ||
+        (employeeStatusFilter === "inactive" && employee.deletedAt);
+
+      if (!matchesStatus) return false;
       if (!search) return true;
 
       return (
@@ -1019,7 +1145,7 @@ const Dashboard = () => {
         employee.department?.toLowerCase().includes(search)
       );
     });
-  }, [employees, employeeSearch]);
+  }, [employees, employeeSearch, employeeStatusFilter]);
 
   const employeeStats = useMemo(
     () => ({
@@ -3648,19 +3774,22 @@ const Dashboard = () => {
                   {filtered.length} ocorrência(s) encontradas
                 </p>
 
-                {filtered.map((report, i) => (
-                  <motion.div
-                    key={report.id}
-                    initial={{ opacity: 0, y: 8 }}
-                    animate={{ opacity: 1, y: 0 }}
-                    transition={{ delay: i * 0.02 }}
-                    onClick={() => {
-                      setDetailImageIndex(0);
-                      setAssignEmployeeIds([]);
-                      setSelectedReport(report);
-                    }}
-                    className="group cursor-pointer rounded-2xl border border-border bg-card p-4 transition-all hover:-translate-y-0.5 hover:border-secondary/50 hover:shadow-lg"
-                  >
+                {filtered.map((report, i) => {
+                  const primaryMedia = getPrimaryReportMedia(report);
+
+                  return (
+                    <motion.div
+                      key={report.id}
+                      initial={{ opacity: 0, y: 8 }}
+                      animate={{ opacity: 1, y: 0 }}
+                      transition={{ delay: i * 0.02 }}
+                      onClick={() => {
+                        setDetailImageIndex(0);
+                        setAssignEmployeeIds([]);
+                        setSelectedReport(report);
+                      }}
+                      className="group cursor-pointer rounded-2xl border border-border bg-card p-4 transition-all hover:-translate-y-0.5 hover:border-secondary/50 hover:shadow-lg"
+                    >
                     <div className="flex min-w-0 items-start gap-3 sm:items-center sm:gap-4">
                       <div className="flex w-8 shrink-0 flex-col items-center gap-1">
                         <div
@@ -3673,13 +3802,36 @@ const Dashboard = () => {
                         </span>
                       </div>
 
-                      <img
-                        src={
-                          report.images?.[0]?.imageUrl || "/placeholder.svg"
-                        }
-                        alt=""
-                        className="hidden h-14 w-14 flex-shrink-0 rounded-xl object-cover sm:block"
-                      />
+                      <div className="hidden h-14 w-14 flex-shrink-0 overflow-hidden rounded-xl border border-border bg-muted sm:flex sm:items-center sm:justify-center">
+                        {primaryMedia ? (
+                          isVideoMedia(primaryMedia.resourceType) ? (
+                            <div className="relative h-full w-full bg-primary/10">
+                              <video
+                                src={primaryMedia.imageUrl}
+                                muted
+                                playsInline
+                                preload="metadata"
+                                className="h-full w-full object-cover"
+                              />
+                              <span className="absolute inset-0 flex items-center justify-center bg-primary/15 text-white">
+                                <FileVideo className="h-5 w-5 drop-shadow" />
+                              </span>
+                            </div>
+                          ) : (
+                            <img
+                              src={primaryMedia.imageUrl}
+                              alt=""
+                              className="h-full w-full object-cover"
+                            />
+                          )
+                        ) : (
+                          <span className="text-primary">
+                            {categoryIcons[report.category.name] || (
+                              <ImageIcon className="h-5 w-5" />
+                            )}
+                          </span>
+                        )}
+                      </div>
 
                       <div className="min-w-0 flex-1">
                         <div className="mb-1 flex min-w-0 flex-wrap items-center gap-2">
@@ -3743,8 +3895,9 @@ const Dashboard = () => {
                         {priorityLabel(report.priority)}
                       </span>
                     </div>
-                  </motion.div>
-                ))}
+                    </motion.div>
+                  );
+                })}
               </div>
             )}
           </>
@@ -3869,6 +4022,19 @@ const Dashboard = () => {
                         className="pl-9 lg:w-[320px]"
                       />
                     </div>
+                    <Select
+                      value={employeeStatusFilter}
+                      onValueChange={setEmployeeStatusFilter}
+                    >
+                      <SelectTrigger className="sm:w-[160px]">
+                        <SelectValue placeholder="Status" />
+                      </SelectTrigger>
+                      <SelectContent>
+                        <SelectItem value="active">Ativos</SelectItem>
+                        <SelectItem value="inactive">Desativados</SelectItem>
+                        <SelectItem value="all">Todos</SelectItem>
+                      </SelectContent>
+                    </Select>
                     <Button
                       type="button"
                       variant="outline"
@@ -3908,11 +4074,16 @@ const Dashboard = () => {
                       Nenhum funcionário encontrado.
                     </p>
                   ) : (
-                    filteredEmployees.map((employee) => (
-                      <div
-                        key={employee.id}
-                        className="flex flex-col gap-3 p-4 transition hover:bg-muted/30 lg:flex-row lg:items-center"
-                      >
+                    <AnimatePresence initial={false}>
+                      {filteredEmployees.map((employee) => (
+                        <motion.div
+                          key={employee.id}
+                          initial={{ opacity: 0, y: 8 }}
+                          animate={{ opacity: 1, y: 0 }}
+                          exit={{ opacity: 0, y: -8 }}
+                          transition={{ duration: 0.18 }}
+                          className="flex flex-col gap-3 p-4 transition hover:bg-muted/30 lg:flex-row lg:items-center"
+                        >
                         <div className="flex h-14 w-14 shrink-0 items-center justify-center overflow-hidden rounded-2xl bg-secondary/10 text-secondary">
                           {employee.avatarUrl ? (
                             <img
@@ -4034,8 +4205,9 @@ const Dashboard = () => {
                             {employee.deletedAt ? "Restaurar" : "Desativar"}
                           </Button>
                         </div>
-                      </div>
-                    ))
+                        </motion.div>
+                      ))}
+                    </AnimatePresence>
                   )}
                 </div>
             </div>
@@ -4408,7 +4580,6 @@ const Dashboard = () => {
                   ["organizationName", "Organização"],
                   ["adminTitle", "Título administrativo"],
                   ["tagline", "Frase do login"],
-                  ["logoSrc", "URL/caminho da logo"],
                 ].map(([key, label]) => (
                   <label key={key} className="space-y-1.5 text-sm font-medium">
                     {label}
@@ -4423,6 +4594,44 @@ const Dashboard = () => {
                     />
                   </label>
                 ))}
+              </div>
+
+              <div className="mt-5 rounded-2xl border border-border bg-background p-4">
+                <div className="flex flex-col gap-4 sm:flex-row sm:items-center">
+                  <div className="flex h-20 w-20 shrink-0 items-center justify-center overflow-hidden rounded-2xl border border-border bg-card">
+                    <img
+                      src={brandForm.logoSrc || defaultBrandPreset.logoSrc}
+                      alt=""
+                      className="h-full w-full object-contain p-2"
+                    />
+                  </div>
+                  <div className="min-w-0 flex-1">
+                    <p className="text-sm font-semibold">Logo PNG</p>
+                    <p className="mt-1 text-xs text-muted-foreground">
+                      Envie a logo em PNG para aplicar no login, painel admin,
+                      área do funcionário e e-mails do backend.
+                    </p>
+                    <label className="mt-3 inline-flex cursor-pointer items-center gap-2 rounded-xl border border-border bg-card px-3 py-2 text-sm font-medium text-primary transition hover:bg-muted">
+                      {uploadingBrandLogo ? (
+                        <Loader2 className="h-4 w-4 animate-spin" />
+                      ) : (
+                        <ImageIcon className="h-4 w-4" />
+                      )}
+                      {uploadingBrandLogo ? "Enviando..." : "Inserir logo"}
+                      <input
+                        type="file"
+                        accept="image/png"
+                        className="hidden"
+                        disabled={uploadingBrandLogo}
+                        onChange={(event) => {
+                          const file = event.target.files?.[0];
+                          event.target.value = "";
+                          if (file) uploadBrandLogo(file);
+                        }}
+                      />
+                    </label>
+                  </div>
+                </div>
               </div>
 
               <div className="mt-5 grid gap-3 sm:grid-cols-3">
@@ -4467,10 +4676,15 @@ const Dashboard = () => {
                 <Button
                   type="button"
                   onClick={saveBrandCustomization}
+                  disabled={savingBrandCustomization || uploadingBrandLogo}
                   className="gap-2"
                 >
-                  <Save className="h-4 w-4" />
-                  Aplicar personalização
+                  {savingBrandCustomization ? (
+                    <Loader2 className="h-4 w-4 animate-spin" />
+                  ) : (
+                    <Save className="h-4 w-4" />
+                  )}
+                  {savingBrandCustomization ? "Salvando..." : "Aplicar personalização"}
                 </Button>
                 <Button
                   type="button"
@@ -4511,8 +4725,8 @@ const Dashboard = () => {
                 </div>
               </div>
               <p className="mt-4 text-xs text-muted-foreground">
-                Nesta versão a personalização fica salva neste navegador. Para
-                produção multiempresa, o próximo passo é persistir o preset no banco.
+                A personalização fica persistida no backend e sincroniza para
+                login, área do funcionário, painel administrativo e e-mails.
               </p>
             </div>
           </div>
