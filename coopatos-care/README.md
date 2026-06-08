@@ -54,6 +54,8 @@ Modelo recomendado para acesso administrativo: `Employee` representa a pessoa/fu
 
 Quando um funcionário do departamento administrativo valida o e-mail, a API cria ou vincula automaticamente um `User` administrativo e envia um e-mail para definir a senha do painel. O login administrativo também possui fluxo de "Esqueci minha senha", com link temporário de redefinição por e-mail.
 
+Também é possível criar um usuário manualmente em `Configurações > Usuários`. O vínculo com funcionário é opcional no cadastro, mas o acesso ao admin só é liberado quando o usuário está associado a um funcionário ativo do departamento administrativo. Se o funcionário deixa de pertencer ao departamento administrativo, o login administrativo passa a ser bloqueado e a sessão ativa é encerrada.
+
 ## Funcionalidades Já Presentes
 
 - Login de funcionário por matrícula e CPF.
@@ -95,7 +97,7 @@ Quando um funcionário do departamento administrativo valida o e-mail, a API cri
 - Admin: rotas `/admin/*` protegidas no backend por sessão administrativa e departamento administrativo, não apenas pelo bloqueio visual do frontend.
 - Funcionário: criação/edição de chamados com prioridade, finalização do próprio chamado e ordenação de "Meus Reportes" com pendentes primeiro, por prioridade e depois data.
 - Admin: login administrativo apenas por e-mail, usuários com filtros por status/perfil/departamento, auditoria visual antes do download CSV e mudança rápida de departamento de funcionários.
-- Admin: recuperação de senha administrativa por e-mail, página de redefinição e convite automático para funcionários administrativos com e-mail validado.
+- Admin: criação manual de usuários, recuperação de senha administrativa por e-mail, página de redefinição e convite automático para funcionários administrativos com e-mail validado.
 - Admin: navegação principal simplificada para apresentação com Indicadores, Chamados, Mapa e Configurações; Funcionários, Usuários, Departamentos, Auditoria/Planilhas e Personalização ficam agrupados dentro de Configurações.
 - Admin: aba Mapa separada com filtros próprios, pins/heatmap e atalho para criar chamado.
 - Admin: Personalização whitelabel com upload de logo PNG, prévia, persistência no backend, aplicação no login/funcionário/admin/e-mails, restauração do preset original e edição ampliada de cores de identidade, interface, texto, cards, bordas, hover e ações.

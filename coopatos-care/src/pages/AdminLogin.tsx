@@ -188,7 +188,7 @@ const AdminLogin = () => {
           <button
             type="button"
             onClick={() => setShowForgotPassword(true)}
-            className="w-full mt-3 text-xs font-medium text-secondary hover:text-secondary/80 transition-colors"
+            className="mt-3 w-full rounded-xl border border-border bg-white px-3 py-2 text-xs font-medium text-primary shadow-sm transition-colors hover:bg-muted"
           >
             Esqueci minha senha administrativa
           </button>

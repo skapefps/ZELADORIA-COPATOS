@@ -443,7 +443,7 @@ const sendEmployeeVerificationEmail = async (
               Seu cadastro foi criado/atualizado no ${brandPreset.appName}. Para liberar o acesso, valide seu e-mail no botão abaixo.
             </p>
             <p style="text-align:center; margin:28px 0;">
-              <a href="${verificationUrl}" style="display:inline-block; background:${secondaryColor}; color:#ffffff; text-decoration:none; padding:14px 22px; border-radius:12px; font-weight:700;">
+              <a href="${verificationUrl}" style="display:inline-block; background:${secondaryColor}; color:#ffffff; text-decoration:none; padding:15px 26px; border-radius:999px; font-weight:800; box-shadow:0 10px 24px rgba(15,23,42,.18); letter-spacing:.2px;">
                 Validar acesso
               </a>
             </p>
@@ -507,7 +507,7 @@ const sendAdminPasswordResetEmail = async ({
               }
             </p>
             <p style="text-align:center; margin:28px 0;">
-              <a href="${resetUrl}" style="display:inline-block; background:${secondaryColor}; color:#ffffff; text-decoration:none; padding:14px 22px; border-radius:12px; font-weight:700;">
+              <a href="${resetUrl}" style="display:inline-block; background:${secondaryColor}; color:#ffffff; text-decoration:none; padding:15px 26px; border-radius:999px; font-weight:800; box-shadow:0 10px 24px rgba(15,23,42,.18); letter-spacing:.2px;">
                 ${isInvite ? "Definir senha administrativa" : "Redefinir senha"}
               </a>
             </p>
@@ -612,6 +612,60 @@ const createOrInviteAdminUserForEmployee = async (
   }
 
   return user;
+};
+
+const sendPasswordResetForUser = async (
+  user: {
+    id: number;
+    email: string;
+    employee?: {
+      id: number;
+      name: string;
+      email: string | null;
+      department?: string | null;
+      emailVerifiedAt?: Date | string | null;
+    } | null;
+  },
+  isInvite = false
+) => {
+  const token = crypto.randomUUID();
+  const updatedUser = await prisma.user.update({
+    where: {
+      id: user.id,
+    },
+    data: {
+      passwordResetToken: token,
+      passwordResetSentAt: new Date(),
+    },
+    include: {
+      employee: true,
+    },
+  });
+
+  void sendAdminPasswordResetEmail({
+    email: updatedUser.email,
+    name: updatedUser.employee?.name || updatedUser.email,
+    token,
+    isInvite,
+  }).catch((error) => {
+    console.error("Erro ao enviar redefinição administrativa:", error);
+  });
+
+  await createAuditLog({
+    action: isInvite ? "ADMIN_ACCESS_INVITED" : "ADMIN_PASSWORD_RESET_SENT",
+    entityType: "USER",
+    entityId: updatedUser.id,
+    summary: isInvite
+      ? `Convite administrativo enviado para ${updatedUser.email}.`
+      : `Link de redefinição administrativa enviado para ${updatedUser.email}.`,
+    metadata: {
+      employeeId: updatedUser.employeeId,
+      email: updatedUser.email,
+      manual: true,
+    },
+  });
+
+  return updatedUser;
 };
 
 router.post("/employee/recover-registration", async (req, res) => {
@@ -967,6 +1021,137 @@ router.get("/brand-settings", async (_req, res) => {
   });
 });
 
+router.post("/admin/forgot-password", async (req, res) => {
+  try {
+    const email = String(req.body.email || "").trim().toLowerCase();
+
+    if (!email || !isValidEmail(email)) {
+      return res.status(400).json({
+        error: "Informe um e-mail válido.",
+      });
+    }
+
+    const genericResponse = {
+      message:
+        "Se o e-mail estiver cadastrado e validado, enviaremos um link para redefinir a senha.",
+    };
+
+    const user = await prisma.user.findFirst({
+      where: {
+        email,
+        deletedAt: null,
+        role: "ADMIN",
+      },
+      include: {
+        employee: true,
+      },
+    });
+
+    const employee =
+      user?.employee ||
+      (await prisma.employee.findFirst({
+        where: {
+          email,
+          deletedAt: null,
+        },
+      }));
+
+    if (
+      employee?.email &&
+      employee.emailVerifiedAt &&
+      isAdministrativeDepartmentName(employee.department)
+    ) {
+      const lastSent = user?.passwordResetSentAt;
+      const elapsed = lastSent
+        ? Math.floor((Date.now() - lastSent.getTime()) / 1000)
+        : ADMIN_RESET_COOLDOWN_SECONDS + 1;
+
+      if (elapsed > ADMIN_RESET_COOLDOWN_SECONDS) {
+        await createOrInviteAdminUserForEmployee(employee, "PASSWORD_RECOVERY");
+      }
+    }
+
+    return res.json(genericResponse);
+  } catch (error) {
+    console.error("Erro ao solicitar redefinição administrativa:", error);
+    return res.status(500).json({
+      error: "Erro ao solicitar redefinição de senha.",
+    });
+  }
+});
+
+router.post("/admin/reset-password", async (req, res) => {
+  try {
+    const token = String(req.body.token || "");
+    const password = String(req.body.password || "");
+
+    if (!token || password.length < 6) {
+      return res.status(400).json({
+        error: "Informe um link válido e uma senha com pelo menos 6 caracteres.",
+      });
+    }
+
+    const user = await prisma.user.findUnique({
+      where: {
+        passwordResetToken: token,
+      },
+      include: {
+        employee: true,
+      },
+    });
+
+    const sentAt = user?.passwordResetSentAt?.getTime() || 0;
+    const expired =
+      !sentAt ||
+      Date.now() - sentAt > ADMIN_PASSWORD_RESET_HOURS * 60 * 60 * 1000;
+
+    if (
+      !user ||
+      user.deletedAt ||
+      user.role !== "ADMIN" ||
+      expired ||
+      !isAdministrativeDepartmentName(user.employee?.department)
+    ) {
+      return res.status(400).json({
+        error: "Link inválido ou expirado.",
+      });
+    }
+
+    const passwordHash = await bcrypt.hash(password, 10);
+    const updatedUser = await prisma.user.update({
+      where: {
+        id: user.id,
+      },
+      data: {
+        passwordHash,
+        passwordResetToken: null,
+        passwordResetSentAt: null,
+      },
+      include: {
+        employee: true,
+      },
+    });
+
+    await createAuditLog({
+      actorId: updatedUser.employee?.id || null,
+      actorName: updatedUser.employee?.name || updatedUser.email,
+      action: "ADMIN_PASSWORD_RESET_COMPLETED",
+      entityType: "USER",
+      entityId: updatedUser.id,
+      summary: `Senha administrativa redefinida para ${updatedUser.email}.`,
+    });
+
+    return res.json({
+      message: "Senha redefinida com sucesso.",
+    });
+  } catch (error) {
+    console.error("Erro ao redefinir senha administrativa:", error);
+    return res.status(500).json({
+      error: "Erro ao redefinir senha.",
+    });
+  }
+});
+
 router.use("/admin", requireAdminRequest);
 
 router.put("/admin/brand-settings", async (req, res) => {
@@ -1055,6 +1240,132 @@ router.get("/admin/users", async (_req, res) => {
   }
 });
 
+router.post("/admin/users", async (req, res) => {
+  try {
+    const email = String(req.body.email || "").trim().toLowerCase();
+    const role = req.body.role === "EMPLOYEE" ? "EMPLOYEE" : "ADMIN";
+    const employeeId = req.body.employeeId ? Number(req.body.employeeId) : null;
+
+    if (!email || !isValidEmail(email)) {
+      return res.status(400).json({
+        error: "Informe um e-mail válido.",
+      });
+    }
+
+    if (employeeId) {
+      const employee = await prisma.employee.findUnique({
+        where: {
+          id: employeeId,
+        },
+        include: {
+          user: true,
+        },
+      });
+
+      if (!employee) {
+        return res.status(404).json({
+          error: "Funcionário não encontrado.",
+        });
+      }
+
+      if (employee.user) {
+        return res.status(409).json({
+          error: "Este funcionário já possui usuário vinculado.",
+        });
+      }
+    }
+
+    const existingUser = await prisma.user.findUnique({
+      where: {
+        email,
+      },
+    });
+
+    if (existingUser) {
+      return res.status(409).json({
+        error: "Já existe um usuário com este e-mail.",
+      });
+    }
+
+    const passwordHash = await bcrypt.hash(crypto.randomUUID(), 10);
+    const user = await prisma.user.create({
+      data: {
+        email,
+        role,
+        employeeId,
+        passwordHash,
+      },
+      include: {
+        employee: true,
+      },
+    });
+
+    if (role === "ADMIN") {
+      await sendPasswordResetForUser(user, true);
+    }
+
+    const createdUser = await prisma.user.findUnique({
+      where: {
+        id: user.id,
+      },
+      include: {
+        employee: true,
+      },
+    });
+
+    await createAuditLog({
+      action: "USER_CREATED",
+      entityType: "USER",
+      entityId: user.id,
+      summary: `Usuário ${email} criado manualmente.`,
+      metadata: {
+        role,
+        employeeId,
+        inviteSent: role === "ADMIN",
+      },
+    });
+
+    return res.status(201).json(createdUser);
+  } catch (error: any) {
+    console.error("Erro ao criar usuário:", error);
+    return res.status(500).json({
+      error:
+        error?.code === "P2002"
+          ? "E-mail ou funcionário já vinculado a outro usuário."
+          : "Erro ao criar usuário.",
+    });
+  }
+});
+
+router.post("/admin/users/:id/send-password-reset", async (req, res) => {
+  try {
+    const id = Number(req.params.id);
+    const user = await prisma.user.findUnique({
+      where: {
+        id,
+      },
+      include: {
+        employee: true,
+      },
+    });
+
+    if (!user || user.deletedAt) {
+      return res.status(404).json({
+        error: "Usuário não encontrado.",
+      });
+    }
+
+    const updatedUser = await sendPasswordResetForUser(user, false);
+
+    return res.json(updatedUser);
+  } catch (error) {
+    console.error("Erro ao enviar redefinição do usuário:", error);
+    return res.status(500).json({
+      error: "Erro ao enviar redefinição.",
+    });
+  }
+});
+
 router.patch("/admin/users/:id/status", async (req, res) => {
   try {
     const id = Number(req.params.id);
@@ -1104,6 +1415,13 @@ router.patch("/admin/employees/:id/department", async (req, res) => {
       },
       select: adminEmployeeSelect,
     });
+
+    if (!isAdministrativeDepartmentName(department)) {
+      io.to(`employee-${employee.id}`).emit("force-logout", {
+        reason: "Seu acesso administrativo foi removido pelo administrador.",
+        role: "admin",
+      });
+    }
 
     await createAuditLog({
       action: "EMPLOYEE_DEPARTMENT_CHANGED",
@@ -1313,6 +1631,16 @@ router.patch("/admin/employees/:id", async (req, res) => {
         emailVerificationToken: true,
       },
     });
+
+    if (
+      isAdministrativeDepartmentName(currentEmployee?.department) &&
+      !isAdministrativeDepartmentName(employee.department)
+    ) {
+      io.to(`employee-${employee.id}`).emit("force-logout", {
+        reason: "Seu acesso administrativo foi removido pelo administrador.",
+        role: "admin",
+      });
+    }
 
     if (shouldVerifyEmail) {
       sendEmployeeVerificationEmailInBackground(employee);
@@ -2857,137 +3185,6 @@ router.post("/reports/:id/images", async (req, res) => {
   });
 
   return res.status(201).json(report);
-});
-
-router.post("/admin/forgot-password", async (req, res) => {
-  try {
-    const email = String(req.body.email || "").trim().toLowerCase();
-
-    if (!email || !isValidEmail(email)) {
-      return res.status(400).json({
-        error: "Informe um e-mail válido.",
-      });
-    }
-
-    const genericResponse = {
-      message:
-        "Se o e-mail estiver cadastrado e validado, enviaremos um link para redefinir a senha.",
-    };
-
-    const user = await prisma.user.findFirst({
-      where: {
-        email,
-        deletedAt: null,
-        role: "ADMIN",
-      },
-      include: {
-        employee: true,
-      },
-    });
-
-    const employee =
-      user?.employee ||
-      (await prisma.employee.findFirst({
-        where: {
-          email,
-          deletedAt: null,
-        },
-      }));
-
-    if (
-      employee?.email &&
-      employee.emailVerifiedAt &&
-      isAdministrativeDepartmentName(employee.department)
-    ) {
-      const lastSent = user?.passwordResetSentAt;
-      const elapsed = lastSent
-        ? Math.floor((Date.now() - lastSent.getTime()) / 1000)
-        : ADMIN_RESET_COOLDOWN_SECONDS + 1;
-
-      if (elapsed > ADMIN_RESET_COOLDOWN_SECONDS) {
-        await createOrInviteAdminUserForEmployee(employee, "PASSWORD_RECOVERY");
-      }
-    }
-
-    return res.json(genericResponse);
-  } catch (error) {
-    console.error("Erro ao solicitar redefinição administrativa:", error);
-    return res.status(500).json({
-      error: "Erro ao solicitar redefinição de senha.",
-    });
-  }
-});
-
-router.post("/admin/reset-password", async (req, res) => {
-  try {
-    const token = String(req.body.token || "");
-    const password = String(req.body.password || "");
-
-    if (!token || password.length < 6) {
-      return res.status(400).json({
-        error: "Informe um link válido e uma senha com pelo menos 6 caracteres.",
-      });
-    }
-
-    const user = await prisma.user.findUnique({
-      where: {
-        passwordResetToken: token,
-      },
-      include: {
-        employee: true,
-      },
-    });
-
-    const sentAt = user?.passwordResetSentAt?.getTime() || 0;
-    const expired =
-      !sentAt ||
-      Date.now() - sentAt > ADMIN_PASSWORD_RESET_HOURS * 60 * 60 * 1000;
-
-    if (
-      !user ||
-      user.deletedAt ||
-      user.role !== "ADMIN" ||
-      expired ||
-      !isAdministrativeDepartmentName(user.employee?.department)
-    ) {
-      return res.status(400).json({
-        error: "Link inválido ou expirado.",
-      });
-    }
-
-    const passwordHash = await bcrypt.hash(password, 10);
-    const updatedUser = await prisma.user.update({
-      where: {
-        id: user.id,
-      },
-      data: {
-        passwordHash,
-        passwordResetToken: null,
-        passwordResetSentAt: null,
-      },
-      include: {
-        employee: true,
-      },
-    });
-
-    await createAuditLog({
-      actorId: updatedUser.employee?.id || null,
-      actorName: updatedUser.employee?.name || updatedUser.email,
-      action: "ADMIN_PASSWORD_RESET_COMPLETED",
-      entityType: "USER",
-      entityId: updatedUser.id,
-      summary: `Senha administrativa redefinida para ${updatedUser.email}.`,
-    });
-
-    return res.json({
-      message: "Senha redefinida com sucesso.",
-    });
-  } catch (error) {
-    console.error("Erro ao redefinir senha administrativa:", error);
-    return res.status(500).json({
-      error: "Erro ao redefinir senha.",
-    });
-  }
 });
 
 router.post("/admin-login", async (req, res) => {

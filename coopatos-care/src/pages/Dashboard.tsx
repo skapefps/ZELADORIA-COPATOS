@@ -217,6 +217,12 @@ type DepartmentForm = {
   active: boolean;
 };
 
+type UserForm = {
+  email: string;
+  role: "ADMIN" | "EMPLOYEE";
+  employeeId: string;
+};
+
 type EmployeeForm = {
   registrationNumber: string;
   name: string;
@@ -303,6 +309,12 @@ const emptyDepartmentForm: DepartmentForm = {
   description: "",
   color: "#2563eb",
   active: true,
+};
+
+const emptyUserForm: UserForm = {
+  email: "",
+  role: "ADMIN",
+  employeeId: "none",
 };
 
 const emptyReportForm: ReportForm = {
@@ -627,6 +639,10 @@ const Dashboard = () => {
   const [userStatusFilter, setUserStatusFilter] = useState("active");
   const [userRoleFilter, setUserRoleFilter] = useState("all");
   const [userDepartmentFilter, setUserDepartmentFilter] = useState("all");
+  const [showUserModal, setShowUserModal] = useState(false);
+  const [userForm, setUserForm] = useState<UserForm>(emptyUserForm);
+  const [savingUser, setSavingUser] = useState(false);
+  const [sendingUserResetId, setSendingUserResetId] = useState<number | null>(null);
   const [auditLogs, setAuditLogs] = useState<AuditLog[]>([]);
   const [showAuditModal, setShowAuditModal] = useState(false);
   const [loadingAuditLogs, setLoadingAuditLogs] = useState(false);
@@ -1307,6 +1323,18 @@ const Dashboard = () => {
       ).sort(),
     [auditLogs]
   );
+
+  const availableUserEmployeeOptions = useMemo(() => {
+    const linkedEmployeeIds = new Set(
+      users
+        .map((user) => user.employeeId || user.employee?.id)
+        .filter(Boolean) as number[]
+    );
+
+    return employees
+      .filter((employee) => !linkedEmployeeIds.has(employee.id))
+      .sort((a, b) => a.name.localeCompare(b.name));
+  }, [employees, users]);
 
   const departmentStats = useMemo(
     () => ({
@@ -2040,6 +2068,105 @@ const Dashboard = () => {
         title: "Erro ao conectar com o servidor",
         variant: "destructive",
       });
+    }
+  };
+
+  const openNewUserModal = () => {
+    setUserForm(emptyUserForm);
+    setShowUserModal(true);
+  };
+
+  const saveUser = async () => {
+    if (!isValidEmail(userForm.email.trim())) {
+      toast({
+        title: "Informe um e-mail válido",
+        variant: "destructive",
+      });
+      return;
+    }
+
+    setSavingUser(true);
+
+    try {
+      const response = await fetch(`${API_URL}/admin/users`, {
+        method: "POST",
+        headers: adminHeaders({
+          "Content-Type": "application/json",
+        }),
+        body: JSON.stringify({
+          email: userForm.email.trim().toLowerCase(),
+          role: userForm.role,
+          employeeId:
+            userForm.employeeId === "none" ? null : Number(userForm.employeeId),
+        }),
+      });
+      const data = await response.json();
+
+      if (!response.ok) {
+        toast({
+          title: "Erro ao criar usuário",
+          description: data.error || "Tente novamente.",
+          variant: "destructive",
+        });
+        return;
+      }
+
+      setUsers((prev) => [data, ...prev]);
+      setShowUserModal(false);
+      setUserForm(emptyUserForm);
+      toast({
+        title: "Usuário criado",
+        description:
+          userForm.role === "ADMIN"
+            ? "Um link para definir senha foi enviado ao e-mail informado."
+            : undefined,
+      });
+    } catch (error) {
+      console.error(error);
+      toast({
+        title: "Erro ao conectar com o servidor",
+        variant: "destructive",
+      });
+    } finally {
+      setSavingUser(false);
+    }
+  };
+
+  const sendUserPasswordReset = async (user: AdminUser) => {
+    setSendingUserResetId(user.id);
+
+    try {
+      const response = await fetch(
+        `${API_URL}/admin/users/${user.id}/send-password-reset`,
+        {
+          method: "POST",
+          headers: adminHeaders(),
+        }
+      );
+      const data = await response.json();
+
+      if (!response.ok) {
+        toast({
+          title: "Erro ao enviar redefinição",
+          description: data.error || "Tente novamente.",
+          variant: "destructive",
+        });
+        return;
+      }
+
+      setUsers((prev) => prev.map((item) => (item.id === data.id ? data : item)));
+      toast({
+        title: "Link enviado",
+        description: `Enviado para ${user.email}.`,
+      });
+    } catch (error) {
+      console.error(error);
+      toast({
+        title: "Erro ao conectar com o servidor",
+        variant: "destructive",
+      });
+    } finally {
+      setSendingUserResetId(null);
     }
   };
 
@@ -4487,11 +4614,21 @@ const Dashboard = () => {
           <div className="space-y-5">
             <div className="rounded-2xl border border-border bg-card shadow-sm">
               <div className="flex flex-col gap-3 border-b border-border p-4">
-                <div>
-                  <p className="text-sm font-semibold">Usuários</p>
-                  <p className="text-xs text-muted-foreground">
-                    {filteredUsers.length} usuário(s) encontrados
-                  </p>
+                <div className="flex flex-col gap-3 lg:flex-row lg:items-center lg:justify-between">
+                  <div>
+                    <p className="text-sm font-semibold">Usuários</p>
+                    <p className="text-xs text-muted-foreground">
+                      {filteredUsers.length} usuário(s) encontrados
+                    </p>
+                  </div>
+                  <Button
+                    type="button"
+                    onClick={openNewUserModal}
+                    className="gap-2"
+                  >
+                    <UserPlus className="h-4 w-4" />
+                    Novo usuário
+                  </Button>
                 </div>
 
                 <div className="grid gap-2 md:grid-cols-4">
@@ -4575,6 +4712,11 @@ const Dashboard = () => {
                           {user.employee?.name || "Sem funcionário vinculado"} •{" "}
                           {user.employee?.department || "Sem departamento"}
                         </p>
+                        {!user.employee && (
+                          <p className="mt-1 text-[11px] text-amber-700">
+                            Sem vínculo: para acessar o admin, vincule a um funcionário do departamento administrativo.
+                          </p>
+                        )}
                       </div>
 
                       <div className="flex flex-wrap gap-2">
@@ -4601,6 +4743,21 @@ const Dashboard = () => {
                             </SelectContent>
                           </Select>
                         )}
+                        <Button
+                          type="button"
+                          variant="outline"
+                          size="sm"
+                          disabled={sendingUserResetId === user.id}
+                          onClick={() => sendUserPasswordReset(user)}
+                          className="gap-1 border-border bg-white text-primary hover:bg-muted"
+                        >
+                          {sendingUserResetId === user.id ? (
+                            <Loader2 className="h-3.5 w-3.5 animate-spin" />
+                          ) : (
+                            <Mail className="h-3.5 w-3.5" />
+                          )}
+                          Redefinir senha
+                        </Button>
                         <Button
                           type="button"
                           variant="outline"
@@ -5401,6 +5558,140 @@ const Dashboard = () => {
                     ))}
                   </div>
                 )}
+              </div>
+            </motion.div>
+          </motion.div>
+        )}
+
+        {showUserModal && (
+          <motion.div
+            className="fixed inset-0 z-[10000] flex items-end justify-center bg-black/60 p-0 sm:items-center sm:p-4"
+            initial={{ opacity: 0 }}
+            animate={{ opacity: 1 }}
+            exit={{ opacity: 0 }}
+            onClick={() => setShowUserModal(false)}
+          >
+            <motion.div
+              initial={{ opacity: 0, y: 36, scale: 0.98 }}
+              animate={{ opacity: 1, y: 0, scale: 1 }}
+              exit={{ opacity: 0, y: 36, scale: 0.98 }}
+              onClick={(event) => event.stopPropagation()}
+              className="w-full max-w-xl rounded-t-3xl border border-border bg-card shadow-2xl sm:rounded-3xl"
+            >
+              <div className="flex items-center justify-between border-b border-border p-4">
+                <div className="flex items-center gap-3">
+                  <div className="flex h-11 w-11 items-center justify-center rounded-2xl bg-primary/10 text-primary">
+                    <UserCog className="h-5 w-5" />
+                  </div>
+                  <div>
+                    <h2 className="text-lg font-bold">Novo usuário</h2>
+                    <p className="text-xs text-muted-foreground">
+                      Crie uma credencial e, se quiser, vincule a um funcionário.
+                    </p>
+                  </div>
+                </div>
+                <button
+                  type="button"
+                  onClick={() => setShowUserModal(false)}
+                  className="flex h-9 w-9 items-center justify-center rounded-full bg-muted text-muted-foreground hover:text-foreground"
+                >
+                  <X className="h-4 w-4" />
+                </button>
+              </div>
+
+              <div className="space-y-4 p-4">
+                <label className="space-y-1.5 text-sm font-medium">
+                  E-mail do usuário
+                  <Input
+                    type="email"
+                    value={userForm.email}
+                    onChange={(event) =>
+                      setUserForm((prev) => ({
+                        ...prev,
+                        email: event.target.value,
+                      }))
+                    }
+                    placeholder="usuario@empresa.com"
+                  />
+                </label>
+
+                <div className="grid gap-3 sm:grid-cols-2">
+                  <label className="space-y-1.5 text-sm font-medium">
+                    Perfil
+                    <Select
+                      value={userForm.role}
+                      onValueChange={(value) =>
+                        setUserForm((prev) => ({
+                          ...prev,
+                          role: value as UserForm["role"],
+                        }))
+                      }
+                    >
+                      <SelectTrigger>
+                        <SelectValue />
+                      </SelectTrigger>
+                      <SelectContent>
+                        <SelectItem value="ADMIN">Admin</SelectItem>
+                        <SelectItem value="EMPLOYEE">Funcionário</SelectItem>
+                      </SelectContent>
+                    </Select>
+                  </label>
+
+                  <label className="space-y-1.5 text-sm font-medium">
+                    Funcionário vinculado
+                    <Select
+                      value={userForm.employeeId}
+                      onValueChange={(value) =>
+                        setUserForm((prev) => ({
+                          ...prev,
+                          employeeId: value,
+                        }))
+                      }
+                    >
+                      <SelectTrigger>
+                        <SelectValue />
+                      </SelectTrigger>
+                      <SelectContent>
+                        <SelectItem value="none">Sem vínculo</SelectItem>
+                        {availableUserEmployeeOptions.map((employee) => (
+                          <SelectItem key={employee.id} value={String(employee.id)}>
+                            {employee.name} - {employee.email || employee.registrationNumber}
+                          </SelectItem>
+                        ))}
+                      </SelectContent>
+                    </Select>
+                  </label>
+                </div>
+
+                <div className="rounded-2xl border border-amber-200 bg-amber-50 p-3 text-xs text-amber-800">
+                  Para acessar o módulo administrativo, o usuário precisa estar
+                  vinculado a um funcionário ativo do departamento administrativo.
+                  Usuários sem vínculo podem ser criados, mas não entram no admin até
+                  serem vinculados.
+                </div>
+
+                <div className="flex flex-col gap-2 sm:flex-row sm:justify-end">
+                  <Button
+                    type="button"
+                    variant="outline"
+                    onClick={() => setShowUserModal(false)}
+                  >
+                    Cancelar
+                  </Button>
+                  <Button
+                    type="button"
+                    onClick={saveUser}
+                    disabled={savingUser}
+                    className="gap-2"
+                  >
+                    {savingUser ? (
+                      <Loader2 className="h-4 w-4 animate-spin" />
+                    ) : (
+                      <UserPlus className="h-4 w-4" />
+                    )}
+                    Criar usuário
+                  </Button>
+                </div>
               </div>
             </motion.div>
           </motion.div>
