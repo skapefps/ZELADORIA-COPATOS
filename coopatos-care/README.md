@@ -52,6 +52,8 @@ Em `Configurações > Personalização`, o admin altera nome do sistema, nome cu
 
 Modelo recomendado para acesso administrativo: `Employee` representa a pessoa/funcionário real e `User` representa a credencial administrativa. Quando alguém precisar acessar o admin, crie/vincule um `User` ao `Employee` existente pelo campo `employeeId`. Assim permissões por departamento, auditoria, sessão única e rastreio de ações continuam ligados a uma pessoa real.
 
+Quando um funcionário do departamento administrativo valida o e-mail, a API cria ou vincula automaticamente um `User` administrativo e envia um e-mail para definir a senha do painel. O login administrativo também possui fluxo de "Esqueci minha senha", com link temporário de redefinição por e-mail.
+
 ## Funcionalidades Já Presentes
 
 - Login de funcionário por matrícula e CPF.
@@ -93,12 +95,14 @@ Modelo recomendado para acesso administrativo: `Employee` representa a pessoa/fu
 - Admin: rotas `/admin/*` protegidas no backend por sessão administrativa e departamento administrativo, não apenas pelo bloqueio visual do frontend.
 - Funcionário: criação/edição de chamados com prioridade, finalização do próprio chamado e ordenação de "Meus Reportes" com pendentes primeiro, por prioridade e depois data.
 - Admin: login administrativo apenas por e-mail, usuários com filtros por status/perfil/departamento, auditoria visual antes do download CSV e mudança rápida de departamento de funcionários.
+- Admin: recuperação de senha administrativa por e-mail, página de redefinição e convite automático para funcionários administrativos com e-mail validado.
 - Admin: navegação principal simplificada para apresentação com Indicadores, Chamados, Mapa e Configurações; Funcionários, Usuários, Departamentos, Auditoria/Planilhas e Personalização ficam agrupados dentro de Configurações.
 - Admin: aba Mapa separada com filtros próprios, pins/heatmap e atalho para criar chamado.
 - Admin: Personalização whitelabel com upload de logo PNG, prévia, persistência no backend, aplicação no login/funcionário/admin/e-mails, restauração do preset original e edição ampliada de cores de identidade, interface, texto, cards, bordas, hover e ações.
 - Sessão: inatividade centralizada em 15 minutos, aviso específico no login administrativo e comparação de token por aba usando `sessionStorage` para impedir que uma nova sessão no mesmo navegador mantenha a aba antiga ativa.
 - Admin: exportação de chamados em CSV e PDF com personalização de colunas e respeitando os filtros atuais de categoria, pessoa, status, período e local/busca; funcionários e auditoria também contam com relatório PDF.
 - Admin: auditoria passa a exibir o responsável pela alteração, resolvendo ids para nome/e-mail quando possível e registrando automaticamente o ator das rotas administrativas.
+- Admin: auditoria com filtros por texto, entidade, responsável e intervalo de datas; exportação CSV/PDF respeita os filtros aplicados e alterações de funcionário registram campos efetivamente modificados, como foto de perfil.
 
 ## Ambiente
 

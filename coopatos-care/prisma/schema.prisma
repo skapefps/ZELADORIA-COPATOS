@@ -54,6 +54,8 @@ model User {
   email        String   @unique
   passwordHash String
   role         UserRole
+  passwordResetToken String? @unique
+  passwordResetSentAt DateTime?
 
   employee     Employee? @relation(fields: [employeeId], references: [id])
 
@@ -62,6 +64,7 @@ model User {
   deletedAt    DateTime?
 
   @@index([email])
+  @@index([passwordResetToken])
 }
 
 model AuditLog {

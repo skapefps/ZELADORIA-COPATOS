@@ -174,6 +174,8 @@ const publicApiUrl =
   "https://zeladoria-coopatos-api.onrender.com";
 const VERIFICATION_COOLDOWN_SECONDS = 120;
 const brandPreset = defaultServerBrandPreset;
+const ADMIN_PASSWORD_RESET_HOURS = 24;
+const ADMIN_RESET_COOLDOWN_SECONDS = 120;
 
 const mergeServerBrandPreset = (preset?: any) => ({
   ...defaultServerBrandPreset,
@@ -260,6 +262,9 @@ const isValidCpf = (cpf: string) => {
     secondDigit === Number(cleanCpf[10])
   );
 };
+
+const isAdministrativeDepartmentName = (department?: string | null) =>
+  normalizeTextForPermission(department).includes("administrativo");
 
 const normalizeTextForPermission = (value?: string | null) =>
   String(value || "")
@@ -451,6 +456,162 @@ const sendEmployeeVerificationEmail = async (
       </div>
     `,
   });
+};
+
+const sendAdminPasswordResetEmail = async ({
+  email,
+  name,
+  token,
+  isInvite = false,
+}: {
+  email: string;
+  name: string;
+  token: string;
+  isInvite?: boolean;
+}) => {
+  const brandPreset = await getServerBrandPreset();
+  const primaryColor = toCssColor(
+    brandPreset.colors.primary,
+    defaultServerBrandPreset.colors.primary
+  );
+  const secondaryColor = toCssColor(
+    brandPreset.colors.secondary,
+    defaultServerBrandPreset.colors.secondary
+  );
+  const emailBackground = toCssColor(
+    brandPreset.colors.emailBackground,
+    defaultServerBrandPreset.colors.emailBackground
+  );
+  const resetUrl = `${publicAppUrl}/admin/redefinir-senha/${token}`;
+
+  await mailTransporter.sendMail({
+    from: process.env.MAIL_FROM,
+    to: email,
+    subject: isInvite
+      ? `Acesso administrativo liberado - ${brandPreset.appName}`
+      : `Redefinição de senha administrativa - ${brandPreset.appName}`,
+    html: `
+      <div style="font-family: Arial, sans-serif; background:${emailBackground}; padding:28px;">
+        <div style="max-width:620px; margin:0 auto; background:#ffffff; border-radius:18px; overflow:hidden; border:1px solid #e5e7eb;">
+          <div style="background:${primaryColor}; padding:24px; text-align:center;">
+            <h1 style="color:#ffffff; margin:0; font-size:22px;">${brandPreset.appName}</h1>
+            <p style="color:#dbeafe; margin:6px 0 0; font-size:14px;">Módulo administrativo</p>
+          </div>
+          <div style="padding:28px;">
+            <h2 style="color:#111827; margin-top:0;">Olá, ${name}!</h2>
+            <p style="font-size:15px; color:#374151; line-height:1.6;">
+              ${
+                isInvite
+                  ? "Seu e-mail foi validado e seu acesso ao módulo administrativo foi liberado. Defina sua senha para entrar no painel."
+                  : "Recebemos uma solicitação para redefinir sua senha administrativa. Use o botão abaixo para criar uma nova senha."
+              }
+            </p>
+            <p style="text-align:center; margin:28px 0;">
+              <a href="${resetUrl}" style="display:inline-block; background:${secondaryColor}; color:#ffffff; text-decoration:none; padding:14px 22px; border-radius:12px; font-weight:700;">
+                ${isInvite ? "Definir senha administrativa" : "Redefinir senha"}
+              </a>
+            </p>
+            <p style="font-size:12px; color:#6b7280; line-height:1.6;">
+              Este link expira em ${ADMIN_PASSWORD_RESET_HOURS} horas. Se o botão não funcionar, copie e cole este link no navegador:<br/>
+              ${resetUrl}
+            </p>
+          </div>
+        </div>
+      </div>
+    `,
+  });
+};
+
+const createOrInviteAdminUserForEmployee = async (
+  employee: {
+    id: number;
+    name: string;
+    email: string | null;
+    department?: string | null;
+    emailVerifiedAt?: Date | string | null;
+  },
+  reason: "EMPLOYEE_VERIFIED" | "EMPLOYEE_UPDATED" | "PASSWORD_RECOVERY"
+) => {
+  if (
+    !employee.email ||
+    !employee.emailVerifiedAt ||
+    !isAdministrativeDepartmentName(employee.department)
+  ) {
+    return null;
+  }
+
+  const token = crypto.randomUUID();
+  const fallbackPasswordHash = await bcrypt.hash(crypto.randomUUID(), 10);
+
+  const existingUser = await prisma.user.findFirst({
+    where: {
+      OR: [
+        {
+          email: employee.email.toLowerCase(),
+        },
+        {
+          employeeId: employee.id,
+        },
+      ],
+    },
+  });
+  const shouldSendAdminEmail = reason !== "EMPLOYEE_UPDATED" || !existingUser;
+
+  const user = existingUser
+    ? await prisma.user.update({
+      where: {
+        id: existingUser.id,
+      },
+      data: {
+        email: employee.email.toLowerCase(),
+        role: "ADMIN",
+        employeeId: employee.id,
+        deletedAt: null,
+        passwordResetToken: shouldSendAdminEmail ? token : undefined,
+        passwordResetSentAt: shouldSendAdminEmail ? new Date() : undefined,
+      },
+    })
+    : await prisma.user.create({
+      data: {
+      email: employee.email.toLowerCase(),
+      employeeId: employee.id,
+      role: "ADMIN",
+      passwordHash: fallbackPasswordHash,
+      passwordResetToken: token,
+      passwordResetSentAt: new Date(),
+      },
+    });
+
+  if (shouldSendAdminEmail) {
+    void sendAdminPasswordResetEmail({
+      email: employee.email,
+      name: employee.name,
+      token,
+      isInvite: reason !== "PASSWORD_RECOVERY",
+    }).catch((error) => {
+      console.error("Erro ao enviar e-mail administrativo:", error);
+    });
+
+    await createAuditLog({
+      action:
+        reason === "PASSWORD_RECOVERY"
+          ? "ADMIN_PASSWORD_RESET_SENT"
+          : "ADMIN_ACCESS_INVITED",
+      entityType: "USER",
+      entityId: user.id,
+      summary:
+        reason === "PASSWORD_RECOVERY"
+          ? `Link de redefinição administrativa enviado para ${employee.email}.`
+          : `Acesso administrativo liberado para ${employee.name}.`,
+      metadata: {
+        employeeId: employee.id,
+        email: employee.email,
+        reason,
+      },
+    });
+  }
+
+  return user;
 };
 
 router.post("/employee/recover-registration", async (req, res) => {
@@ -954,6 +1115,8 @@ router.patch("/admin/employees/:id/department", async (req, res) => {
       },
     });
 
+    await createOrInviteAdminUserForEmployee(employee, "EMPLOYEE_UPDATED");
+
     return res.json(employee);
   } catch (error) {
     console.error("Erro ao alterar departamento do funcionário:", error);
@@ -1083,8 +1246,15 @@ router.patch("/admin/employees/:id", async (req, res) => {
         id,
       },
       select: {
+        registrationNumber: true,
+        name: true,
         email: true,
         emailVerifiedAt: true,
+        cpf: true,
+        phone: true,
+        department: true,
+        avatarUrl: true,
+        birthDate: true,
       },
     });
 
@@ -1146,16 +1316,47 @@ router.patch("/admin/employees/:id", async (req, res) => {
 
     if (shouldVerifyEmail) {
       sendEmployeeVerificationEmailInBackground(employee);
+    } else {
+      await createOrInviteAdminUserForEmployee(employee, "EMPLOYEE_UPDATED");
     }
+
+    const changedFields: Record<
+      string,
+      { from: string | null; to: string | null }
+    > = {};
+    const addChange = (field: string, from: unknown, to: unknown) => {
+      if (String(from || "") !== String(to || "")) {
+        changedFields[field] = {
+          from: from ? String(from) : null,
+          to: to ? String(to) : null,
+        };
+      }
+    };
+
+    addChange("registrationNumber", currentEmployee?.registrationNumber, cleanRegistrationNumber);
+    addChange("name", currentEmployee?.name, employee.name);
+    addChange("email", currentEmployee?.email, employee.email);
+    addChange("cpf", currentEmployee?.cpf, cleanCpf);
+    addChange("phone", currentEmployee?.phone, cleanPhone);
+    addChange("department", currentEmployee?.department, employee.department);
+    addChange("avatarUrl", currentEmployee?.avatarUrl, employee.avatarUrl);
+    addChange(
+      "birthDate",
+      currentEmployee?.birthDate?.toISOString().slice(0, 10),
+      employee.birthDate ? new Date(employee.birthDate).toISOString().slice(0, 10) : null
+    );
+
+    const changedLabels = Object.keys(changedFields);
 
     await createAuditLog({
       action: "EMPLOYEE_UPDATED",
       entityType: "EMPLOYEE",
       entityId: employee.id,
-      summary: `Funcionário ${employee.name} atualizado.`,
+      summary: changedLabels.length
+        ? `Funcionário ${employee.name} atualizado: ${changedLabels.join(", ")}.`
+        : `Funcionário ${employee.name} salvo sem alteração de campos.`,
       metadata: {
-        emailChanged: Boolean(shouldVerifyEmail),
-        department: employee.department,
+        changedFields,
       },
     });
 
@@ -1325,6 +1526,7 @@ router.get("/employee/verify-email/:token", async (req, res) => {
       select: adminEmployeeSelect,
     });
 
+    await createOrInviteAdminUserForEmployee(employee, "EMPLOYEE_VERIFIED");
     io.emit("employee-verification-updated", employee);
 
     if (req.headers.accept?.includes("application/json")) {
@@ -1574,12 +1776,69 @@ router.get("/statuses", async (req, res) => {
 
 router.get("/admin/audit-logs", async (req, res) => {
   try {
-    const { entityType, limit } = req.query;
+    const {
+      entityType,
+      action,
+      actorId,
+      entityId,
+      startDate,
+      endDate,
+      search,
+      limit,
+    } = req.query;
+
+    const where: Prisma.AuditLogWhereInput = {
+      entityType: entityType && entityType !== "all" ? String(entityType) : undefined,
+      action: action && action !== "all" ? String(action) : undefined,
+      actorId:
+        actorId && actorId !== "all" && !Number.isNaN(Number(actorId))
+          ? Number(actorId)
+          : undefined,
+      entityId:
+        entityId && !Number.isNaN(Number(entityId))
+          ? Number(entityId)
+          : undefined,
+    };
+
+    if (startDate || endDate) {
+      where.createdAt = {
+        gte: startDate ? new Date(`${String(startDate)}T00:00:00`) : undefined,
+        lte: endDate ? new Date(`${String(endDate)}T23:59:59`) : undefined,
+      };
+    }
+
+    if (search) {
+      const term = String(search);
+      where.OR = [
+        {
+          summary: {
+            contains: term,
+            mode: "insensitive",
+          },
+        },
+        {
+          action: {
+            contains: term,
+            mode: "insensitive",
+          },
+        },
+        {
+          entityType: {
+            contains: term,
+            mode: "insensitive",
+          },
+        },
+        {
+          actorName: {
+            contains: term,
+            mode: "insensitive",
+          },
+        },
+      ];
+    }
 
     const logs = await prisma.auditLog.findMany({
-      where: {
-        entityType: entityType ? String(entityType) : undefined,
-      },
+      where,
       orderBy: {
         createdAt: "desc",
       },
@@ -1842,7 +2101,47 @@ router.get("/admin/exports/:type", async (req, res) => {
     }
 
     if (type === "audit") {
+      const {
+        entityType,
+        action,
+        actorId,
+        entityId,
+        startDate,
+        endDate,
+        search,
+      } = req.query;
+      const where: Prisma.AuditLogWhereInput = {
+        entityType: entityType && entityType !== "all" ? String(entityType) : undefined,
+        action: action && action !== "all" ? String(action) : undefined,
+        actorId:
+          actorId && actorId !== "all" && !Number.isNaN(Number(actorId))
+            ? Number(actorId)
+            : undefined,
+        entityId:
+          entityId && !Number.isNaN(Number(entityId))
+            ? Number(entityId)
+            : undefined,
+      };
+
+      if (startDate || endDate) {
+        where.createdAt = {
+          gte: startDate ? new Date(`${String(startDate)}T00:00:00`) : undefined,
+          lte: endDate ? new Date(`${String(endDate)}T23:59:59`) : undefined,
+        };
+      }
+
+      if (search) {
+        const term = String(search);
+        where.OR = [
+          { summary: { contains: term, mode: "insensitive" } },
+          { action: { contains: term, mode: "insensitive" } },
+          { entityType: { contains: term, mode: "insensitive" } },
+          { actorName: { contains: term, mode: "insensitive" } },
+        ];
+      }
+
       const logs = await prisma.auditLog.findMany({
+        where,
         orderBy: {
           createdAt: "desc",
         },
@@ -2558,6 +2857,137 @@ router.post("/reports/:id/images", async (req, res) => {
   });
 
   return res.status(201).json(report);
+});
+
+router.post("/admin/forgot-password", async (req, res) => {
+  try {
+    const email = String(req.body.email || "").trim().toLowerCase();
+
+    if (!email || !isValidEmail(email)) {
+      return res.status(400).json({
+        error: "Informe um e-mail válido.",
+      });
+    }
+
+    const genericResponse = {
+      message:
+        "Se o e-mail estiver cadastrado e validado, enviaremos um link para redefinir a senha.",
+    };
+
+    const user = await prisma.user.findFirst({
+      where: {
+        email,
+        deletedAt: null,
+        role: "ADMIN",
+      },
+      include: {
+        employee: true,
+      },
+    });
+
+    const employee =
+      user?.employee ||
+      (await prisma.employee.findFirst({
+        where: {
+          email,
+          deletedAt: null,
+        },
+      }));
+
+    if (
+      employee?.email &&
+      employee.emailVerifiedAt &&
+      isAdministrativeDepartmentName(employee.department)
+    ) {
+      const lastSent = user?.passwordResetSentAt;
+      const elapsed = lastSent
+        ? Math.floor((Date.now() - lastSent.getTime()) / 1000)
+        : ADMIN_RESET_COOLDOWN_SECONDS + 1;
+
+      if (elapsed > ADMIN_RESET_COOLDOWN_SECONDS) {
+        await createOrInviteAdminUserForEmployee(employee, "PASSWORD_RECOVERY");
+      }
+    }
+
+    return res.json(genericResponse);
+  } catch (error) {
+    console.error("Erro ao solicitar redefinição administrativa:", error);
+    return res.status(500).json({
+      error: "Erro ao solicitar redefinição de senha.",
+    });
+  }
+});
+
+router.post("/admin/reset-password", async (req, res) => {
+  try {
+    const token = String(req.body.token || "");
+    const password = String(req.body.password || "");
+
+    if (!token || password.length < 6) {
+      return res.status(400).json({
+        error: "Informe um link válido e uma senha com pelo menos 6 caracteres.",
+      });
+    }
+
+    const user = await prisma.user.findUnique({
+      where: {
+        passwordResetToken: token,
+      },
+      include: {
+        employee: true,
+      },
+    });
+
+    const sentAt = user?.passwordResetSentAt?.getTime() || 0;
+    const expired =
+      !sentAt ||
+      Date.now() - sentAt > ADMIN_PASSWORD_RESET_HOURS * 60 * 60 * 1000;
+
+    if (
+      !user ||
+      user.deletedAt ||
+      user.role !== "ADMIN" ||
+      expired ||
+      !isAdministrativeDepartmentName(user.employee?.department)
+    ) {
+      return res.status(400).json({
+        error: "Link inválido ou expirado.",
+      });
+    }
+
+    const passwordHash = await bcrypt.hash(password, 10);
+    const updatedUser = await prisma.user.update({
+      where: {
+        id: user.id,
+      },
+      data: {
+        passwordHash,
+        passwordResetToken: null,
+        passwordResetSentAt: null,
+      },
+      include: {
+        employee: true,
+      },
+    });
+
+    await createAuditLog({
+      actorId: updatedUser.employee?.id || null,
+      actorName: updatedUser.employee?.name || updatedUser.email,
+      action: "ADMIN_PASSWORD_RESET_COMPLETED",
+      entityType: "USER",
+      entityId: updatedUser.id,
+      summary: `Senha administrativa redefinida para ${updatedUser.email}.`,
+    });
+
+    return res.json({
+      message: "Senha redefinida com sucesso.",
+    });
+  } catch (error) {
+    console.error("Erro ao redefinir senha administrativa:", error);
+    return res.status(500).json({
+      error: "Erro ao redefinir senha.",
+    });
+  }
 });
 
 router.post("/admin-login", async (req, res) => {

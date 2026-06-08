@@ -11,6 +11,7 @@ import EmployeePanel from "./pages/EmployeePanel";
 import Dashboard from "./pages/Dashboard";
 import NotFound from "./pages/NotFound";
 import VerifyEmployeeEmail from "./pages/VerifyEmployeeEmail";
+import AdminResetPassword from "./pages/AdminResetPassword";
 
 const queryClient = new QueryClient();
 
@@ -48,6 +49,7 @@ const App = () => (
             <Routes>
               <Route path="/" element={<EmployeeLogin />} />
               <Route path="/admin/login" element={<AdminLogin />} />
+              <Route path="/admin/redefinir-senha/:token" element={<AdminResetPassword />} />
               <Route path="/validar-email/:token" element={<VerifyEmployeeEmail />} />
               <Route path="/funcionario" element={<ProtectedEmployee><EmployeePanel /></ProtectedEmployee>} />
               <Route path="/dashboard" element={<ProtectedAdmin><Dashboard /></ProtectedAdmin>} />

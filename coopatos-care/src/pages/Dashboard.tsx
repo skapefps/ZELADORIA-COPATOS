@@ -630,6 +630,12 @@ const Dashboard = () => {
   const [auditLogs, setAuditLogs] = useState<AuditLog[]>([]);
   const [showAuditModal, setShowAuditModal] = useState(false);
   const [loadingAuditLogs, setLoadingAuditLogs] = useState(false);
+  const [auditEntityFilter, setAuditEntityFilter] = useState("all");
+  const [auditActorFilter, setAuditActorFilter] = useState("all");
+  const [auditStartDate, setAuditStartDate] = useState("");
+  const [auditEndDate, setAuditEndDate] = useState("");
+  const [auditSearch, setAuditSearch] = useState("");
+  const [showAdminLogoutConfirm, setShowAdminLogoutConfirm] = useState(false);
   const [verificationNow, setVerificationNow] = useState(Date.now());
   const [editingEmployeeId, setEditingEmployeeId] = useState<number | null>(null);
   const [savingEmployee, setSavingEmployee] = useState(false);
@@ -1269,6 +1275,38 @@ const Dashboard = () => {
       return matchesStatus && matchesRole && matchesDepartment && matchesSearch;
     });
   }, [users, userSearch, userStatusFilter, userRoleFilter, userDepartmentFilter]);
+
+  const auditActorOptions = useMemo(() => {
+    const fromEmployees = employees.map((employee) => ({
+      id: employee.id,
+      name: employee.name,
+    }));
+    const fromUsers = users
+      .filter((user) => user.employee)
+      .map((user) => ({
+        id: user.employee!.id,
+        name: user.employee!.name,
+      }));
+
+    return Array.from(
+      new Map([...fromEmployees, ...fromUsers].map((item) => [item.id, item])).values()
+    ).sort((a, b) => a.name.localeCompare(b.name));
+  }, [employees, users]);
+
+  const auditEntityOptions = useMemo(
+    () =>
+      Array.from(
+        new Set([
+          "EMPLOYEE",
+          "USER",
+          "REPORT",
+          "DEPARTMENT",
+          "BRAND_SETTING",
+          ...auditLogs.map((log) => log.entityType),
+        ])
+      ).sort(),
+    [auditLogs]
+  );
 
   const departmentStats = useMemo(
     () => ({
@@ -2005,14 +2043,31 @@ const Dashboard = () => {
     }
   };
 
+  const buildAuditQuery = (limit = 200) => {
+    const params = new URLSearchParams({
+      limit: String(limit),
+    });
+
+    if (auditEntityFilter !== "all") params.set("entityType", auditEntityFilter);
+    if (auditActorFilter !== "all") params.set("actorId", auditActorFilter);
+    if (auditStartDate) params.set("startDate", auditStartDate);
+    if (auditEndDate) params.set("endDate", auditEndDate);
+    if (auditSearch.trim()) params.set("search", auditSearch.trim());
+
+    return params.toString();
+  };
+
   const openAuditLogs = async () => {
     setShowAuditModal(true);
     setLoadingAuditLogs(true);
 
     try {
-      const response = await fetch(`${API_URL}/admin/audit-logs?limit=200`, {
-        headers: adminHeaders(),
-      });
+      const response = await fetch(
+        `${API_URL}/admin/audit-logs?${buildAuditQuery(200)}`,
+        {
+          headers: adminHeaders(),
+        }
+      );
       const data = await response.json();
 
       if (!response.ok) {
@@ -2038,7 +2093,8 @@ const Dashboard = () => {
 
   const exportAdminCsv = async (type: "employees" | "reports" | "audit") => {
     try {
-      const response = await fetch(`${API_URL}/admin/exports/${type}`, {
+      const query = type === "audit" ? `?${buildAuditQuery(2000)}` : "";
+      const response = await fetch(`${API_URL}/admin/exports/${type}${query}`, {
         headers: adminHeaders(),
       });
 
@@ -2249,9 +2305,12 @@ const Dashboard = () => {
 
     if (logs.length === 0) {
       try {
-        const response = await fetch(`${API_URL}/admin/audit-logs?limit=500`, {
-          headers: adminHeaders(),
-        });
+        const response = await fetch(
+          `${API_URL}/admin/audit-logs?${buildAuditQuery(500)}`,
+          {
+            headers: adminHeaders(),
+          }
+        );
         const data = await response.json();
 
         if (response.ok) {
@@ -3151,7 +3210,20 @@ const Dashboard = () => {
 
         <div className="flex min-w-0 shrink-0 items-center gap-2 sm:gap-3">
           <div className="hidden min-w-0 items-center gap-2 rounded-2xl bg-white/10 px-3 py-2 text-primary-foreground ring-1 ring-white/10 sm:flex">
-            <UserCircle className="h-5 w-5 shrink-0" />
+            <div className="flex h-8 w-8 shrink-0 items-center justify-center overflow-hidden rounded-full bg-white/10">
+              {admin.employee?.avatarUrl ? (
+                <img
+                  src={admin.employee.avatarUrl.replace(
+                    "/upload/",
+                    "/upload/w_96,h_96,c_fill,q_auto,f_auto/"
+                  )}
+                  alt={admin.employee?.name || "Administrador"}
+                  className="h-full w-full object-cover"
+                />
+              ) : (
+                <UserCircle className="h-5 w-5" />
+              )}
+            </div>
             <div className="min-w-0 text-right">
               <p className="max-w-[180px] truncate text-sm font-semibold">
                 {admin.employee?.name || admin.email || "Administrador"}
@@ -3163,18 +3235,26 @@ const Dashboard = () => {
           </div>
 
           <div className="flex min-w-0 items-center gap-1 rounded-xl bg-white/10 px-2 py-1.5 text-primary-foreground ring-1 ring-white/10 sm:hidden">
-            <UserCircle className="h-4 w-4 shrink-0" />
+            {admin.employee?.avatarUrl ? (
+              <img
+                src={admin.employee.avatarUrl.replace(
+                  "/upload/",
+                  "/upload/w_64,h_64,c_fill,q_auto,f_auto/"
+                )}
+                alt=""
+                className="h-5 w-5 shrink-0 rounded-full object-cover"
+              />
+            ) : (
+              <UserCircle className="h-4 w-4 shrink-0" />
+            )}
             <span className="max-w-[96px] truncate text-xs font-semibold">
               {admin.employee?.name?.split(" ")[0] || "Admin"}
             </span>
           </div>
 
           <button
-            onClick={() => {
-              logout();
-              navigate("/admin/login", { replace: true });
-            }}
-            className="flex shrink-0 items-center gap-1 text-sm text-primary-foreground/70 transition hover:text-primary-foreground"
+            onClick={() => setShowAdminLogoutConfirm(true)}
+            className="flex shrink-0 items-center gap-1 text-sm text-red-400 transition hover:text-red-500"
           >
             <LogOut className="h-4 w-4" />
             Sair
@@ -5093,6 +5173,57 @@ const Dashboard = () => {
       </main>
 
       <AnimatePresence>
+        {showAdminLogoutConfirm && (
+          <motion.div
+            className="fixed inset-0 z-[10000] flex items-center justify-center bg-black/50 p-4"
+            initial={{ opacity: 0 }}
+            animate={{ opacity: 1 }}
+            exit={{ opacity: 0 }}
+            onClick={() => setShowAdminLogoutConfirm(false)}
+          >
+            <motion.div
+              initial={{ opacity: 0, y: 18, scale: 0.98 }}
+              animate={{ opacity: 1, y: 0, scale: 1 }}
+              exit={{ opacity: 0, y: 18, scale: 0.98 }}
+              onClick={(event) => event.stopPropagation()}
+              className="w-full max-w-sm rounded-2xl border border-border bg-card p-6 shadow-2xl"
+            >
+              <div className="text-center">
+                <div className="mx-auto mb-4 flex h-12 w-12 items-center justify-center rounded-full bg-red-100">
+                  <LogOut className="h-6 w-6 text-red-600" />
+                </div>
+
+                <h3 className="mb-2 text-lg font-semibold">Confirmar saída</h3>
+
+                <p className="mb-6 text-sm text-muted-foreground">
+                  Tem certeza que deseja sair do sistema administrativo?
+                </p>
+              </div>
+
+              <div className="flex gap-2">
+                <Button
+                  variant="outline"
+                  className="flex-1"
+                  onClick={() => setShowAdminLogoutConfirm(false)}
+                >
+                  Cancelar
+                </Button>
+
+                <Button
+                  className="flex-1 bg-red-600 text-white hover:bg-red-700"
+                  onClick={() => {
+                    setShowAdminLogoutConfirm(false);
+                    logout();
+                    navigate("/admin/login", { replace: true });
+                  }}
+                >
+                  Sair
+                </Button>
+              </div>
+            </motion.div>
+          </motion.div>
+        )}
+
         {showAuditModal && (
           <motion.div
             className="fixed inset-0 z-[10000] flex items-end justify-center bg-black/60 p-0 sm:items-center sm:p-4"
@@ -5152,6 +5283,78 @@ const Dashboard = () => {
               </div>
 
               <div className="modal-max-h-72 overflow-y-auto p-4">
+                <div className="mb-4 rounded-2xl border border-border bg-background p-3">
+                  <div className="grid gap-2 md:grid-cols-3">
+                    <Input
+                      value={auditSearch}
+                      onChange={(event) => setAuditSearch(event.target.value)}
+                      placeholder="Buscar ação, resumo ou ator..."
+                    />
+                    <Select
+                      value={auditEntityFilter}
+                      onValueChange={setAuditEntityFilter}
+                    >
+                      <SelectTrigger>
+                        <SelectValue placeholder="Entidade" />
+                      </SelectTrigger>
+                      <SelectContent>
+                        <SelectItem value="all">Todas entidades</SelectItem>
+                        {auditEntityOptions.map((entity) => (
+                          <SelectItem key={entity} value={entity}>
+                            {entity}
+                          </SelectItem>
+                        ))}
+                      </SelectContent>
+                    </Select>
+                    <Select value={auditActorFilter} onValueChange={setAuditActorFilter}>
+                      <SelectTrigger>
+                        <SelectValue placeholder="Responsável" />
+                      </SelectTrigger>
+                      <SelectContent>
+                        <SelectItem value="all">Todos responsáveis</SelectItem>
+                        {auditActorOptions.map((actor) => (
+                          <SelectItem key={actor.id} value={String(actor.id)}>
+                            {actor.name}
+                          </SelectItem>
+                        ))}
+                      </SelectContent>
+                    </Select>
+                    <Input
+                      type="date"
+                      value={auditStartDate}
+                      onChange={(event) => setAuditStartDate(event.target.value)}
+                    />
+                    <Input
+                      type="date"
+                      value={auditEndDate}
+                      onChange={(event) => setAuditEndDate(event.target.value)}
+                    />
+                    <div className="flex gap-2">
+                      <Button
+                        type="button"
+                        className="flex-1"
+                        onClick={openAuditLogs}
+                        disabled={loadingAuditLogs}
+                      >
+                        Aplicar
+                      </Button>
+                      <Button
+                        type="button"
+                        variant="outline"
+                        onClick={() => {
+                          setAuditSearch("");
+                          setAuditEntityFilter("all");
+                          setAuditActorFilter("all");
+                          setAuditStartDate("");
+                          setAuditEndDate("");
+                        }}
+                      >
+                        Limpar
+                      </Button>
+                    </div>
+                  </div>
+                </div>
+
                 {loadingAuditLogs ? (
                   <div className="flex items-center gap-2 text-sm text-muted-foreground">
                     <Loader2 className="h-4 w-4 animate-spin" />
