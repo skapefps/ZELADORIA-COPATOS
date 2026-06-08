@@ -39,7 +39,9 @@ import {
   Search,
   Trash2,
   UserCheck,
+  UserCircle,
   UserPlus,
+  SlidersHorizontal,
 } from "lucide-react";
 import {
   Bar,
@@ -66,6 +68,7 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import { Input } from "@/components/ui/input";
+import { Checkbox } from "@/components/ui/checkbox";
 import { BrandLogo } from "@/components/BrandLogo";
 import {
   defaultBrandPreset,
@@ -74,6 +77,12 @@ import {
   mergeBrandPreset,
   useBranding,
 } from "@/config/brand";
+import {
+  AnalyticsViewSection,
+  analyticsViewOptions,
+  getDefaultAnalyticsView,
+  normalizeAnalyticsView,
+} from "@/config/analyticsView";
 import DashboardMaps from "@/components/DashboardMaps";
 
 type AdminSection =
@@ -242,8 +251,15 @@ type BrandForm = {
   tagline: string;
   logoSrc: string;
   primary: string;
+  primaryForeground: string;
   secondary: string;
+  secondaryForeground: string;
   background: string;
+  foreground: string;
+  card: string;
+  muted: string;
+  border: string;
+  hover: string;
 };
 
 type ReportExportColumn =
@@ -310,8 +326,15 @@ const createBrandForm = (preset = defaultBrandPreset): BrandForm => ({
   tagline: preset.tagline,
   logoSrc: preset.logoSrc,
   primary: hslStringToHex(preset.colors.primary),
+  primaryForeground: hslStringToHex(preset.colors.primaryForeground),
   secondary: hslStringToHex(preset.colors.secondary),
+  secondaryForeground: hslStringToHex(preset.colors.secondaryForeground),
   background: hslStringToHex(preset.colors.background),
+  foreground: hslStringToHex(preset.colors.foreground),
+  card: hslStringToHex(preset.colors.card),
+  muted: hslStringToHex(preset.colors.muted),
+  border: hslStringToHex(preset.colors.border),
+  hover: hslStringToHex(preset.colors.sidebarAccent),
 });
 
 const MAX_FILE_SIZE = 100 * 1024 * 1024;
@@ -374,6 +397,7 @@ const API_URL =
     ? "http://localhost:3333"
     : import.meta.env.VITE_API_URL ||
     "https://zeladoria-coopatos-api.onrender.com";
+const ANALYTICS_VIEW_STORAGE_KEY = "coopatos-admin-analytics-view";
 
 const categoryIcons: Record<string, React.ReactNode> = {
   Hídrico: <Droplets className="w-4 h-4" />,
@@ -635,6 +659,18 @@ const Dashboard = () => {
   const [analyticsStartDate, setAnalyticsStartDate] = useState("");
   const [analyticsEndDate, setAnalyticsEndDate] = useState("");
   const [analyticsLocation, setAnalyticsLocation] = useState("");
+  const [visibleAnalyticsSections, setVisibleAnalyticsSections] = useState<
+    AnalyticsViewSection[]
+  >(() => {
+    try {
+      const stored = localStorage.getItem(ANALYTICS_VIEW_STORAGE_KEY);
+      return stored
+        ? normalizeAnalyticsView(JSON.parse(stored))
+        : getDefaultAnalyticsView();
+    } catch {
+      return getDefaultAnalyticsView();
+    }
+  });
   const [selectedReport, setSelectedReport] = useState<AdminReport | null>(null);
   const [showReportModal, setShowReportModal] = useState(false);
   const [reportForm, setReportForm] = useState<ReportForm>(emptyReportForm);
@@ -907,6 +943,26 @@ const Dashboard = () => {
     setBrandForm(createBrandForm(brandPreset));
   }, [brandPreset]);
 
+  useEffect(() => {
+    localStorage.setItem(
+      ANALYTICS_VIEW_STORAGE_KEY,
+      JSON.stringify(visibleAnalyticsSections)
+    );
+  }, [visibleAnalyticsSections]);
+
+  const showAnalyticsSection = (section: AnalyticsViewSection) =>
+    visibleAnalyticsSections.includes(section);
+
+  const toggleAnalyticsSection = (section: AnalyticsViewSection) => {
+    setVisibleAnalyticsSections((prev) =>
+      normalizeAnalyticsView(
+        prev.includes(section)
+          ? prev.filter((item) => item !== section)
+          : [...prev, section]
+      )
+    );
+  };
+
   const saveBrandCustomization = async () => {
     const nextPreset = {
       ...brandPreset,
@@ -921,14 +977,26 @@ const Dashboard = () => {
       colors: {
         ...brandPreset.colors,
         background: hexToHslString(brandForm.background),
-        card: hexToHslString("#ffffff"),
+        foreground: hexToHslString(brandForm.foreground),
+        card: hexToHslString(brandForm.card),
+        cardForeground: hexToHslString(brandForm.foreground),
         primary: hexToHslString(brandForm.primary),
+        primaryForeground: hexToHslString(brandForm.primaryForeground),
         ring: hexToHslString(brandForm.primary),
         sidebarBackground: hexToHslString(brandForm.primary),
         sidebarBorder: hexToHslString(brandForm.primary),
         secondary: hexToHslString(brandForm.secondary),
+        secondaryForeground: hexToHslString(brandForm.secondaryForeground),
         sidebarPrimary: hexToHslString(brandForm.secondary),
+        sidebarPrimaryForeground: hexToHslString(brandForm.secondaryForeground),
         accent: hexToHslString(brandForm.secondary),
+        accentForeground: hexToHslString(brandForm.foreground),
+        muted: hexToHslString(brandForm.muted),
+        border: hexToHslString(brandForm.border),
+        input: hexToHslString(brandForm.border),
+        sidebarForeground: hexToHslString(brandForm.primaryForeground),
+        sidebarAccent: hexToHslString(brandForm.hover),
+        sidebarAccentForeground: hexToHslString(brandForm.primaryForeground),
       },
     };
 
@@ -3081,16 +3149,37 @@ const Dashboard = () => {
           </div>
         </div>
 
-        <button
-          onClick={() => {
-            logout();
-            navigate("/admin/login", { replace: true });
-          }}
-          className="flex shrink-0 items-center gap-1 text-sm text-primary-foreground/70 hover:text-primary-foreground"
-        >
-          <LogOut className="h-4 w-4" />
-          Sair
-        </button>
+        <div className="flex min-w-0 shrink-0 items-center gap-2 sm:gap-3">
+          <div className="hidden min-w-0 items-center gap-2 rounded-2xl bg-white/10 px-3 py-2 text-primary-foreground ring-1 ring-white/10 sm:flex">
+            <UserCircle className="h-5 w-5 shrink-0" />
+            <div className="min-w-0 text-right">
+              <p className="max-w-[180px] truncate text-sm font-semibold">
+                {admin.employee?.name || admin.email || "Administrador"}
+              </p>
+              <p className="max-w-[180px] truncate text-[11px] text-primary-foreground/65">
+                {admin.employee?.department || admin.email || "Acesso administrativo"}
+              </p>
+            </div>
+          </div>
+
+          <div className="flex min-w-0 items-center gap-1 rounded-xl bg-white/10 px-2 py-1.5 text-primary-foreground ring-1 ring-white/10 sm:hidden">
+            <UserCircle className="h-4 w-4 shrink-0" />
+            <span className="max-w-[96px] truncate text-xs font-semibold">
+              {admin.employee?.name?.split(" ")[0] || "Admin"}
+            </span>
+          </div>
+
+          <button
+            onClick={() => {
+              logout();
+              navigate("/admin/login", { replace: true });
+            }}
+            className="flex shrink-0 items-center gap-1 text-sm text-primary-foreground/70 transition hover:text-primary-foreground"
+          >
+            <LogOut className="h-4 w-4" />
+            Sair
+          </button>
+        </div>
       </header>
 
       <div className="sticky top-[80px] z-10 border-b border-border/60 bg-background/80 backdrop-blur-xl sm:top-[112px]">
@@ -3275,7 +3364,80 @@ const Dashboard = () => {
               </Button>
             </div>
 
-            <div className="grid gap-3 md:grid-cols-2 xl:grid-cols-4">
+            <div className="rounded-2xl border border-border bg-card p-4 shadow-sm">
+              <div className="mb-4 flex flex-col gap-3 lg:flex-row lg:items-center lg:justify-between">
+                <div className="flex items-center gap-2">
+                  <span className="rounded-xl bg-primary/10 p-2 text-primary">
+                    <SlidersHorizontal className="h-4 w-4" />
+                  </span>
+                  <div>
+                    <p className="text-sm font-semibold">Indicadores visíveis</p>
+                    <p className="text-xs text-muted-foreground">
+                      Escolha quais cards e gráficos aparecem nesta tela.
+                    </p>
+                  </div>
+                </div>
+
+                <div className="flex flex-wrap gap-2">
+                  <Button
+                    type="button"
+                    variant="outline"
+                    size="sm"
+                    onClick={() => setVisibleAnalyticsSections(getDefaultAnalyticsView())}
+                  >
+                    Marcar todos
+                  </Button>
+                  <Button
+                    type="button"
+                    variant="ghost"
+                    size="sm"
+                    onClick={() => setVisibleAnalyticsSections(getDefaultAnalyticsView())}
+                  >
+                    Restaurar padrão
+                  </Button>
+                </div>
+              </div>
+
+              <div className="grid gap-3 lg:grid-cols-3">
+                {(["Cards", "Graficos", "Listas"] as const).map((group) => (
+                  <div
+                    key={group}
+                    className="rounded-2xl border border-border bg-background p-3"
+                  >
+                    <p className="mb-3 text-xs font-semibold uppercase tracking-wide text-muted-foreground">
+                      {group === "Graficos" ? "Gráficos" : group}
+                    </p>
+                    <div className="space-y-2">
+                      {analyticsViewOptions
+                        .filter((option) => option.group === group)
+                        .map((option) => (
+                          <label
+                            key={option.id}
+                            className="flex cursor-pointer items-start gap-3 rounded-xl p-2 transition hover:bg-muted/60"
+                          >
+                            <Checkbox
+                              checked={visibleAnalyticsSections.includes(option.id)}
+                              onCheckedChange={() => toggleAnalyticsSection(option.id)}
+                              className="mt-0.5"
+                            />
+                            <span className="min-w-0">
+                              <span className="block text-sm font-medium">
+                                {option.label}
+                              </span>
+                              <span className="block text-xs text-muted-foreground">
+                                {option.description}
+                              </span>
+                            </span>
+                          </label>
+                        ))}
+                    </div>
+                  </div>
+                ))}
+              </div>
+            </div>
+
+            {showAnalyticsSection("summary") && (
+              <div className="grid gap-3 md:grid-cols-2 xl:grid-cols-4">
               {[
                 {
                   label: "Chamados totais",
@@ -3318,13 +3480,15 @@ const Dashboard = () => {
                     {item.value}
                   </p>
                   <p className="mt-1 text-xs text-muted-foreground">
-                    {item.detail}
-                  </p>
-                </button>
+                  {item.detail}
+                </p>
+              </button>
               ))}
-            </div>
+              </div>
+            )}
 
-            <div className="grid gap-3 md:grid-cols-3">
+            {showAnalyticsSection("secondary") && (
+              <div className="grid gap-3 md:grid-cols-3">
               {[
                 {
                   label: "Risco alto aberto",
@@ -3357,9 +3521,12 @@ const Dashboard = () => {
                   </p>
                 </div>
               ))}
-            </div>
+              </div>
+            )}
 
-            <div className="grid gap-4 xl:grid-cols-[1.25fr_0.75fr]">
+            {(showAnalyticsSection("monthly") || showAnalyticsSection("status")) && (
+              <div className="grid gap-4 xl:grid-cols-[1.25fr_0.75fr]">
+              {showAnalyticsSection("monthly") && (
               <div className="rounded-2xl border border-border bg-card p-4 shadow-sm">
                 <div className="mb-4 flex items-center justify-between gap-3">
                   <div>
@@ -3395,7 +3562,9 @@ const Dashboard = () => {
                   </ResponsiveContainer>
                 </div>
               </div>
+              )}
 
+              {showAnalyticsSection("status") && (
               <div className="rounded-2xl border border-border bg-card p-4 shadow-sm">
                 <div className="mb-4 flex items-center justify-between gap-3">
                   <div>
@@ -3429,9 +3598,13 @@ const Dashboard = () => {
                   </ResponsiveContainer>
                 </div>
               </div>
-            </div>
+              )}
+              </div>
+            )}
 
-            <div className="grid gap-4 xl:grid-cols-2">
+            {(showAnalyticsSection("backlog") || showAnalyticsSection("efficiency")) && (
+              <div className="grid gap-4 xl:grid-cols-2">
+              {showAnalyticsSection("backlog") && (
               <div className="rounded-2xl border border-border bg-card p-4 shadow-sm">
                 <p className="text-sm font-semibold">Backlog por status</p>
                 <p className="mb-4 text-xs text-muted-foreground">
@@ -3449,7 +3622,9 @@ const Dashboard = () => {
                   </ResponsiveContainer>
                 </div>
               </div>
+              )}
 
+              {showAnalyticsSection("efficiency") && (
               <div className="rounded-2xl border border-border bg-card p-4 shadow-sm">
                 <p className="text-sm font-semibold">Eficiência por pessoa</p>
                 <p className="mb-4 text-xs text-muted-foreground">
@@ -3467,9 +3642,13 @@ const Dashboard = () => {
                   </ResponsiveContainer>
                 </div>
               </div>
-            </div>
+              )}
+              </div>
+            )}
 
-            <div className="grid gap-4 xl:grid-cols-2">
+            {(showAnalyticsSection("employees") || showAnalyticsSection("departments")) && (
+              <div className="grid gap-4 xl:grid-cols-2">
+              {showAnalyticsSection("employees") && (
               <div className="rounded-2xl border border-border bg-card p-4 shadow-sm">
                 <p className="text-sm font-semibold">Produção individual</p>
                 <p className="mb-4 text-xs text-muted-foreground">
@@ -3488,7 +3667,9 @@ const Dashboard = () => {
                   </ResponsiveContainer>
                 </div>
               </div>
+              )}
 
+              {showAnalyticsSection("departments") && (
               <div className="rounded-2xl border border-border bg-card p-4 shadow-sm">
                 <p className="text-sm font-semibold">Produção por departamento</p>
                 <p className="mb-4 text-xs text-muted-foreground">
@@ -3507,9 +3688,13 @@ const Dashboard = () => {
                   </ResponsiveContainer>
                 </div>
               </div>
-            </div>
+              )}
+              </div>
+            )}
 
-            <div className="grid gap-4 xl:grid-cols-2">
+            {(showAnalyticsSection("categories") || showAnalyticsSection("priority")) && (
+              <div className="grid gap-4 xl:grid-cols-2">
+              {showAnalyticsSection("categories") && (
               <div className="rounded-2xl border border-border bg-card p-4 shadow-sm">
                 <p className="text-sm font-semibold">Categorias com mais demanda</p>
                 <div className="mt-4 space-y-3">
@@ -3535,7 +3720,9 @@ const Dashboard = () => {
                   ))}
                 </div>
               </div>
+              )}
 
+              {showAnalyticsSection("priority") && (
               <div className="rounded-2xl border border-border bg-card p-4 shadow-sm">
                 <p className="text-sm font-semibold">Prioridade dos chamados</p>
                 <div className="mt-4 grid grid-cols-2 gap-3">
@@ -3554,9 +3741,12 @@ const Dashboard = () => {
                   ))}
                 </div>
               </div>
-            </div>
+              )}
+              </div>
+            )}
 
-            <div className="rounded-2xl border border-border bg-card p-4 shadow-sm">
+            {showAnalyticsSection("locations") && (
+              <div className="rounded-2xl border border-border bg-card p-4 shadow-sm">
               <p className="text-sm font-semibold">Locais com recorrência</p>
               <div className="mt-4 grid gap-3 md:grid-cols-2">
                 {analytics.locationData.length === 0 ? (
@@ -3585,7 +3775,8 @@ const Dashboard = () => {
                   ))
                 )}
               </div>
-            </div>
+              </div>
+            )}
           </div>
         ) : adminSection === "reports" ? (
           <>
@@ -4634,41 +4825,79 @@ const Dashboard = () => {
                 </div>
               </div>
 
-              <div className="mt-5 grid gap-3 sm:grid-cols-3">
+              <div className="mt-5 space-y-4">
                 {[
-                  ["primary", "Cor principal"],
-                  ["secondary", "Cor de destaque"],
-                  ["background", "Fundo"],
-                ].map(([key, label]) => (
-                  <label
-                    key={key}
-                    className="rounded-2xl border border-border bg-background p-3 text-sm font-medium"
+                  {
+                    title: "Identidade",
+                    description: "Cores que dão personalidade à marca.",
+                    colors: [
+                      ["primary", "Cor principal"],
+                      ["primaryForeground", "Texto sobre principal"],
+                      ["secondary", "Cor de ação/destaque"],
+                      ["secondaryForeground", "Texto sobre destaque"],
+                    ],
+                  },
+                  {
+                    title: "Interface",
+                    description: "Base visual de telas, cards, textos e campos.",
+                    colors: [
+                      ["background", "Fundo do sistema"],
+                      ["foreground", "Texto principal"],
+                      ["card", "Fundo dos cards"],
+                      ["muted", "Fundo suave/campos"],
+                      ["border", "Bordas e inputs"],
+                    ],
+                  },
+                  {
+                    title: "Interações",
+                    description: "Cor usada em hover, menu lateral e realces.",
+                    colors: [["hover", "Hover/menu ativo"]],
+                  },
+                ].map((group) => (
+                  <div
+                    key={group.title}
+                    className="rounded-2xl border border-border bg-background p-4"
                   >
-                    {label}
-                    <div className="mt-3 flex items-center gap-3">
-                      <input
-                        type="color"
-                        value={brandForm[key as keyof BrandForm]}
-                        onChange={(event) =>
-                          setBrandForm((prev) => ({
-                            ...prev,
-                            [key]: event.target.value,
-                          }))
-                        }
-                        className="h-10 w-12 rounded-lg border border-border bg-transparent"
-                      />
-                      <Input
-                        value={brandForm[key as keyof BrandForm]}
-                        onChange={(event) =>
-                          setBrandForm((prev) => ({
-                            ...prev,
-                            [key]: event.target.value,
-                          }))
-                        }
-                        className="h-10"
-                      />
+                    <div className="mb-3">
+                      <p className="text-sm font-semibold">{group.title}</p>
+                      <p className="text-xs text-muted-foreground">
+                        {group.description}
+                      </p>
                     </div>
-                  </label>
+                    <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-3">
+                      {group.colors.map(([key, label]) => (
+                        <label
+                          key={key}
+                          className="rounded-xl border border-border bg-card p-3 text-sm font-medium"
+                        >
+                          {label}
+                          <div className="mt-3 flex items-center gap-3">
+                            <input
+                              type="color"
+                              value={brandForm[key as keyof BrandForm]}
+                              onChange={(event) =>
+                                setBrandForm((prev) => ({
+                                  ...prev,
+                                  [key]: event.target.value,
+                                }))
+                              }
+                              className="h-10 w-12 rounded-lg border border-border bg-transparent"
+                            />
+                            <Input
+                              value={brandForm[key as keyof BrandForm]}
+                              onChange={(event) =>
+                                setBrandForm((prev) => ({
+                                  ...prev,
+                                  [key]: event.target.value,
+                                }))
+                              }
+                              className="h-10"
+                            />
+                          </div>
+                        </label>
+                      ))}
+                    </div>
+                  </div>
                 ))}
               </div>
 
@@ -4701,8 +4930,11 @@ const Dashboard = () => {
             <div className="rounded-2xl border border-border bg-card p-5 shadow-sm">
               <p className="text-sm font-semibold">Prévia rápida</p>
               <div
-                className="mt-4 rounded-3xl p-5 text-white shadow-lg"
-                style={{ backgroundColor: brandForm.primary }}
+                className="mt-4 rounded-3xl p-5 shadow-lg"
+                style={{
+                  backgroundColor: brandForm.primary,
+                  color: brandForm.primaryForeground,
+                }}
               >
                 <div className="flex items-center gap-3">
                   <img
@@ -4712,16 +4944,42 @@ const Dashboard = () => {
                   />
                   <div>
                     <p className="text-xl font-bold">{brandForm.shortName}</p>
-                    <p className="text-sm text-white/75">
+                    <p className="text-sm opacity-75">
                       {brandForm.adminTitle} • {brandForm.organizationName}
                     </p>
                   </div>
                 </div>
                 <div
                   className="mt-5 inline-flex rounded-full px-4 py-2 text-sm font-semibold"
-                  style={{ backgroundColor: brandForm.secondary }}
+                  style={{
+                    backgroundColor: brandForm.secondary,
+                    color: brandForm.secondaryForeground,
+                  }}
                 >
                   {brandForm.tagline || "Sempre presente!"}
+                </div>
+                <div
+                  className="mt-5 rounded-2xl border p-4"
+                  style={{
+                    backgroundColor: brandForm.card,
+                    borderColor: brandForm.border,
+                    color: brandForm.foreground,
+                  }}
+                >
+                  <p className="text-sm font-semibold">Exemplo de card</p>
+                  <p className="mt-1 text-xs opacity-70">
+                    Fundo, texto, borda e hover seguem as escolhas acima.
+                  </p>
+                  <button
+                    type="button"
+                    className="mt-3 rounded-xl px-3 py-2 text-xs font-semibold"
+                    style={{
+                      backgroundColor: brandForm.hover,
+                      color: brandForm.primaryForeground,
+                    }}
+                  >
+                    Ação em hover/menu
+                  </button>
                 </div>
               </div>
               <p className="mt-4 text-xs text-muted-foreground">
