@@ -77,6 +77,7 @@ Também é possível criar um usuário manualmente em `Configurações > Usuári
 - Busca/filtros em telas do funcionário.
 - Recuperação de matrícula por e-mail e CPF.
 - Preset whitelabel para trocar nome, logo, favicon e cores principais.
+- E-mails transacionais padronizados com logo, cores e textos do whitelabel ativo.
 - Admin: CRUD de funcionários iniciado com listagem, busca, criação/edição em modal, foto de perfil, data de nascimento, departamento por preset, desativação/restauração e validação de e-mail.
 - Admin: registro visual de quando o e-mail de validação foi enviado, cooldown de reenvio e validação por rota do frontend (`/validar-email/:token`) chamando a API.
 - Admin: criação, edição, exclusão e atribuição múltipla de funcionários em chamados pelo modal administrativo.

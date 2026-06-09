@@ -2,7 +2,7 @@ import React, { useEffect, useState } from "react";
 import { useAuth } from "@/contexts/AuthContext";
 import { useNavigate } from "react-router-dom";
 import { motion } from "framer-motion";
-import { Loader2, Mail, Shield, X } from "lucide-react";
+import { KeyRound, Loader2, Mail, UserRound, X } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { BrandLogo } from "@/components/BrandLogo";
@@ -182,21 +182,20 @@ const AdminLogin = () => {
                 : "Entrar"}
             </Button>
           </form>
-          <p className="text-xs text-muted-foreground text-center mt-4">
-
-          </p>
           <button
             type="button"
             onClick={() => setShowForgotPassword(true)}
-            className="mt-3 w-full rounded-xl border border-border bg-white px-3 py-2 text-xs font-medium text-primary shadow-sm transition-colors hover:bg-muted"
+            className="mx-auto mt-4 block text-xs font-medium text-muted-foreground underline underline-offset-4 transition-colors hover:text-primary focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2"
           >
-            Esqueci minha senha administrativa
+            Esqueci minha senha
           </button>
           <button
+            type="button"
             onClick={() => navigate("/")}
-            className="w-full mt-3 text-xs text-muted-foreground hover:text-foreground transition-colors"
+            className="mx-auto mt-4 flex items-center justify-center gap-1.5 text-xs font-medium text-muted-foreground transition-colors hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2"
           >
-            ← Voltar ao acesso do funcionário
+            <UserRound className="h-3.5 w-3.5" />
+            Acesso funcionário
           </button>
         </div>
       </motion.div>
@@ -206,50 +205,83 @@ const AdminLogin = () => {
           className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4"
           onClick={() => setShowForgotPassword(false)}
         >
-          <div
-            className="w-full max-w-md rounded-2xl border border-border bg-card p-6 shadow-2xl"
+          <motion.div
+            initial={{ opacity: 0, y: 18, scale: 0.98 }}
+            animate={{ opacity: 1, y: 0, scale: 1 }}
+            transition={{ duration: 0.2, ease: "easeOut" }}
+            className="w-full max-w-md overflow-hidden rounded-3xl border border-border bg-card shadow-2xl"
             onClick={(event) => event.stopPropagation()}
           >
-            <div className="mb-5 flex items-start justify-between gap-3">
-              <div className="flex items-center gap-3">
-                <div className="flex h-11 w-11 items-center justify-center rounded-2xl bg-secondary/10 text-secondary">
-                  <Mail className="h-5 w-5" />
+            <div className="border-b border-border bg-muted/40 px-6 py-5">
+              <div className="flex items-start justify-between gap-4">
+                <div className="flex items-center gap-3">
+                  <div className="flex h-12 w-12 items-center justify-center rounded-2xl bg-secondary/15 text-secondary shadow-sm">
+                    <KeyRound className="h-5 w-5" />
+                  </div>
+                  <div>
+                    <h2 className="text-lg font-bold text-foreground">
+                      Recuperar senha
+                    </h2>
+                    <p className="text-sm text-muted-foreground">
+                      Enviaremos um link seguro para o e-mail administrativo.
+                    </p>
+                  </div>
                 </div>
-                <div>
-                  <h2 className="text-lg font-bold">Redefinir senha</h2>
-                  <p className="text-sm text-muted-foreground">
-                    Informe seu e-mail administrativo.
-                  </p>
-                </div>
+                <button
+                  type="button"
+                  onClick={() => setShowForgotPassword(false)}
+                  className="rounded-full bg-background p-2 text-muted-foreground shadow-sm transition-colors hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+                  aria-label="Fechar recuperação de senha"
+                >
+                  <X className="h-4 w-4" />
+                </button>
               </div>
-              <button
-                type="button"
-                onClick={() => setShowForgotPassword(false)}
-                className="rounded-full bg-muted p-2 text-muted-foreground hover:text-foreground"
-              >
-                <X className="h-4 w-4" />
-              </button>
             </div>
 
-            <Input
-              type="email"
-              value={recoveryEmail}
-              onChange={(event) => setRecoveryEmail(event.target.value)}
-              placeholder="email@empresa.com"
-            />
+            <div className="space-y-5 px-6 py-6">
+              <div className="rounded-2xl border border-border bg-background/70 p-4">
+                <div className="mb-2 flex items-center gap-2 text-sm font-semibold text-foreground">
+                  <Mail className="h-4 w-4 text-secondary" />
+                  E-mail do administrador
+                </div>
+                <Input
+                  type="email"
+                  value={recoveryEmail}
+                  onChange={(event) => setRecoveryEmail(event.target.value)}
+                  placeholder="nome@empresa.com"
+                  className="bg-card"
+                  autoFocus
+                />
+                <p className="mt-2 text-xs leading-relaxed text-muted-foreground">
+                  Se o e-mail estiver cadastrado e validado, você receberá as instruções para redefinir a senha.
+                </p>
+              </div>
 
-            <Button
-              type="button"
-              disabled={sendingRecovery}
-              onClick={requestPasswordReset}
-              className="mt-4 w-full bg-secondary text-secondary-foreground hover:bg-secondary/90"
-            >
-              {sendingRecovery ? (
-                <Loader2 className="mr-2 h-4 w-4 animate-spin" />
-              ) : null}
-              Enviar link de redefinição
-            </Button>
-          </div>
+              <div className="flex flex-col-reverse gap-3 sm:flex-row sm:justify-end">
+                <Button
+                  type="button"
+                  variant="outline"
+                  onClick={() => setShowForgotPassword(false)}
+                  className="sm:w-auto"
+                >
+                  Cancelar
+                </Button>
+                <Button
+                  type="button"
+                  disabled={sendingRecovery}
+                  onClick={requestPasswordReset}
+                  className="bg-secondary text-secondary-foreground hover:bg-secondary/90 sm:w-auto"
+                >
+                  {sendingRecovery ? (
+                    <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                  ) : (
+                    <Mail className="mr-2 h-4 w-4" />
+                  )}
+                  Enviar link
+                </Button>
+              </div>
+            </div>
+          </motion.div>
         </div>
       )}
     </div>

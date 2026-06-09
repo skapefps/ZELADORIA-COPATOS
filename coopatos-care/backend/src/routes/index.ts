@@ -211,6 +211,188 @@ const toCssColor = (value: string, fallback: string) => {
   return `hsl(${value})`;
 };
 
+const hslToHex = (h: number, s: number, l: number) => {
+  const saturation = s / 100;
+  const lightness = l / 100;
+  const chroma = (1 - Math.abs(2 * lightness - 1)) * saturation;
+  const huePrime = h / 60;
+  const x = chroma * (1 - Math.abs((huePrime % 2) - 1));
+  let red = 0;
+  let green = 0;
+  let blue = 0;
+
+  if (huePrime >= 0 && huePrime < 1) {
+    red = chroma;
+    green = x;
+  } else if (huePrime >= 1 && huePrime < 2) {
+    red = x;
+    green = chroma;
+  } else if (huePrime >= 2 && huePrime < 3) {
+    green = chroma;
+    blue = x;
+  } else if (huePrime >= 3 && huePrime < 4) {
+    green = x;
+    blue = chroma;
+  } else if (huePrime >= 4 && huePrime < 5) {
+    red = x;
+    blue = chroma;
+  } else if (huePrime >= 5 && huePrime < 6) {
+    red = chroma;
+    blue = x;
+  }
+
+  const match = lightness - chroma / 2;
+  const toHex = (channel: number) =>
+    Math.round((channel + match) * 255)
+      .toString(16)
+      .padStart(2, "0");
+
+  return `#${toHex(red)}${toHex(green)}${toHex(blue)}`;
+};
+
+const toEmailColor = (value: string, fallback: string): string => {
+  const normalized = String(value || fallback || "").trim();
+  const fallbackColor = String(fallback || "#1b3c61").trim();
+
+  if (normalized.startsWith("#")) return normalized;
+  if (normalized.startsWith("rgb")) return normalized;
+
+  const hslMatch = normalized
+    .replace(/^hsl\(/, "")
+    .replace(/\)$/, "")
+    .replace(/,/g, " ")
+    .match(/(\d+(?:\.\d+)?)\s+(\d+(?:\.\d+)?)%?\s+(\d+(?:\.\d+)?)%?/);
+
+  if (!hslMatch) {
+    return fallbackColor.startsWith("#") || fallbackColor.startsWith("rgb")
+      ? fallbackColor
+      : toEmailColor(fallbackColor, "#1b3c61");
+  }
+
+  return hslToHex(
+    Number(hslMatch[1]),
+    Number(hslMatch[2]),
+    Number(hslMatch[3])
+  );
+};
+
+const getEmailLogoUrl = (brand: any) => {
+  const logo = String(brand.logoUrl || brand.logoSrc || defaultServerBrandPreset.logoUrl);
+
+  if (logo.startsWith("http")) return logo;
+  return `${publicAppUrl}${logo.startsWith("/") ? "" : "/"}${logo}`;
+};
+
+const getEmailBrand = async () => {
+  const brand = await getServerBrandPreset();
+
+  return {
+    ...brand,
+    logoUrl: getEmailLogoUrl(brand),
+    colors: {
+      primary: toEmailColor(
+        brand.colors.primary,
+        defaultServerBrandPreset.colors.primary
+      ),
+      secondary: toEmailColor(
+        brand.colors.secondary,
+        defaultServerBrandPreset.colors.secondary
+      ),
+      emailBackground: toEmailColor(
+        brand.colors.emailBackground,
+        defaultServerBrandPreset.colors.emailBackground
+      ),
+      card: toEmailColor(brand.colors.card || "0 0% 100%", "#ffffff"),
+      foreground: toEmailColor(brand.colors.foreground || "213 56% 24%", "#1b3c61"),
+      mutedForeground: toEmailColor(
+        brand.colors.mutedForeground || "213 20% 46%",
+        "#64748b"
+      ),
+    },
+  };
+};
+
+const renderBrandedEmail = ({
+  brand,
+  eyebrow,
+  title,
+  greeting,
+  body,
+  button,
+  secondaryHtml = "",
+}: {
+  brand: Awaited<ReturnType<typeof getEmailBrand>>;
+  eyebrow: string;
+  title: string;
+  greeting: string;
+  body: string;
+  button?: {
+    label: string;
+    url: string;
+  };
+  secondaryHtml?: string;
+}) => `
+  <div style="margin:0; padding:0; background:${brand.colors.emailBackground};">
+    <table role="presentation" width="100%" cellspacing="0" cellpadding="0" bgcolor="${brand.colors.emailBackground}" style="width:100%; background-color:${brand.colors.emailBackground}; padding:32px 16px; font-family:Arial,Helvetica,sans-serif;">
+      <tr>
+        <td align="center">
+          <table role="presentation" width="100%" cellspacing="0" cellpadding="0" bgcolor="#ffffff" style="max-width:640px; overflow:hidden; border-radius:20px; background-color:#ffffff; border:1px solid #e5e7eb;">
+            <tr>
+              <td bgcolor="${brand.colors.primary}" style="background-color:${brand.colors.primary}; padding:30px 28px; text-align:center;">
+                <img src="${brand.logoUrl}" alt="${brand.organizationName}" width="180" style="display:block; width:180px; max-width:70%; height:auto; margin:0 auto 16px; border:0; outline:none; text-decoration:none;" />
+                <h1 style="margin:0; color:#ffffff; font-size:27px; line-height:1.25; font-weight:800;">
+                  ${brand.appName}
+                </h1>
+                <p style="margin:8px 0 0; color:#d9f99d; font-size:16px; line-height:1.4; font-weight:700;">
+                  ${eyebrow}
+                </p>
+              </td>
+            </tr>
+            <tr>
+              <td style="padding:34px 34px 30px;">
+                <h2 style="margin:0 0 18px; color:#111827; font-size:24px; line-height:1.3; font-weight:800;">
+                  ${greeting}
+                </h2>
+                <div style="color:#374151; font-size:16px; line-height:1.7;">
+                  ${body}
+                </div>
+                ${
+                  button
+                    ? `
+                      <table role="presentation" cellspacing="0" cellpadding="0" align="center" style="margin:30px auto 24px;">
+                        <tr>
+                          <td bgcolor="${brand.colors.secondary}" style="background-color:${brand.colors.secondary}; border-radius:14px; text-align:center;">
+                            <a href="${button.url}" style="display:inline-block; color:#ffffff; text-decoration:none; padding:15px 30px; border-radius:14px; font-size:16px; font-weight:800;">
+                              ${button.label}
+                            </a>
+                          </td>
+                        </tr>
+                      </table>
+                      <p style="margin:0 0 18px; color:#64748b; font-size:13px; line-height:1.6;">
+                        Se o botão não funcionar, copie e cole este link no navegador:<br/>
+                        <a href="${button.url}" style="color:${brand.colors.primary}; word-break:break-all;">${button.url}</a>
+                      </p>
+                    `
+                    : ""
+                }
+                ${secondaryHtml}
+              </td>
+            </tr>
+            <tr>
+              <td bgcolor="#f8fafc" style="border-top:1px solid #e5e7eb; padding:22px 24px; text-align:center; background-color:#f8fafc;">
+                <img src="${brand.logoUrl}" alt="${brand.organizationName}" width="128" style="display:block; width:128px; max-width:45%; height:auto; margin:0 auto 10px; border:0; outline:none; text-decoration:none;" />
+                <p style="margin:0; color:#64748b; font-size:13px; line-height:1.5;">
+                  ${brand.organizationName} • ${brand.tagline || "Sempre presente!"}
+                </p>
+              </td>
+            </tr>
+          </table>
+        </td>
+      </tr>
+    </table>
+  </div>
+`;
+
 const adminEmployeeSelect = {
   id: true,
   registrationNumber: true,
@@ -411,50 +593,31 @@ const sendEmployeeVerificationEmail = async (
 ) => {
   if (!employee.email || !employee.emailVerificationToken) return;
 
-  const brandPreset = await getServerBrandPreset();
-  const primaryColor = toCssColor(
-    brandPreset.colors.primary,
-    defaultServerBrandPreset.colors.primary
-  );
-  const secondaryColor = toCssColor(
-    brandPreset.colors.secondary,
-    defaultServerBrandPreset.colors.secondary
-  );
-  const emailBackground = toCssColor(
-    brandPreset.colors.emailBackground,
-    defaultServerBrandPreset.colors.emailBackground
-  );
+  const brandPreset = await getEmailBrand();
   const verificationUrl = `${publicAppUrl}/validar-email/${employee.emailVerificationToken}`;
 
   await mailTransporter.sendMail({
     from: process.env.MAIL_FROM,
     to: employee.email,
     subject: `Valide seu acesso - ${brandPreset.appName}`,
-    html: `
-      <div style="font-family: Arial, sans-serif; background:${emailBackground}; padding:28px;">
-        <div style="max-width:620px; margin:0 auto; background:#ffffff; border-radius:18px; overflow:hidden; border:1px solid #e5e7eb;">
-          <div style="background:${primaryColor}; padding:24px; text-align:center;">
-            <h1 style="color:#ffffff; margin:0; font-size:22px;">${brandPreset.appName}</h1>
-            <p style="color:#d1fae5; margin:6px 0 0; font-size:14px;">Validação de cadastro</p>
-          </div>
-          <div style="padding:28px;">
-            <h2 style="color:#111827; margin-top:0;">Olá, ${employee.name}!</h2>
-            <p style="font-size:15px; color:#374151; line-height:1.6;">
-              Seu cadastro foi criado/atualizado no ${brandPreset.appName}. Para liberar o acesso, valide seu e-mail no botão abaixo.
-            </p>
-            <p style="text-align:center; margin:28px 0;">
-              <a href="${verificationUrl}" style="display:inline-block; background:${secondaryColor}; color:#ffffff; text-decoration:none; padding:15px 26px; border-radius:999px; font-weight:800; box-shadow:0 10px 24px rgba(15,23,42,.18); letter-spacing:.2px;">
-                Validar acesso
-              </a>
-            </p>
-            <p style="font-size:12px; color:#6b7280; line-height:1.6;">
-              Se o botão não funcionar, copie e cole este link no navegador:<br/>
-              ${verificationUrl}
-            </p>
-          </div>
-        </div>
-      </div>
-    `,
+    html: renderBrandedEmail({
+      brand: brandPreset,
+      eyebrow: "Validação de cadastro",
+      title: "Confirme seu e-mail",
+      greeting: `Olá, ${employee.name}!`,
+      body: `
+        <p style="margin:0 0 14px;">
+          Seu cadastro no <strong>${brandPreset.appName}</strong> foi criado ou atualizado.
+        </p>
+        <p style="margin:0;">
+          Para proteger sua conta e liberar o acesso ao sistema, confirme que este e-mail pertence a você.
+        </p>
+      `,
+      button: {
+        label: "Validar meu acesso",
+        url: verificationUrl,
+      },
+    }),
   });
 };
 
@@ -469,19 +632,7 @@ const sendAdminPasswordResetEmail = async ({
   token: string;
   isInvite?: boolean;
 }) => {
-  const brandPreset = await getServerBrandPreset();
-  const primaryColor = toCssColor(
-    brandPreset.colors.primary,
-    defaultServerBrandPreset.colors.primary
-  );
-  const secondaryColor = toCssColor(
-    brandPreset.colors.secondary,
-    defaultServerBrandPreset.colors.secondary
-  );
-  const emailBackground = toCssColor(
-    brandPreset.colors.emailBackground,
-    defaultServerBrandPreset.colors.emailBackground
-  );
+  const brandPreset = await getEmailBrand();
   const resetUrl = `${publicAppUrl}/admin/redefinir-senha/${token}`;
 
   await mailTransporter.sendMail({
@@ -490,35 +641,38 @@ const sendAdminPasswordResetEmail = async ({
     subject: isInvite
       ? `Acesso administrativo liberado - ${brandPreset.appName}`
       : `Redefinição de senha administrativa - ${brandPreset.appName}`,
-    html: `
-      <div style="font-family: Arial, sans-serif; background:${emailBackground}; padding:28px;">
-        <div style="max-width:620px; margin:0 auto; background:#ffffff; border-radius:18px; overflow:hidden; border:1px solid #e5e7eb;">
-          <div style="background:${primaryColor}; padding:24px; text-align:center;">
-            <h1 style="color:#ffffff; margin:0; font-size:22px;">${brandPreset.appName}</h1>
-            <p style="color:#dbeafe; margin:6px 0 0; font-size:14px;">Módulo administrativo</p>
-          </div>
-          <div style="padding:28px;">
-            <h2 style="color:#111827; margin-top:0;">Olá, ${name}!</h2>
-            <p style="font-size:15px; color:#374151; line-height:1.6;">
-              ${
-                isInvite
-                  ? "Seu e-mail foi validado e seu acesso ao módulo administrativo foi liberado. Defina sua senha para entrar no painel."
-                  : "Recebemos uma solicitação para redefinir sua senha administrativa. Use o botão abaixo para criar uma nova senha."
-              }
-            </p>
-            <p style="text-align:center; margin:28px 0;">
-              <a href="${resetUrl}" style="display:inline-block; background:${secondaryColor}; color:#ffffff; text-decoration:none; padding:15px 26px; border-radius:999px; font-weight:800; box-shadow:0 10px 24px rgba(15,23,42,.18); letter-spacing:.2px;">
-                ${isInvite ? "Definir senha administrativa" : "Redefinir senha"}
-              </a>
-            </p>
-            <p style="font-size:12px; color:#6b7280; line-height:1.6;">
-              Este link expira em ${ADMIN_PASSWORD_RESET_HOURS} horas. Se o botão não funcionar, copie e cole este link no navegador:<br/>
-              ${resetUrl}
-            </p>
-          </div>
+    html: renderBrandedEmail({
+      brand: brandPreset,
+      eyebrow: "Módulo administrativo",
+      title: isInvite ? "Acesso administrativo liberado" : "Redefina sua senha",
+      greeting: `Olá, ${name}!`,
+      body: isInvite
+        ? `
+          <p style="margin:0 0 14px;">
+            Seu e-mail foi validado e seu acesso ao painel administrativo do <strong>${brandPreset.appName}</strong> foi liberado.
+          </p>
+          <p style="margin:0;">
+            Para concluir o acesso com segurança, defina sua senha administrativa pelo botão abaixo.
+          </p>
+        `
+        : `
+          <p style="margin:0 0 14px;">
+            Recebemos uma solicitação para redefinir sua senha administrativa.
+          </p>
+          <p style="margin:0;">
+            Use o botão abaixo para criar uma nova senha. Se você não solicitou esta ação, ignore este e-mail.
+          </p>
+        `,
+      button: {
+        label: isInvite ? "Definir senha administrativa" : "Redefinir minha senha",
+        url: resetUrl,
+      },
+      secondaryHtml: `
+        <div style="margin-top:20px; border-radius:16px; background:#f8fafc; border:1px solid #e2e8f0; padding:14px 16px; color:#64748b; font-size:13px; line-height:1.6;">
+          Este link expira em ${ADMIN_PASSWORD_RESET_HOURS} horas por segurança.
         </div>
-      </div>
-    `,
+      `,
+    }),
   });
 };
 
@@ -697,76 +851,45 @@ router.post("/employee/recover-registration", async (req, res) => {
   }
 
   try {
+    const emailBrand = await getEmailBrand();
+
     await mailTransporter.sendMail({
       from: process.env.MAIL_FROM,
       to: employee.email!,
-      subject: `Recuperação de matrícula - ${brandPreset.appName}`,
-      html: `
-        <div style="font-family: Arial, sans-serif; background:${brandPreset.colors.emailBackground}; padding:28px;">
-          <div style="max-width:620px; margin:0 auto; background:#ffffff; border-radius:18px; overflow:hidden; border:1px solid #e5e7eb;">
-            
-            <div style="background:${brandPreset.colors.primary}; padding:24px; text-align:center;">
-              <h1 style="color:#ffffff; margin:0; font-size:22px;">
-                ${brandPreset.appName}
-              </h1>
-              <p style="color:#d1fae5; margin:6px 0 0; font-size:14px;">
-                Recuperação de acesso
-              </p>
-            </div>
-
-            <div style="padding:28px;">
-              <h2 style="color:#111827; margin-top:0;">
-                Olá, ${employee.name}!
-              </h2>
-
-              <p style="font-size:15px; color:#374151; line-height:1.6;">
-                Recebemos uma solicitação para recuperar sua matrícula de acesso ao sistema ${brandPreset.appName}.
-              </p>
-
-              <p style="font-size:15px; color:#374151; line-height:1.6;">
-                Encontramos seu cadastro com os dados informados:
-              </p>
-
-              <div style="background:#f0fdf4; border:1px solid #bbf7d0; border-radius:14px; padding:18px; margin:22px 0;">
-                <p style="margin:6px 0; font-size:15px;">
-                  <strong>Nome completo:</strong> ${employee.name}
-                </p>
-
-                <p style="margin:6px 0; font-size:15px;">
-                  <strong>Matrícula:</strong> 
-                  <span style="font-size:18px; color:${brandPreset.colors.primary}; font-weight:700;">
-                    ${employee.registrationNumber}
-                  </span>
-                </p>
-
-                <p style="margin:6px 0; font-size:15px;">
-                  <strong>Departamento:</strong> ${employee.department || "Não informado"}
-                </p>
-              </div>
-
-              <p style="font-size:14px; color:#6b7280; line-height:1.6;">
-                Utilize essa matrícula junto ao seu CPF para acessar novamente o sistema.
-              </p>
-
-              <p style="font-size:13px; color:#9ca3af; line-height:1.6;">
-                Caso você não tenha solicitado essa recuperação, apenas ignore este e-mail.
-              </p>
-            </div>
-
-            <div style="border-top:1px solid #e5e7eb; padding:20px; text-align:center;">
-              <img
-                src="${brandPreset.logoUrl}"
-                alt="${brandPreset.organizationName}"
-                style="max-width:130px; margin-bottom:8px;"
-              />
-
-              <p style="font-size:12px; color:#6b7280; margin:0;">
-                ${brandPreset.organizationName} - ${brandPreset.tagline}
-              </p>
-            </div>
+      subject: `Recuperação de matrícula - ${emailBrand.appName}`,
+      html: renderBrandedEmail({
+        brand: emailBrand,
+        eyebrow: "Recuperação de acesso",
+        title: "Sua matrícula foi localizada",
+        greeting: `Olá, ${employee.name}!`,
+        body: `
+          <p style="margin:0 0 14px;">
+            Recebemos uma solicitação para recuperar seus dados de acesso ao <strong>${emailBrand.appName}</strong>.
+          </p>
+          <p style="margin:0;">
+            Encontramos seu cadastro com segurança usando o e-mail e CPF informados.
+          </p>
+        `,
+        secondaryHtml: `
+          <div style="margin:24px 0 8px; border-radius:18px; background:#f8fafc; border:1px solid #e2e8f0; padding:18px;">
+            <p style="margin:0 0 10px; color:#334155; font-size:14px;">
+              <strong>Nome completo:</strong> ${employee.name}
+            </p>
+            <p style="margin:0 0 10px; color:#334155; font-size:14px;">
+              <strong>Matrícula:</strong>
+              <span style="display:inline-block; margin-left:6px; color:${emailBrand.colors.primary}; font-size:19px; font-weight:800;">
+                ${employee.registrationNumber}
+              </span>
+            </p>
+            <p style="margin:0; color:#334155; font-size:14px;">
+              <strong>Departamento:</strong> ${employee.department || "Não informado"}
+            </p>
           </div>
-        </div>
-      `,
+          <p style="margin:16px 0 0; color:#64748b; font-size:13px; line-height:1.6;">
+            Use essa matrícula junto ao seu CPF para acessar novamente. Se você não solicitou essa recuperação, apenas ignore este e-mail.
+          </p>
+        `,
+      }),
     });
 
     return res.json({
