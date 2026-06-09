@@ -1,5 +1,6 @@
 import React, {
   createContext,
+  useCallback,
   useContext,
   useEffect,
   useState,
@@ -141,7 +142,7 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
     }
   };
 
-  const logout = (reason?: "manual" | "timeout") => {
+  const logout = useCallback((reason?: "manual" | "timeout") => {
     localStorage.removeItem("auth");
     localStorage.removeItem("employee");
     localStorage.removeItem("admin");
@@ -168,7 +169,7 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
       role: null,
       matricula: null,
     });
-  };
+  }, [auth.role]);
 
   useEffect(() => {
     if (!auth.isAuthenticated) return;
@@ -213,7 +214,7 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
 
       clearInterval(interval);
     };
-  }, [auth.isAuthenticated]);
+  }, [auth.isAuthenticated, logout]);
 
   return (
     <AuthContext.Provider value={{ ...auth, loginEmployee, loginAdmin, logout }}>

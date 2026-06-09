@@ -15,6 +15,179 @@ const auditActorStorage = new AsyncLocalStorage<{
   actorName: string | null;
 }>();
 
+type ServerBrandColors = typeof defaultServerBrandPreset.colors &
+  Record<string, string | undefined>;
+type ServerBrandPreset = Omit<typeof defaultServerBrandPreset, "colors"> & {
+  logoSrc?: string;
+  logoUrl: string;
+  colors: ServerBrandColors;
+};
+type ServerBrandPresetInput = Partial<Omit<typeof defaultServerBrandPreset, "colors">> & {
+  logoSrc?: string;
+  colors?: Partial<ServerBrandColors>;
+};
+
+type IncomingMediaItem = {
+  imageUrl: string;
+  publicId?: string | null;
+  resourceType?: string | null;
+};
+
+type GeocodeResult = {
+  lat: number;
+  lng: number;
+  displayName: string;
+  exactHouseNumber: boolean;
+  provider: "openstreetmap";
+};
+
+type NominatimGeocodeResponse = {
+  lat?: string;
+  lon?: string;
+  display_name?: string;
+  address?: {
+    house_number?: string;
+  };
+};
+
+const normalizeIncomingMediaItems = (mediaItems: unknown): IncomingMediaItem[] =>
+  Array.isArray(mediaItems)
+    ? mediaItems
+        .filter(
+          (item): item is IncomingMediaItem =>
+            typeof item === "object" &&
+            item !== null &&
+            "imageUrl" in item &&
+            typeof (item as { imageUrl?: unknown }).imageUrl === "string" &&
+            Boolean((item as { imageUrl: string }).imageUrl.trim())
+        )
+        .map((item) => ({
+          imageUrl: item.imageUrl,
+          publicId: item.publicId || null,
+          resourceType: item.resourceType || "image",
+        }))
+    : [];
+
+const normalizeAddressText = (value: string) =>
+  value
+    .normalize("NFD")
+    .replace(/[\u0300-\u036f]/g, "")
+    .replace(/\b(n[uú]mero|numero|nº|n°|num\.?|no\.?)\b/gi, " ")
+    .replace(/\s+/g, " ")
+    .trim();
+
+const parseBrazilianAddress = (typedAddress: string) => {
+  const normalized = normalizeAddressText(typedAddress);
+  const parts = normalized
+    .split(",")
+    .map((part) => part.trim())
+    .filter(Boolean);
+  const firstPart = parts[0] || normalized;
+  const numberMatch = normalized.match(/\b\d+[A-Za-z]?\b/);
+  const houseNumber = numberMatch?.[0] || "";
+  const street = firstPart
+    .replace(new RegExp(`\\b${houseNumber}\\b`, "i"), "")
+    .replace(/\s+/g, " ")
+    .trim();
+
+  return {
+    street,
+    houseNumber,
+    suburb: parts[1] || "",
+    city: parts[2] || "Patos de Minas",
+    state: parts[3] || "Minas Gerais",
+  };
+};
+
+const buildNominatimQueries = (typedAddress: string) => {
+  const parsed = parseBrazilianAddress(typedAddress);
+  const structuredParams = new URLSearchParams({
+    format: "json",
+    addressdetails: "1",
+    limit: "3",
+    countrycodes: "br",
+  });
+
+  if (parsed.street) {
+    structuredParams.set(
+      "street",
+      [parsed.houseNumber, parsed.street].filter(Boolean).join(" ")
+    );
+  }
+
+  if (parsed.city) structuredParams.set("city", parsed.city);
+  if (parsed.state) structuredParams.set("state", parsed.state);
+  structuredParams.set("country", "Brasil");
+
+  const freeQueries = [
+    typedAddress,
+    [
+      parsed.houseNumber,
+      parsed.street,
+      parsed.suburb,
+      parsed.city,
+      parsed.state,
+      "Brasil",
+    ]
+      .filter(Boolean)
+      .join(", "),
+    [parsed.street, parsed.suburb, parsed.city, parsed.state, "Brasil"]
+      .filter(Boolean)
+      .join(", "),
+  ];
+
+  return [
+    `https://nominatim.openstreetmap.org/search?${structuredParams.toString()}`,
+    ...freeQueries.map(
+      (query) =>
+        `https://nominatim.openstreetmap.org/search?format=json&addressdetails=1&countrycodes=br&limit=3&q=${encodeURIComponent(
+          query
+        )}`
+    ),
+  ];
+};
+
+const geocodeWithOpenStreetMap = async (
+  typedAddress: string
+): Promise<GeocodeResult | null> => {
+  const parsed = parseBrazilianAddress(typedAddress);
+
+  for (const url of buildNominatimQueries(typedAddress)) {
+    const response = await fetch(url, {
+      headers: {
+        "User-Agent": "zeladoria-coopatos/1.0",
+      },
+    });
+    const data = (await response.json()) as NominatimGeocodeResponse[];
+    const result = data?.[0];
+
+    if (result?.lat && result?.lon) {
+      return {
+        lat: Number(result.lat),
+        lng: Number(result.lon),
+        displayName: result.display_name || typedAddress,
+        exactHouseNumber:
+          Boolean(parsed.houseNumber) &&
+          result.address?.house_number === parsed.houseNumber,
+        provider: "openstreetmap",
+      };
+    }
+  }
+
+  return null;
+};
+
+const hasPrismaCode = (error: unknown, code: string) =>
+  typeof error === "object" &&
+  error !== null &&
+  "code" in error &&
+  (error as { code?: unknown }).code === code;
+
+const toServerBrandPresetInput = (preset: unknown): ServerBrandPresetInput | null =>
+  typeof preset === "object" && preset !== null
+    ? (preset as ServerBrandPresetInput)
+    : null;
+
 cloudinary.config({
   cloud_name: process.env.CLOUDINARY_CLOUD_NAME,
   api_key: process.env.CLOUDINARY_API_KEY,
@@ -176,8 +349,37 @@ const VERIFICATION_COOLDOWN_SECONDS = 120;
 const brandPreset = defaultServerBrandPreset;
 const ADMIN_PASSWORD_RESET_HOURS = 24;
 const ADMIN_RESET_COOLDOWN_SECONDS = 120;
+const strongPasswordRules = [
+  {
+    test: (password: string) => password.length >= 5,
+    message: "ter pelo menos 5 caracteres",
+  },
+  {
+    test: (password: string) => /[A-Z]/.test(password),
+    message: "ter uma letra maiúscula",
+  },
+  {
+    test: (password: string) => /[a-z]/.test(password),
+    message: "ter uma letra minúscula",
+  },
+  {
+    test: (password: string) => /\d/.test(password),
+    message: "ter um número",
+  },
+  {
+    test: (password: string) => /[^A-Za-z0-9]/.test(password),
+    message: "ter um caractere especial",
+  },
+];
 
-const mergeServerBrandPreset = (preset?: any) => ({
+const getStrongPasswordErrors = (password: string) =>
+  strongPasswordRules
+    .filter((rule) => !rule.test(password))
+    .map((rule) => rule.message);
+
+const mergeServerBrandPreset = (
+  preset?: ServerBrandPresetInput | null
+): ServerBrandPreset => ({
   ...defaultServerBrandPreset,
   ...(preset || {}),
   logoUrl:
@@ -190,7 +392,7 @@ const mergeServerBrandPreset = (preset?: any) => ({
   },
 });
 
-const getServerBrandPreset = async () => {
+const getServerBrandPreset = async (): Promise<ServerBrandPreset> => {
   try {
     const settings = await prisma.brandSetting.findUnique({
       where: {
@@ -198,10 +400,10 @@ const getServerBrandPreset = async () => {
       },
     });
 
-    return mergeServerBrandPreset(settings?.preset);
+    return mergeServerBrandPreset(toServerBrandPresetInput(settings?.preset));
   } catch (error) {
     console.error("Erro ao carregar whitelabel:", error);
-    return defaultServerBrandPreset;
+    return mergeServerBrandPreset(defaultServerBrandPreset);
   }
 };
 
@@ -276,7 +478,7 @@ const toEmailColor = (value: string, fallback: string): string => {
   );
 };
 
-const getEmailLogoUrl = (brand: any) => {
+const getEmailLogoUrl = (brand: ReturnType<typeof mergeServerBrandPreset>) => {
   const logo = String(brand.logoUrl || brand.logoSrc || defaultServerBrandPreset.logoUrl);
 
   if (logo.startsWith("http")) return logo;
@@ -511,7 +713,7 @@ const escapeCsvValue = (value: unknown) => {
 };
 
 const sendCsv = (
-  res: any,
+  res: Response,
   filename: string,
   headers: string[],
   rows: unknown[][]
@@ -974,6 +1176,27 @@ router.get("/", (req, res) => {
   });
 });
 
+router.get("/geocode", async (req, res) => {
+  const address = String(req.query.address || "").trim();
+
+  if (!address) {
+    return res.status(400).json({ message: "Informe um endereço para buscar." });
+  }
+
+  try {
+    const result = await geocodeWithOpenStreetMap(address);
+
+    if (!result) {
+      return res.status(404).json({ message: "Endereço não encontrado." });
+    }
+
+    return res.json(result);
+  } catch (error) {
+    console.error("Erro ao geocodificar endereço:", error);
+    return res.status(500).json({ message: "Erro ao buscar endereço." });
+  }
+});
+
 router.get("/notifications/:employeeId", async (req, res) => {
   try {
     const employeeId = Number(req.params.employeeId);
@@ -1207,10 +1430,11 @@ router.post("/admin/reset-password", async (req, res) => {
   try {
     const token = String(req.body.token || "");
     const password = String(req.body.password || "");
+    const passwordErrors = getStrongPasswordErrors(password);
 
-    if (!token || password.length < 6) {
+    if (!token || passwordErrors.length > 0) {
       return res.status(400).json({
-        error: "Informe um link válido e uma senha com pelo menos 6 caracteres.",
+        error: `A senha precisa ${passwordErrors.join(", ")}.`,
       });
     }
 
@@ -1315,7 +1539,7 @@ router.put("/admin/brand-settings", async (req, res) => {
     });
 
     return res.json({
-      preset: mergeServerBrandPreset(settings.preset),
+      preset: mergeServerBrandPreset(toServerBrandPresetInput(settings.preset)),
     });
   } catch (error) {
     console.error("Erro ao salvar whitelabel:", error);
@@ -1449,11 +1673,11 @@ router.post("/admin/users", async (req, res) => {
     });
 
     return res.status(201).json(createdUser);
-  } catch (error: any) {
+  } catch (error: unknown) {
     console.error("Erro ao criar usuário:", error);
     return res.status(500).json({
       error:
-        error?.code === "P2002"
+        hasPrismaCode(error, "P2002")
           ? "E-mail ou funcionário já vinculado a outro usuário."
           : "Erro ao criar usuário.",
     });
@@ -1651,11 +1875,11 @@ router.post("/admin/employees", async (req, res) => {
     const { emailVerificationToken: _token, ...safeEmployee } = employee;
 
     return res.status(201).json(safeEmployee);
-  } catch (error: any) {
+  } catch (error: unknown) {
     console.error("Erro ao criar funcionário:", error);
     return res.status(500).json({
       error:
-        error?.code === "P2002"
+        hasPrismaCode(error, "P2002")
           ? "Matrícula ou CPF já cadastrado."
           : "Erro ao criar funcionário.",
     });
@@ -1814,11 +2038,11 @@ router.patch("/admin/employees/:id", async (req, res) => {
     const { emailVerificationToken: _token, ...safeEmployee } = employee;
 
     return res.json(safeEmployee);
-  } catch (error: any) {
+  } catch (error: unknown) {
     console.error("Erro ao atualizar funcionário:", error);
     return res.status(500).json({
       error:
-        error?.code === "P2002"
+        hasPrismaCode(error, "P2002")
           ? "Matrícula ou CPF já cadastrado."
           : "Erro ao atualizar funcionário.",
     });
@@ -2085,9 +2309,7 @@ router.post("/reports/:id/notes", async (req, res) => {
     const reportId = Number(req.params.id);
     const { authorId, content, mediaItems } = req.body;
 
-    const normalizedMediaItems = Array.isArray(mediaItems)
-      ? mediaItems.filter((item: any) => item?.imageUrl)
-      : [];
+    const normalizedMediaItems = normalizeIncomingMediaItems(mediaItems);
     const normalizedContent = String(content || "").trim();
 
     if (!authorId || (!normalizedContent && normalizedMediaItems.length === 0)) {
@@ -2103,7 +2325,7 @@ router.post("/reports/:id/notes", async (req, res) => {
         content: normalizedContent,
         media: normalizedMediaItems.length
           ? {
-            create: normalizedMediaItems.map((item: any) => ({
+            create: normalizedMediaItems.map((item) => ({
               mediaUrl: item.imageUrl,
               publicId: item.publicId,
               resourceType: item.resourceType || "image",
@@ -2312,8 +2534,46 @@ router.get("/admin/departments", async (_req, res) => {
         name: "asc",
       },
     });
+    const enrichedDepartments = await Promise.all(
+      departments.map(async (department) => {
+        const [employeeCount, reportCount] = await Promise.all([
+          prisma.employee.count({
+            where: {
+              department: department.name,
+              deletedAt: null,
+            },
+          }),
+          prisma.report.count({
+            where: {
+              OR: [
+                {
+                  employee: {
+                    department: department.name,
+                  },
+                },
+                {
+                  participants: {
+                    some: {
+                      employee: {
+                        department: department.name,
+                      },
+                    },
+                  },
+                },
+              ],
+            },
+          }),
+        ]);
 
-    return res.json(departments);
+        return {
+          ...department,
+          employeeCount,
+          reportCount,
+        };
+      })
+    );
+
+    return res.json(enrichedDepartments);
   } catch (error) {
     console.error("Erro ao carregar departamentos:", error);
     return res.status(500).json({
@@ -2354,11 +2614,15 @@ router.post("/admin/departments", async (req, res) => {
       },
     });
 
-    return res.status(201).json(department);
-  } catch (error: any) {
+    return res.status(201).json({
+      ...department,
+      employeeCount: 0,
+      reportCount: 0,
+    });
+  } catch (error: unknown) {
     console.error("Erro ao criar departamento:", error);
 
-    if (error?.code === "P2002") {
+    if (hasPrismaCode(error, "P2002")) {
       return res.status(409).json({
         error: "Já existe um departamento com esse nome.",
       });
@@ -2417,11 +2681,44 @@ router.patch("/admin/departments/:id", async (req, res) => {
       },
     });
 
-    return res.json(department);
-  } catch (error: any) {
+    const [employeeCount, reportCount] = await Promise.all([
+      prisma.employee.count({
+        where: {
+          department: department.name,
+          deletedAt: null,
+        },
+      }),
+      prisma.report.count({
+        where: {
+          OR: [
+            {
+              employee: {
+                department: department.name,
+              },
+            },
+            {
+              participants: {
+                some: {
+                  employee: {
+                    department: department.name,
+                  },
+                },
+              },
+            },
+          ],
+        },
+      }),
+    ]);
+
+    return res.json({
+      ...department,
+      employeeCount,
+      reportCount,
+    });
+  } catch (error: unknown) {
     console.error("Erro ao atualizar departamento:", error);
 
-    if (error?.code === "P2002") {
+    if (hasPrismaCode(error, "P2002")) {
       return res.status(409).json({
         error: "Já existe um departamento com esse nome.",
       });
@@ -2787,8 +3084,7 @@ router.post("/reports", async (req, res) => {
     address,
     mediaItems,
   } = req.body;
-
-  console.log("BODY RECEBIDO:", req.body);
+  const normalizedMediaItems = normalizeIncomingMediaItems(mediaItems);
 
   const openStatus = await prisma.reportStatus.findFirst({
     where: {
@@ -2822,9 +3118,9 @@ router.post("/reports", async (req, res) => {
         },
       },
 
-      images: mediaItems?.length
+      images: normalizedMediaItems.length
         ? {
-          create: mediaItems.map((item: any) => ({
+          create: normalizedMediaItems.map((item) => ({
             imageUrl: item.imageUrl,
             publicId: item.publicId,
             resourceType: item.resourceType || "image",
@@ -2896,6 +3192,7 @@ router.post("/admin/reports", async (req, res) => {
     const uniqueParticipantIds = Array.from(
       new Set([Number(employeeId), ...(participantIds || []).map(Number)])
     ).filter(Boolean);
+    const normalizedMediaItems = normalizeIncomingMediaItems(mediaItems);
 
     const report = await prisma.report.create({
       data: {
@@ -2915,9 +3212,9 @@ router.post("/admin/reports", async (req, res) => {
             role: participantId === Number(employeeId) ? "OWNER" : "PARTICIPANT",
           })),
         },
-        images: mediaItems?.length
+        images: normalizedMediaItems.length
           ? {
-            create: mediaItems.map((item: any) => ({
+            create: normalizedMediaItems.map((item) => ({
               imageUrl: item.imageUrl,
               publicId: item.publicId,
               resourceType: item.resourceType || "image",
@@ -3286,15 +3583,16 @@ router.delete("/report-images/:id", async (req, res) => {
 router.post("/reports/:id/images", async (req, res) => {
   const reportId = Number(req.params.id);
   const { mediaItems } = req.body;
+  const normalizedMediaItems = normalizeIncomingMediaItems(mediaItems);
 
-  if (!mediaItems || mediaItems.length === 0) {
+  if (normalizedMediaItems.length === 0) {
     return res.status(400).json({
       error: "Nenhuma imagem enviada.",
     });
   }
 
   await prisma.reportImage.createMany({
-    data: mediaItems.map((item: any) => ({
+    data: normalizedMediaItems.map((item) => ({
       reportId,
       imageUrl: item.imageUrl,
       publicId: item.publicId,
@@ -3515,7 +3813,7 @@ router.patch("/reports/:id/status", async (req, res) => {
 
 router.get("/media-proxy", async (req, res) => {
   try {
-    let url = String(req.query.url || "");
+    const url = String(req.query.url || "");
 
     if (!url || !url.startsWith("https://res.cloudinary.com/")) {
       return res.status(400).json({ error: "URL inválida." });
@@ -3776,6 +4074,7 @@ router.post("/private-conversations/:conversationId/messages", async (req, res) 
       replyToMessageId,
       mentionedEmployeeIds,
     } = req.body;
+    const normalizedMediaItems = normalizeIncomingMediaItems(mediaItems);
 
     if (!senderId) {
       return res.status(400).json({
@@ -3783,7 +4082,7 @@ router.post("/private-conversations/:conversationId/messages", async (req, res) 
       });
     }
 
-    if ((!message || !message.trim()) && (!mediaItems || mediaItems.length === 0)) {
+    if ((!message || !message.trim()) && normalizedMediaItems.length === 0) {
       return res.status(400).json({
         error: "Mensagem ou mídia é obrigatória.",
       });
@@ -3820,9 +4119,9 @@ router.post("/private-conversations/:conversationId/messages", async (req, res) 
         senderId: Number(senderId),
         message: message?.trim() || "",
         replyToMessageId: replyToMessageId ? Number(replyToMessageId) : null,
-        media: mediaItems?.length
+        media: normalizedMediaItems.length
           ? {
-            create: mediaItems.map((item: any) => ({
+            create: normalizedMediaItems.map((item) => ({
               mediaUrl: item.imageUrl,
               publicId: item.publicId,
               resourceType: item.resourceType || "image",
@@ -4118,8 +4417,9 @@ router.post("/reports/:id/messages", async (req, res) => {
     mediaItems,
     mentionedEmployeeIds,
   } = req.body;
+  const normalizedMediaItems = normalizeIncomingMediaItems(mediaItems);
 
-  if ((!message || !message.trim()) && (!mediaItems || mediaItems.length === 0)) {
+  if ((!message || !message.trim()) && normalizedMediaItems.length === 0) {
     return res.status(400).json({
       error: "Mensagem ou mídia é obrigatória.",
     });
@@ -4134,9 +4434,9 @@ router.post("/reports/:id/messages", async (req, res) => {
       message: message?.trim() || "",
       replyToMessageId: replyToMessageId ? Number(replyToMessageId) : null,
 
-      media: mediaItems?.length
+      media: normalizedMediaItems.length
         ? {
-          create: mediaItems.map((item: any) => ({
+          create: normalizedMediaItems.map((item) => ({
             mediaUrl: item.imageUrl,
             publicId: item.publicId,
             resourceType: item.resourceType || "image",

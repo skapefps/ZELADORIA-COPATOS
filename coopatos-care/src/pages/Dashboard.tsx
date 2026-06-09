@@ -70,6 +70,7 @@ import {
 import { Input } from "@/components/ui/input";
 import { Checkbox } from "@/components/ui/checkbox";
 import { BrandLogo } from "@/components/BrandLogo";
+import { AddressMapPicker } from "@/components/AddressMapPicker";
 import {
   defaultBrandPreset,
   hexToHslString,
@@ -100,7 +101,11 @@ type SettingsTab =
   | "audit";
 
 type NominatimAddress = {
+  lat?: string;
+  lon?: string;
+  display_name?: string;
   address?: {
+    house_number?: string;
     road?: string;
     pedestrian?: string;
     suburb?: string;
@@ -111,6 +116,133 @@ type NominatimAddress = {
     village?: string;
     state?: string;
   };
+};
+
+type GeocodeResult = {
+  lat: number;
+  lng: number;
+  displayName: string;
+  exactHouseNumber: boolean;
+  provider?: "google" | "openstreetmap";
+};
+
+const normalizeAddressText = (value: string) =>
+  value
+    .normalize("NFD")
+    .replace(/[\u0300-\u036f]/g, "")
+    .replace(/\b(n[uú]mero|numero|nº|n°|num\.?|no\.?)\b/gi, " ")
+    .replace(/\s+/g, " ")
+    .trim();
+
+const parseBrazilianAddress = (typedAddress: string) => {
+  const normalized = normalizeAddressText(typedAddress);
+  const parts = normalized
+    .split(",")
+    .map((part) => part.trim())
+    .filter(Boolean);
+  const firstPart = parts[0] || normalized;
+  const numberMatch = normalized.match(/\b\d+[A-Za-z]?\b/);
+  const houseNumber = numberMatch?.[0] || "";
+  const street = firstPart
+    .replace(new RegExp(`\\b${houseNumber}\\b`, "i"), "")
+    .replace(/\s+/g, " ")
+    .trim();
+
+  return {
+    street,
+    houseNumber,
+    suburb: parts[1] || "",
+    city: parts[2] || "Patos de Minas",
+    state: parts[3] || "Minas Gerais",
+  };
+};
+
+const buildNominatimQueries = (typedAddress: string) => {
+  const parsed = parseBrazilianAddress(typedAddress);
+  const structuredParams = new URLSearchParams({
+    format: "json",
+    addressdetails: "1",
+    limit: "3",
+    countrycodes: "br",
+  });
+
+  if (parsed.street) {
+    structuredParams.set(
+      "street",
+      [parsed.houseNumber, parsed.street].filter(Boolean).join(" ")
+    );
+  }
+
+  if (parsed.city) structuredParams.set("city", parsed.city);
+  if (parsed.state) structuredParams.set("state", parsed.state);
+  structuredParams.set("country", "Brasil");
+
+  const freeQueries = [
+    typedAddress,
+    [
+      parsed.houseNumber,
+      parsed.street,
+      parsed.suburb,
+      parsed.city,
+      parsed.state,
+      "Brasil",
+    ]
+      .filter(Boolean)
+      .join(", "),
+    [parsed.street, parsed.suburb, parsed.city, parsed.state, "Brasil"]
+      .filter(Boolean)
+      .join(", "),
+  ];
+
+  return [
+    `https://nominatim.openstreetmap.org/search?${structuredParams.toString()}`,
+    ...freeQueries.map(
+      (query) =>
+        `https://nominatim.openstreetmap.org/search?format=json&addressdetails=1&countrycodes=br&limit=3&q=${encodeURIComponent(
+          query
+        )}`
+    ),
+  ];
+};
+
+const geocodeBrazilianAddress = async (
+  typedAddress: string,
+  apiUrl?: string
+): Promise<GeocodeResult | null> => {
+  const parsed = parseBrazilianAddress(typedAddress);
+
+  if (apiUrl) {
+    try {
+      const response = await fetch(
+        `${apiUrl}/geocode?address=${encodeURIComponent(typedAddress)}`
+      );
+
+      if (response.ok) {
+        return (await response.json()) as GeocodeResult;
+      }
+    } catch (error) {
+      console.warn("Falha ao buscar endereço pelo backend:", error);
+    }
+  }
+
+  for (const url of buildNominatimQueries(typedAddress)) {
+    const response = await fetch(url);
+    const data: NominatimAddress[] = await response.json();
+    const result = data?.[0];
+
+    if (result?.lat && result?.lon) {
+      return {
+        lat: Number(result.lat),
+        lng: Number(result.lon),
+        displayName: result.display_name || typedAddress,
+        exactHouseNumber:
+          Boolean(parsed.houseNumber) &&
+          result.address?.house_number === parsed.houseNumber,
+      };
+    }
+  }
+
+  return null;
 };
 
 type AdminStatus = {
@@ -182,6 +314,8 @@ type AdminDepartment = {
   description?: string | null;
   color?: string | null;
   active: boolean;
+  employeeCount?: number;
+  reportCount?: number;
   deletedAt?: string | null;
   createdAt: string;
   updatedAt: string;
@@ -681,6 +815,7 @@ const Dashboard = () => {
   const [analyticsStartDate, setAnalyticsStartDate] = useState("");
   const [analyticsEndDate, setAnalyticsEndDate] = useState("");
   const [analyticsLocation, setAnalyticsLocation] = useState("");
+  const [showAnalyticsFilters, setShowAnalyticsFilters] = useState(true);
   const [visibleAnalyticsSections, setVisibleAnalyticsSections] = useState<
     AnalyticsViewSection[]
   >(() => {
@@ -718,6 +853,8 @@ const Dashboard = () => {
   const [selectedAnalyticsSections, setSelectedAnalyticsSections] = useState<
     AnalyticsExportSection[]
   >(analyticsExportSections.map((section) => section.id));
+  const [includeAnalyticsChartsInPdf, setIncludeAnalyticsChartsInPdf] =
+    useState(false);
   const [selectedReportColumns, setSelectedReportColumns] = useState<
     ReportExportColumn[]
   >([
@@ -1948,6 +2085,29 @@ const Dashboard = () => {
   };
 
   const toggleDepartmentStatus = async (department: AdminDepartment) => {
+    const localEmployeeCount = employees.filter(
+      (employee) => employee.department === department.name && !employee.deletedAt
+    ).length;
+    const localReportCount = reports.filter(
+      (report) =>
+        report.employee?.department === department.name ||
+        report.participants?.some(
+          (participant) => participant.employee.department === department.name
+        )
+    ).length;
+    const impactEmployeeCount = department.employeeCount ?? localEmployeeCount;
+    const impactReportCount = department.reportCount ?? localReportCount;
+
+    if (
+      department.active &&
+      (impactEmployeeCount > 0 || impactReportCount > 0) &&
+      !window.confirm(
+        `Desativar "${department.name}"?\n\n${impactEmployeeCount} funcionário(s) ativo(s) e ${impactReportCount} chamado(s) continuam vinculados a esse departamento. Ele deixará de aparecer como opção ativa para novos vínculos, mas o histórico será preservado.`
+      )
+    ) {
+      return;
+    }
+
     try {
       const response = await fetch(
         `${API_URL}/admin/departments/${department.id}`,
@@ -2586,6 +2746,54 @@ const Dashboard = () => {
         .join("")
       : `<p class="empty">Sem dados para este filtro.</p>`;
 
+  const renderPrintBarChart = (
+    items: { name: string; value: number; color?: string | null }[],
+    valueFormatter: (value: number) => string = (value) => String(value)
+  ) => {
+    if (!items.length) return `<p class="empty">Sem dados para gerar gráfico.</p>`;
+
+    const maxValue = Math.max(...items.map((item) => item.value), 1);
+
+    return `
+      <div class="chart">
+        ${items
+          .map((item, index) => {
+            const width = Math.max((item.value / maxValue) * 100, item.value > 0 ? 6 : 0);
+            const color = item.color || chartPalette[index % chartPalette.length];
+
+            return `
+              <div class="bar-row">
+                <div class="bar-label">${item.name}</div>
+                <div class="bar-track">
+                  <div class="bar-fill" style="width:${width}%; background:${color};"></div>
+                </div>
+                <strong>${valueFormatter(item.value)}</strong>
+              </div>
+            `;
+          })
+          .join("")}
+      </div>
+    `;
+  };
+
+  const renderPrintPanel = (
+    id: AnalyticsExportSection,
+    title: string,
+    listItems: { name: string; value: number; color?: string | null }[],
+    chartItems = listItems,
+    valueFormatter?: (value: number) => string
+  ) =>
+    selectedAnalyticsSections.includes(id)
+      ? `<div class="panel">
+        <h2>${title}</h2>
+        ${
+          includeAnalyticsChartsInPdf
+            ? renderPrintBarChart(chartItems, valueFormatter)
+            : renderPrintList(listItems)
+        }
+      </div>`
+      : "";
+
   const exportAnalyticsPdf = () => {
     if (selectedAnalyticsSections.length === 0) {
       toast({
@@ -2632,6 +2840,11 @@ const Dashboard = () => {
             .card strong { display: block; margin-top: 8px; font-size: 30px; color: #1f3557; }
             .row { display: flex; justify-content: space-between; gap: 12px; padding: 9px 0; border-bottom: 1px solid #edf1f7; font-size: 13px; }
             .row:last-child { border-bottom: 0; }
+            .chart { display: grid; gap: 10px; margin-top: 4px; }
+            .bar-row { display: grid; grid-template-columns: minmax(90px, 1.1fr) minmax(140px, 2fr) auto; align-items: center; gap: 10px; font-size: 12px; }
+            .bar-label { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; color: #374151; }
+            .bar-track { height: 14px; overflow: hidden; border-radius: 999px; background: #edf1f7; }
+            .bar-fill { height: 100%; border-radius: 999px; }
             .empty { color: #62708a; font-size: 13px; }
             @media print { body { background: #fff; padding: 20px; } .panel, .card, .filter { break-inside: avoid; } }
           </style>
@@ -2660,15 +2873,34 @@ const Dashboard = () => {
             </section>`
     )}
           <section class="two">
-            ${section("status", `<div class="panel"><h2>Status</h2>${renderPrintList(analytics.statusData)}</div>`)}
-            ${section("priority", `<div class="panel"><h2>Prioridades</h2>${renderPrintList(analytics.priorityData)}</div>`)}
-            ${section("categories", `<div class="panel"><h2>Categorias</h2>${renderPrintList(analytics.categoryData)}</div>`)}
-            ${section("locations", `<div class="panel"><h2>Locais recorrentes</h2>${renderPrintList(analytics.locationData)}</div>`)}
-            ${section("employees", `<div class="panel"><h2>Produção individual</h2>${renderPrintList(analytics.employeeData.map((item) => ({ name: item.name, value: item.total })))}</div>`)}
-            ${section("departments", `<div class="panel"><h2>Departamentos</h2>${renderPrintList(analytics.departmentData.map((item) => ({ name: item.name, value: item.chamados })))}</div>`)}
-            ${section("monthly", `<div class="panel"><h2>Evolução mensal</h2>${renderPrintList(analytics.monthlyData.map((item) => ({ name: item.month, value: item.abertos })))}</div>`)}
-            ${section("backlog", `<div class="panel"><h2>Backlog por status</h2>${renderPrintList(analytics.backlogData)}</div>`)}
-            ${section("efficiency", `<div class="panel"><h2>Eficiência por pessoa</h2>${renderPrintList(analytics.efficiencyData.map((item) => ({ name: item.name, value: item.taxa })))}</div>`)}
+            ${renderPrintPanel("status", "Status", analytics.statusData)}
+            ${renderPrintPanel("priority", "Prioridades", analytics.priorityData)}
+            ${renderPrintPanel("categories", "Categorias", analytics.categoryData)}
+            ${renderPrintPanel("locations", "Locais recorrentes", analytics.locationData)}
+            ${renderPrintPanel(
+              "employees",
+              "Produção individual",
+              analytics.employeeData.map((item) => ({ name: item.name, value: item.total })),
+              analytics.employeeData.map((item) => ({ name: item.name, value: item.total }))
+            )}
+            ${renderPrintPanel(
+              "departments",
+              "Departamentos",
+              analytics.departmentData.map((item) => ({ name: item.name, value: item.chamados }))
+            )}
+            ${renderPrintPanel(
+              "monthly",
+              "Evolução mensal",
+              analytics.monthlyData.map((item) => ({ name: item.month, value: item.abertos }))
+            )}
+            ${renderPrintPanel("backlog", "Backlog por status", analytics.backlogData)}
+            ${renderPrintPanel(
+              "efficiency",
+              "Eficiência por pessoa",
+              analytics.efficiencyData.map((item) => ({ name: item.name, value: item.taxa })),
+              analytics.efficiencyData.map((item) => ({ name: item.name, value: item.taxa })),
+              (value) => `${value}%`
+            )}
           </section>
         </body>
       </html>
@@ -2924,14 +3156,9 @@ const Dashboard = () => {
     setGeocodingReport(true);
 
     try {
-      const response = await fetch(
-        `https://nominatim.openstreetmap.org/search?format=json&q=${encodeURIComponent(
-          reportForm.address
-        )}&limit=1`
-      );
-      const data = await response.json();
+      const result = await geocodeBrazilianAddress(reportForm.address, API_URL);
 
-      if (!data || data.length === 0) {
+      if (!result) {
         toast({
           title: "Endereço não encontrado",
           description: "Tente informar rua, número, bairro e cidade.",
@@ -2942,14 +3169,18 @@ const Dashboard = () => {
 
       setReportForm((prev) => ({
         ...prev,
-        address: data[0].display_name,
-        latitude: String(Number(data[0].lat)),
-        longitude: String(Number(data[0].lon)),
+        address: result.displayName,
+        latitude: String(result.lat),
+        longitude: String(result.lng),
       }));
 
       toast({
         title: "Endereço localizado",
-        description: "Coordenadas preenchidas automaticamente.",
+        description: result.exactHouseNumber
+          ? "Número confirmado e coordenadas preenchidas."
+          : result.provider === "openstreetmap"
+            ? "A base gratuita encontrou a rua, mas não confirmou o número. Ajuste o marcador no mapa."
+            : "Coordenadas preenchidas. Se o ponto não estiver exato, ajuste o marcador no mapa.",
       });
     } catch (error) {
       console.error(error);
@@ -3574,17 +3805,25 @@ const Dashboard = () => {
             <div className="rounded-2xl border border-border bg-card p-4 shadow-sm">
               <div className="mb-4 flex flex-col gap-3 lg:flex-row lg:items-center lg:justify-between">
                 <div className="flex items-center gap-2">
-                  <span className="rounded-xl bg-primary/10 p-2 text-primary">
+                  <button
+                    type="button"
+                    onClick={() => setShowAnalyticsFilters((prev) => !prev)}
+                    className="rounded-xl bg-primary/10 p-2 text-primary transition hover:bg-primary/15"
+                    title={showAnalyticsFilters ? "Recolher opções" : "Abrir opções"}
+                  >
                     <SlidersHorizontal className="h-4 w-4" />
-                  </span>
+                  </button>
                   <div>
                     <p className="text-sm font-semibold">Indicadores visíveis</p>
                     <p className="text-xs text-muted-foreground">
-                      Escolha quais cards e gráficos aparecem nesta tela.
+                      {showAnalyticsFilters
+                        ? "Escolha quais cards e gráficos aparecem nesta tela."
+                        : "Guia recolhida. Clique no ícone para abrir as opções."}
                     </p>
                   </div>
                 </div>
 
+                {showAnalyticsFilters && (
                 <div className="flex flex-wrap gap-2">
                   <Button
                     type="button"
@@ -3603,8 +3842,10 @@ const Dashboard = () => {
                     Restaurar padrão
                   </Button>
                 </div>
+                )}
               </div>
 
+              {showAnalyticsFilters && (
               <div className="grid gap-3 lg:grid-cols-3">
                 {(["Cards", "Graficos", "Listas"] as const).map((group) => (
                   <div
@@ -3641,6 +3882,7 @@ const Dashboard = () => {
                   </div>
                 ))}
               </div>
+              )}
             </div>
 
             {showAnalyticsSection("summary") && (
@@ -4855,10 +5097,10 @@ const Dashboard = () => {
                   </p>
                 ) : (
                   filteredDepartments.map((department) => {
-                    const teamCount = employees.filter(
+                    const localTeamCount = employees.filter(
                       (employee) => employee.department === department.name
                     ).length;
-                    const reportCount = reports.filter(
+                    const localReportCount = reports.filter(
                       (report) =>
                         report.employee?.department === department.name ||
                         report.participants?.some(
@@ -4866,6 +5108,8 @@ const Dashboard = () => {
                             participant.employee.department === department.name
                         )
                     ).length;
+                    const teamCount = department.employeeCount ?? localTeamCount;
+                    const reportCount = department.reportCount ?? localReportCount;
 
                     return (
                       <div
@@ -4898,6 +5142,12 @@ const Dashboard = () => {
                         <p className="mt-3 min-h-10 text-sm text-muted-foreground">
                           {department.description || "Sem descrição cadastrada."}
                         </p>
+
+                        {!department.active && teamCount > 0 && (
+                          <div className="mt-3 rounded-xl border border-amber-200 bg-amber-50 px-3 py-2 text-xs text-amber-800">
+                            Departamento inativo, mas ainda possui funcionários vinculados. Mova-os para outro departamento se quiser encerrar totalmente o uso.
+                          </div>
+                        )}
 
 	                        <div className="mt-4 flex flex-wrap gap-2 text-xs text-muted-foreground">
                           <span className="rounded-full bg-muted px-2.5 py-1">
@@ -6086,6 +6336,23 @@ const Dashboard = () => {
                         {reportForm.longitude || "-"}
                       </p>
                     )}
+
+                    {reportForm.latitude && reportForm.longitude && (
+                      <AddressMapPicker
+                        value={{
+                          lat: Number(reportForm.latitude),
+                          lng: Number(reportForm.longitude),
+                        }}
+                        onChange={(coordinates) =>
+                          setReportForm((prev) => ({
+                            ...prev,
+                            latitude: String(coordinates.lat),
+                            longitude: String(coordinates.lng),
+                          }))
+                        }
+                        label="Ajustar local exato do chamado"
+                      />
+                    )}
                   </div>
                 </div>
 
@@ -6829,6 +7096,23 @@ const Dashboard = () => {
                   </label>
                 ))}
               </div>
+
+              <label className="mt-4 flex cursor-pointer items-start gap-3 rounded-2xl border border-border bg-background p-3 text-sm transition hover:border-secondary/60">
+                <input
+                  type="checkbox"
+                  checked={includeAnalyticsChartsInPdf}
+                  onChange={(event) =>
+                    setIncludeAnalyticsChartsInPdf(event.target.checked)
+                  }
+                  className="mt-0.5 h-4 w-4 accent-primary"
+                />
+                <span>
+                  <span className="block font-medium">Incluir gráficos no PDF</span>
+                  <span className="block text-xs text-muted-foreground">
+                    Gera barras visuais no relatório usando os mesmos dados dos indicadores.
+                  </span>
+                </span>
+              </label>
 
               <div className="mt-5 flex flex-col gap-2 sm:flex-row sm:justify-end">
                 <Button

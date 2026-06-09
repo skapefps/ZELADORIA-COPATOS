@@ -42,6 +42,7 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
 import { BrandLogo } from "@/components/BrandLogo";
+import { AddressMapPicker } from "@/components/AddressMapPicker";
 import { useBranding } from "@/config/brand";
 import {
   Select,
@@ -58,6 +59,102 @@ import { useToast } from "@/hooks/use-toast";
 
 
 const MAX_FILE_SIZE = 100 * 1024 * 1024; // TAMANHO maximo do arquivo , atualmente 100mb
+
+type NominatimGeocodeResult = {
+  lat?: string;
+  lon?: string;
+  display_name?: string;
+  address?: {
+    house_number?: string;
+  };
+};
+
+type GeocodeResult = {
+  lat: number;
+  lng: number;
+  displayName: string;
+  exactHouseNumber: boolean;
+  provider?: "google" | "openstreetmap";
+};
+
+const normalizeAddressText = (value: string) =>
+  value
+    .normalize("NFD")
+    .replace(/[\u0300-\u036f]/g, "")
+    .replace(/\b(n[uú]mero|numero|nº|n°|num\.?|no\.?)\b/gi, " ")
+    .replace(/\s+/g, " ")
+    .trim();
+
+const parseBrazilianAddress = (typedAddress: string) => {
+  const normalized = normalizeAddressText(typedAddress);
+  const parts = normalized
+    .split(",")
+    .map((part) => part.trim())
+    .filter(Boolean);
+  const firstPart = parts[0] || normalized;
+  const numberMatch = normalized.match(/\b\d+[A-Za-z]?\b/);
+  const houseNumber = numberMatch?.[0] || "";
+  const street = firstPart
+    .replace(new RegExp(`\\b${houseNumber}\\b`, "i"), "")
+    .replace(/\s+/g, " ")
+    .trim();
+
+  return {
+    street,
+    houseNumber,
+    suburb: parts[1] || "",
+    city: parts[2] || "Patos de Minas",
+    state: parts[3] || "Minas Gerais",
+  };
+};
+
+const buildNominatimQueries = (typedAddress: string) => {
+  const parsed = parseBrazilianAddress(typedAddress);
+  const structuredParams = new URLSearchParams({
+    format: "json",
+    addressdetails: "1",
+    limit: "3",
+    countrycodes: "br",
+  });
+
+  if (parsed.street) {
+    structuredParams.set(
+      "street",
+      [parsed.houseNumber, parsed.street].filter(Boolean).join(" ")
+    );
+  }
+
+  if (parsed.city) structuredParams.set("city", parsed.city);
+  if (parsed.state) structuredParams.set("state", parsed.state);
+  structuredParams.set("country", "Brasil");
+
+  const freeQueries = [
+    typedAddress,
+    [
+      parsed.houseNumber,
+      parsed.street,
+      parsed.suburb,
+      parsed.city,
+      parsed.state,
+      "Brasil",
+    ]
+      .filter(Boolean)
+      .join(", "),
+    [parsed.street, parsed.suburb, parsed.city, parsed.state, "Brasil"]
+      .filter(Boolean)
+      .join(", "),
+  ];
+
+  return [
+    `https://nominatim.openstreetmap.org/search?${structuredParams.toString()}`,
+    ...freeQueries.map(
+      (query) =>
+        `https://nominatim.openstreetmap.org/search?format=json&addressdetails=1&countrycodes=br&limit=3&q=${encodeURIComponent(
+          query
+        )}`
+    ),
+  ];
+};
 
 type Category = {
   id: number;
@@ -1282,7 +1379,6 @@ const EmployeePanel = () => {
     const element = privateMessageRefs.current[messageId];
 
     if (!element) {
-      console.log("Mensagem original não encontrada:", messageId);
       return;
     }
 
@@ -3154,10 +3250,6 @@ const EmployeePanel = () => {
         lat: null,
         lng: null,
       };
-      const imageUrl = null;
-
-      console.log("URL da imagem enviada:", imageUrl);
-
       const mediaItems = await Promise.all(
         selectedFiles.map((file) => uploadImageToCloudinary(file))
       );
@@ -3341,37 +3433,108 @@ const EmployeePanel = () => {
     };
   }, []);
 
-  const geocodeAddress = async (typedAddress: string) => {
+  const geocodeAddress = async (typedAddress: string): Promise<GeocodeResult | null> => {
     if (!typedAddress.trim()) return null;
 
     setGeocoding(true);
 
     try {
-      const response = await fetch(
-        `https://nominatim.openstreetmap.org/search?format=json&q=${encodeURIComponent(
-          typedAddress
-        )}&limit=1`
-      );
+      const parsed = parseBrazilianAddress(typedAddress);
+      const backendResponse = await fetch(
+        `${API_URL}/geocode?address=${encodeURIComponent(typedAddress)}`
+      ).catch(() => null);
 
-      const data = await response.json();
+      if (backendResponse?.ok) {
+        const result = (await backendResponse.json()) as GeocodeResult;
 
-      if (!data || data.length === 0) {
-        toast({
-          title: "Endereço não encontrado",
-          description: "Tente informar rua, número, bairro e cidade.",
-          variant: "destructive",
-        });
-        return null;
+        if (parsed.houseNumber && !result.exactHouseNumber) {
+          toast({
+            title: "Rua localizada",
+            description:
+              result.provider === "openstreetmap"
+                ? "O OpenStreetMap encontrou a rua, mas não confirmou o número informado."
+                : "O número informado não foi confirmado pela base de mapas.",
+          });
+        }
+
+        return result;
       }
 
-      return {
-        lat: Number(data[0].lat),
-        lng: Number(data[0].lon),
-        displayName: data[0].display_name,
-      };
+      for (const url of buildNominatimQueries(typedAddress)) {
+        const response = await fetch(url);
+        const data: NominatimGeocodeResult[] = await response.json();
+        const result = data?.[0];
+
+        if (result?.lat && result?.lon) {
+          const exactHouseNumber =
+            Boolean(parsed.houseNumber) &&
+            result.address?.house_number === parsed.houseNumber;
+
+          if (parsed.houseNumber && !exactHouseNumber) {
+            toast({
+              title: "Rua localizada",
+              description:
+                "O número informado não foi confirmado no mapa. A numeração pode não estar cadastrada no OpenStreetMap.",
+            });
+          }
+
+          return {
+            lat: Number(result.lat),
+            lng: Number(result.lon),
+            displayName: result.display_name || typedAddress,
+            exactHouseNumber,
+          };
+        }
+      }
+
+      toast({
+        title: "Endereço não encontrado",
+        description: "Tente informar rua, número, bairro e cidade.",
+        variant: "destructive",
+      });
+
+      return null;
     } finally {
       setGeocoding(false);
     }
+  };
+
+  const findAddressForNewReport = async () => {
+    const result = await geocodeAddress(address);
+
+    if (!result) return;
+
+    setCoords({
+      lat: result.lat,
+      lng: result.lng,
+    });
+    setAddress(result.displayName);
+
+    toast({
+      title: "Endereço localizado",
+      description: result.exactHouseNumber
+        ? "Número confirmado e ponto preenchido."
+        : "A base gratuita encontrou a rua. Ajuste o marcador no mapa para marcar o número exato.",
+    });
+  };
+
+  const findAddressForEditReport = async () => {
+    const result = await geocodeAddress(editAddress);
+
+    if (!result) return;
+
+    setEditCoords({
+      lat: result.lat,
+      lng: result.lng,
+    });
+    setEditAddress(result.displayName);
+
+    toast({
+      title: "Endereço localizado",
+      description: result.exactHouseNumber
+        ? "Número confirmado e ponto preenchido."
+        : "A base gratuita encontrou a rua. Ajuste o marcador no mapa para marcar o número exato.",
+    });
   };
 
   // =========================
@@ -4011,14 +4174,38 @@ const EmployeePanel = () => {
           className="text-base"
         />
       </div>
-      {address && (
-        <Input
-          placeholder="Endereço"
-          value={address}
-          onChange={(e) => setAddress(e.target.value)}
-          className="text-base"
-        />
-      )}
+      <div className="space-y-2">
+        <div className="grid gap-2 sm:grid-cols-[1fr_auto]">
+          <Input
+            placeholder="Endereço (ex: Rua dos Jurúas, 56, Caiçaras, Patos de Minas - MG)"
+            value={address}
+            onChange={(e) => setAddress(e.target.value)}
+            className="text-base"
+          />
+          <Button
+            type="button"
+            variant="outline"
+            onClick={findAddressForNewReport}
+            disabled={geocoding || !address.trim()}
+            className="gap-2"
+          >
+            {geocoding ? (
+              <span className="h-4 w-4 rounded-full border-2 border-current/30 border-t-current animate-spin" />
+            ) : (
+              <Search className="h-4 w-4" />
+            )}
+            Encontrar
+          </Button>
+        </div>
+
+        {coords && (
+          <AddressMapPicker
+            value={coords}
+            onChange={setCoords}
+            label="Ajustar local exato do chamado"
+          />
+        )}
+      </div>
 
       <Input
         placeholder="Nome do chamado *"
@@ -4459,6 +4646,8 @@ const EmployeePanel = () => {
     </motion.div>
   );
 
+  const activeTabIndex = Math.max(tabsOrder.indexOf(tab), 0);
+
   return (
     <div className="min-h-screen overflow-x-hidden overscroll-y-contain bg-background">
       <div className="mx-auto w-full max-w-lg lg:max-w-6xl lg:px-8"></div>
@@ -4493,24 +4682,21 @@ const EmployeePanel = () => {
 
       {/* Tabs */}
       <div className="sticky top-[104px] z-[500] flex border-b border-border bg-card shadow-sm pointer-events-auto">
+        <motion.span
+          className="absolute bottom-0 left-0 h-0.5 w-1/3 bg-secondary will-change-transform"
+          animate={{ x: `${activeTabIndex * 100}%` }}
+          transition={{ type: "tween", duration: 0.22, ease: [0.22, 1, 0.36, 1] }}
+        />
         <button
           onClick={() => {
             setTab("new");
             setShowFilters(false);
             window.scrollTo(0, 0);
           }}
-          className={`relative flex-1 py-3 text-sm font-medium flex items-center justify-center gap-2 ${tab === "new" ? "text-secondary" : "text-muted-foreground"
+          className={`relative flex-1 py-3 text-sm font-medium flex items-center justify-center gap-2 transition-colors duration-150 ${tab === "new" ? "text-secondary" : "text-muted-foreground"
             }`}
         >
           <Plus className="w-4 h-4" /> Novo Chamado
-
-          {tab === "new" && (
-            <motion.span
-              layoutId="activeTab"
-              className="absolute bottom-0 left-0 right-0 h-0.5 bg-secondary"
-              transition={{ type: "spring", stiffness: 450, damping: 35 }}
-            />
-          )}
         </button>
 
         <button
@@ -4519,18 +4705,10 @@ const EmployeePanel = () => {
             setShowFilters(false);
             window.scrollTo(0, 0);
           }}
-          className={`relative flex-1 py-3 text-sm font-medium flex items-center justify-center gap-2 ${tab === "history" ? "text-secondary" : "text-muted-foreground"
+          className={`relative flex-1 py-3 text-sm font-medium flex items-center justify-center gap-2 transition-colors duration-150 ${tab === "history" ? "text-secondary" : "text-muted-foreground"
             }`}
         >
           <List className="w-4 h-4" /> Meus Reportes ({myReports.length})
-
-          {tab === "history" && (
-            <motion.span
-              layoutId="activeTab"
-              className="absolute bottom-0 left-0 right-0 h-0.5 bg-secondary"
-              transition={{ type: "spring", stiffness: 450, damping: 35 }}
-            />
-          )}
         </button>
         <button
           onClick={() => {
@@ -4538,19 +4716,11 @@ const EmployeePanel = () => {
             setShowFilters(false);
             window.scrollTo(0, 0);
           }}
-          className={`relative flex-1 py-3 text-sm font-medium flex items-center justify-center gap-2 ${tab === "reports" ? "text-secondary" : "text-muted-foreground"
+          className={`relative flex-1 py-3 text-sm font-medium flex items-center justify-center gap-2 transition-colors duration-150 ${tab === "reports" ? "text-secondary" : "text-muted-foreground"
             }`}
         >
           <List className="w-4 h-4" />
           Reportes ({allReports.length})
-
-          {tab === "reports" && (
-            <motion.span
-              layoutId="activeTab"
-              className="absolute bottom-0 left-0 right-0 h-0.5 bg-secondary"
-              transition={{ type: "spring", stiffness: 450, damping: 35 }}
-            />
-          )}
         </button>
       </div>
 
@@ -4900,17 +5070,40 @@ const EmployeePanel = () => {
                         </span>
                       </div>
 
-                      <Input
-                        value={editAddress}
-                        onChange={(e) => setEditAddress(e.target.value)}
-                        placeholder="Endereço do chamado"
-                      />
+                      <div className="grid gap-2 sm:grid-cols-[1fr_auto]">
+                        <Input
+                          value={editAddress}
+                          onChange={(e) => setEditAddress(e.target.value)}
+                          placeholder="Endereço do chamado"
+                        />
+                        <Button
+                          type="button"
+                          variant="outline"
+                          onClick={findAddressForEditReport}
+                          disabled={geocoding || !editAddress.trim()}
+                          className="gap-2"
+                        >
+                          {geocoding ? (
+                            <span className="h-4 w-4 rounded-full border-2 border-current/30 border-t-current animate-spin" />
+                          ) : (
+                            <Search className="h-4 w-4" />
+                          )}
+                          Encontrar
+                        </Button>
+                      </div>
 
                       {editCoords && (
-                        <p className="text-xs text-muted-foreground">
-                          Lat: {editCoords.lat.toFixed(6)} | Lng:{" "}
-                          {editCoords.lng.toFixed(6)}
-                        </p>
+                        <>
+                          <p className="text-xs text-muted-foreground">
+                            Lat: {editCoords.lat.toFixed(6)} | Lng:{" "}
+                            {editCoords.lng.toFixed(6)}
+                          </p>
+                          <AddressMapPicker
+                            value={editCoords}
+                            onChange={setEditCoords}
+                            label="Ajustar local exato do chamado"
+                          />
+                        </>
                       )}
                     </div>
                   ) : (

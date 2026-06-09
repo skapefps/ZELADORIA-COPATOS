@@ -1,7 +1,7 @@
 import { useState } from "react";
 import { useNavigate, useParams } from "react-router-dom";
 import { motion } from "framer-motion";
-import { KeyRound, Loader2 } from "lucide-react";
+import { CheckCircle2, KeyRound, Loader2, XCircle } from "lucide-react";
 import { BrandLogo } from "@/components/BrandLogo";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -15,6 +15,17 @@ const API_URL =
     : import.meta.env.VITE_API_URL ||
       "https://zeladoria-coopatos-api.onrender.com";
 
+const passwordRules = [
+  { label: "Mínimo de 5 caracteres", test: (value: string) => value.length >= 5 },
+  { label: "Uma letra maiúscula", test: (value: string) => /[A-Z]/.test(value) },
+  { label: "Uma letra minúscula", test: (value: string) => /[a-z]/.test(value) },
+  { label: "Um número", test: (value: string) => /\d/.test(value) },
+  {
+    label: "Um caractere especial",
+    test: (value: string) => /[^A-Za-z0-9]/.test(value),
+  },
+];
+
 const AdminResetPassword = () => {
   const { token } = useParams();
   const navigate = useNavigate();
@@ -23,14 +34,15 @@ const AdminResetPassword = () => {
   const [password, setPassword] = useState("");
   const [confirmPassword, setConfirmPassword] = useState("");
   const [loading, setLoading] = useState(false);
+  const failedPasswordRules = passwordRules.filter((rule) => !rule.test(password));
 
   const submit = async (event: React.FormEvent) => {
     event.preventDefault();
 
-    if (password.length < 6) {
+    if (failedPasswordRules.length > 0) {
       toast({
-        title: "Senha muito curta",
-        description: "Use pelo menos 6 caracteres.",
+        title: "Senha incompleta",
+        description: "Confira os requisitos de segurança antes de salvar.",
         variant: "destructive",
       });
       return;
@@ -126,6 +138,30 @@ const AdminResetPassword = () => {
               onChange={(event) => setPassword(event.target.value)}
               placeholder="Nova senha"
             />
+            <div className="rounded-2xl border border-border bg-muted/30 p-3">
+              <p className="mb-2 text-xs font-semibold text-foreground">
+                Requisitos da senha
+              </p>
+              <div className="grid gap-1.5 text-xs">
+                {passwordRules.map((rule) => {
+                  const valid = rule.test(password);
+
+                  return (
+                    <div
+                      key={rule.label}
+                      className={valid ? "flex items-center gap-2 text-green-700" : "flex items-center gap-2 text-muted-foreground"}
+                    >
+                      {valid ? (
+                        <CheckCircle2 className="h-3.5 w-3.5" />
+                      ) : (
+                        <XCircle className="h-3.5 w-3.5" />
+                      )}
+                      {rule.label}
+                    </div>
+                  );
+                })}
+              </div>
+            </div>
             <Input
               type="password"
               value={confirmPassword}

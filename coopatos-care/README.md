@@ -90,7 +90,9 @@ Também é possível criar um usuário manualmente em `Configurações > Usuári
 - Vercel: `vercel.json` mantém apenas o rewrite de SPA; o domínio em produção responde em `www.zeladoriacoopatos.com.br`, e o domínio raiz pode ser definido como primário nas configurações do Vercel se a Coopatos quiser remover o `www`.
 - Admin: filtros de chamados por categoria, status, funcionário atribuído, período e busca textual.
 - Admin: mapa de chamados reconectado para pins e mapa de calor com base nos chamados filtrados, com z-index ajustado para não cobrir modais.
+- Admin: mapa com alternância entre ruas/satélite, botões de zoom, enquadrar todos os pontos e atalhos para Street View/Google Maps.
 - Admin: cadastro de funcionário com CPF e telefone mascarados, limite de caracteres, validações de CPF/e-mail/telefone, e-mail obrigatório e envio assíncrono da validação logo após criar/alterar e-mail.
+- Admin: redefinição de senha com regra forte mínima: 5 caracteres, maiúscula, minúscula, número e caractere especial.
 - Admin: exportações CSV para planilhas de funcionários, chamados e auditoria.
 - Admin: auditoria inicial de cadastro/edição/desativação de funcionários, envio de validação e criação/edição de chamados.
 - Admin: aba de indicadores com filtros próprios por categoria, status, pessoa, período e busca/local, seleção de quais cards/gráficos ficam visíveis, cards clicáveis para abrir chamados filtrados sem alterar os filtros dos indicadores, visão executiva, evolução mensal, status, prioridade, categorias, produtividade individual, eficiência por pessoa, backlog por status, produtividade por departamento, recorrência de locais, críticos pendentes e exportação PDF configurável.
@@ -103,6 +105,7 @@ Também é possível criar um usuário manualmente em `Configurações > Usuári
 - Admin: aba Mapa separada com filtros próprios, pins/heatmap e atalho para criar chamado.
 - Admin: Personalização whitelabel com upload de logo PNG, prévia, persistência no backend, aplicação no login/funcionário/admin/e-mails, restauração do preset original e edição ampliada de cores de identidade, interface, texto, cards, bordas, hover e ações.
 - Sessão: inatividade centralizada em 15 minutos, aviso específico no login administrativo e comparação de token por aba usando `sessionStorage` para impedir que uma nova sessão no mesmo navegador mantenha a aba antiga ativa.
+- API: CORS configurável por domínio, headers básicos de segurança e normalização centralizada de mídias antes da gravação.
 - Admin: exportação de chamados em CSV e PDF com personalização de colunas e respeitando os filtros atuais de categoria, pessoa, status, período e local/busca; funcionários e auditoria também contam com relatório PDF.
 - Admin: auditoria passa a exibir o responsável pela alteração, resolvendo ids para nome/e-mail quando possível e registrando automaticamente o ator das rotas administrativas.
 - Admin: auditoria com filtros por texto, entidade, responsável e intervalo de datas; exportação CSV/PDF respeita os filtros aplicados e alterações de funcionário registram campos efetivamente modificados, como foto de perfil.
@@ -142,6 +145,7 @@ MAIL_FROM=
 ADMIN_SUPPORT_EMAIL=
 PUBLIC_APP_URL=https://www.zeladoriacoopatos.com.br
 PUBLIC_API_URL=https://zeladoria-coopatos-api.onrender.com
+CORS_ORIGINS=https://www.zeladoriacoopatos.com.br,https://zeladoria-coopatos.vercel.app
 ```
 
 Na Vercel/frontend:
@@ -163,6 +167,10 @@ Pontos de atenção:
 - Confirmar se `DATABASE_URL` local e do Render apontam para o banco correto.
 - Manter banco antigo por alguns dias como backup quando houver migração.
 - Rodar deploy limpo no Render após troca de variáveis importantes.
+
+## Busca de Endereço
+
+A busca automática de endereço usa a rota `GET /geocode` com OpenStreetMap/Nominatim, sem custo obrigatório. Como bases gratuitas podem não ter todos os números de imóveis, o formulário também permite ajustar o marcador no mapa e salvar latitude/longitude exatas para o chamado.
 
 ## Fluxos Importantes
 

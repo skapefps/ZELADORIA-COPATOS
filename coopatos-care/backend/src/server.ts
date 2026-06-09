@@ -7,7 +7,46 @@ import { router } from "./routes/index.js";
 
 const app = express();
 
-app.use(cors());
+const configuredOrigins = [
+  process.env.PUBLIC_APP_URL,
+  process.env.FRONTEND_URL,
+  process.env.CORS_ORIGINS,
+  "http://localhost:5173",
+  "http://localhost:8080",
+  "http://127.0.0.1:5173",
+  "http://127.0.0.1:8080",
+]
+  .filter(Boolean)
+  .flatMap((origin) => String(origin).split(","))
+  .map((origin) => origin.trim().replace(/\/$/, ""))
+  .filter(Boolean);
+
+const corsOptions: cors.CorsOptions = {
+  origin(origin, callback) {
+    if (!origin) {
+      callback(null, true);
+      return;
+    }
+
+    callback(null, configuredOrigins.includes(origin.replace(/\/$/, "")));
+  },
+  methods: ["GET", "POST", "PUT", "PATCH", "DELETE", "OPTIONS"],
+  allowedHeaders: [
+    "Content-Type",
+    "Authorization",
+    "X-Admin-Id",
+    "X-Admin-Session-Token",
+  ],
+};
+
+app.use(cors(corsOptions));
+app.disable("x-powered-by");
+app.use((_req, res, next) => {
+  res.setHeader("X-Content-Type-Options", "nosniff");
+  res.setHeader("X-Frame-Options", "DENY");
+  res.setHeader("Referrer-Policy", "strict-origin-when-cross-origin");
+  next();
+});
 
 app.use(express.json({ limit: "50mb" }));
 app.use(express.urlencoded({ extended: true, limit: "50mb" }));
@@ -17,10 +56,7 @@ const server = http.createServer(app);
 export const onlineEmployees = new Map<number, string>();
 
 export const io = new Server(server, {
-  cors: {
-    origin: "*",
-    methods: ["GET", "POST", "PATCH", "DELETE"],
-  },
+  cors: corsOptions,
 });
 
 const emitPresenceUpdate = () => {
@@ -50,12 +86,12 @@ io.on("connection", (socket) => {
   });
 
   socket.on("join-private-conversation", (conversationId) => {
-  socket.join(`private-conversation-${conversationId}`);
-});
+    socket.join(`private-conversation-${conversationId}`);
+  });
 
-socket.on("leave-private-conversation", (conversationId) => {
-  socket.leave(`private-conversation-${conversationId}`);
-});
+  socket.on("leave-private-conversation", (conversationId) => {
+    socket.leave(`private-conversation-${conversationId}`);
+  });
 
   socket.on("disconnect", () => {
     if (employeeId) {
