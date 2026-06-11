@@ -3,7 +3,7 @@ import { useNavigate } from "react-router-dom";
 import { io } from "socket.io-client";
 import EmojiPicker, { Theme } from "emoji-picker-react";
 import { useAuth } from "@/contexts/AuthContext";
-import { motion, AnimatePresence, useMotionValue, animate } from "framer-motion";
+import { motion, AnimatePresence } from "framer-motion";
 import {
   Camera,
   MapPin,
@@ -532,16 +532,8 @@ const EmployeePanel = () => {
   const socketRef = useRef<ReturnType<typeof io> | null>(null);
   const [selectedFiles, setSelectedFiles] = useState<File[]>([]);
   const touchStartX = useRef(0);
-  const tabsOrder: Array<"new" | "history" | "reports"> = [
-    "new",
-    "history",
-    "reports",
-  ];
-
-  const tabX = useMotionValue(0);
-  const tabsContainerRef = useRef<HTMLDivElement | null>(null);
-  const [tabsContainerWidth, setTabsContainerWidth] = useState(0);
-  const [isMobileTabs, setIsMobileTabs] = useState(false);
+  const tabsOrder: Array<"new" | "history" | "reports"> = ["new", "history", "reports"];
+  const contentScrollRef = useRef<HTMLDivElement | null>(null);
   const [readMessagesByReport, setReadMessagesByReport] = useState<Record<number, number>>({});
   const [unreadCounts, setUnreadCounts] = useState<Record<number, number>>({});
   const [address, setAddress] = useState("");
@@ -690,6 +682,11 @@ const EmployeePanel = () => {
   const [statusFilter, setStatusFilter] = useState("all");
   const [categoryFilter, setCategoryFilter] = useState("all");
 
+  const scrollPanelToTop = () => {
+    contentScrollRef.current?.scrollTo({ top: 0, behavior: "smooth" });
+    window.scrollTo({ top: 0, behavior: "smooth" });
+  };
+
   const refreshReports = async () => {
     try {
       const employee = JSON.parse(localStorage.getItem("employee") || "{}");
@@ -750,66 +747,6 @@ const EmployeePanel = () => {
   useEffect(() => {
     showMessagesModalRef.current = showMessagesModal;
   }, [showMessagesModal]);
-  useEffect(() => {
-    const updateWidth = () => {
-      setIsMobileTabs(window.innerWidth < 768);
-
-      if (tabsContainerRef.current) {
-        setTabsContainerWidth(tabsContainerRef.current.offsetWidth);
-      }
-    };
-
-    updateWidth();
-
-    window.addEventListener("resize", updateWidth);
-
-    return () => {
-      window.removeEventListener("resize", updateWidth);
-    };
-  }, []);
-
-  useEffect(() => {
-    const currentIndex = tabsOrder.indexOf(tab);
-
-    if (!tabsContainerWidth) return;
-
-    animate(tabX, -currentIndex * tabsContainerWidth, {
-      type: "spring",
-      stiffness: 280,
-      damping: 32,
-    });
-  }, [tab, tabsContainerWidth]);
-
-  const handleTabDragEnd = (_: unknown, info: { offset: { x: number } }) => {
-    if (!tabsContainerWidth) return;
-
-    const currentIndex = tabsOrder.indexOf(tab);
-    const dragDistance = info.offset.x;
-    const limit = tabsContainerWidth * 0.18;
-
-    if (dragDistance < -limit) {
-      const nextIndex = Math.min(currentIndex + 1, tabsOrder.length - 1);
-      setTab(tabsOrder[nextIndex]);
-      setShowFilters(false);
-      window.scrollTo(0, 0);
-      return;
-    }
-
-    if (dragDistance > limit) {
-      const previousIndex = Math.max(currentIndex - 1, 0);
-      setTab(tabsOrder[previousIndex]);
-      setShowFilters(false);
-      window.scrollTo(0, 0);
-      return;
-    }
-
-    animate(tabX, -currentIndex * tabsContainerWidth, {
-      type: "spring",
-      stiffness: 280,
-      damping: 32,
-    });
-  };
-
   // =========================
   // Load categories and reports
   // =========================
@@ -4249,7 +4186,7 @@ const EmployeePanel = () => {
       animate={{ opacity: 1 }}
       exit={{ opacity: 0 }}
       transition={{ duration: 0.15 }}
-      className="space-y-3 lg:grid lg:grid-cols-3 lg:gap-4 lg:space-y-0"
+      className="space-y-4 pb-8 touch-pan-y lg:grid lg:grid-cols-3 lg:items-start lg:gap-4 lg:space-y-0"
     >
       <div className="lg:col-span-3 mb-3 flex justify-end">
         <Button
@@ -4344,7 +4281,7 @@ const EmployeePanel = () => {
         filteredReports.map((report) => (
           <div
             key={report.id}
-            className="relative bg-card rounded-lg p-4 border border-border"
+            className="relative flex h-full flex-col rounded-lg border border-border bg-card p-4"
           >
             <div className="mb-3 h-32 rounded-lg overflow-hidden border border-border bg-muted/30 flex items-center justify-center">
               {report.images?.[0]?.imageUrl ? (
@@ -4374,7 +4311,7 @@ const EmployeePanel = () => {
               )}
             </div>
 
-            <div className="flex items-start justify-between gap-3 mb-3">
+            <div className="mb-3 flex flex-1 items-start justify-between gap-3">
               <div className="min-w-0 space-y-1.5">
                 <span className="text-xs text-muted-foreground">
                   #{report.id}
@@ -4425,7 +4362,7 @@ const EmployeePanel = () => {
             <Button
               variant="outline"
               size="sm"
-              className="mt-3 w-full"
+              className="mt-auto w-full"
               onClick={() => openReportDetails(report)}
             >
               Ver detalhes
@@ -4454,7 +4391,7 @@ const EmployeePanel = () => {
       animate={{ opacity: 1 }}
       exit={{ opacity: 0 }}
       transition={{ duration: 0.15 }}
-      className="space-y-3 lg:grid lg:grid-cols-3 lg:gap-4 lg:space-y-0"
+      className="space-y-4 pb-8 touch-pan-y lg:grid lg:grid-cols-3 lg:items-start lg:gap-4 lg:space-y-0"
     >
       <div className="lg:col-span-3 mb-3 flex justify-end">
         <Button
@@ -4548,7 +4485,7 @@ const EmployeePanel = () => {
         filteredAllReports.map((report) => (
           <div
             key={report.id}
-            className="bg-card rounded-lg p-4 border border-border"
+            className="flex h-full flex-col rounded-lg border border-border bg-card p-4"
           >
             <div className="mb-3 h-32 rounded-lg overflow-hidden border border-border bg-muted/30 flex items-center justify-center">
               {report.images?.[0]?.imageUrl ? (
@@ -4578,7 +4515,7 @@ const EmployeePanel = () => {
               )}
             </div>
 
-            <div className="flex items-start justify-between gap-3 mb-3">
+            <div className="mb-3 flex flex-1 items-start justify-between gap-3">
               <div className="min-w-0 space-y-1.5">
                 <span className="text-xs text-muted-foreground">
                   #{report.id}
@@ -4635,7 +4572,7 @@ const EmployeePanel = () => {
             <Button
               variant="outline"
               size="sm"
-              className="mt-3 w-full"
+              className="mt-auto w-full"
               onClick={() => openReportDetails(report)}
             >
               Ver detalhes
@@ -4649,10 +4586,10 @@ const EmployeePanel = () => {
   const activeTabIndex = Math.max(tabsOrder.indexOf(tab), 0);
 
   return (
-    <div className="min-h-screen overflow-x-hidden overscroll-y-contain bg-background">
+    <div className="flex h-screen max-h-screen flex-col overflow-hidden bg-background supports-[height:100dvh]:h-dvh supports-[height:100dvh]:max-h-dvh">
       <div className="mx-auto w-full max-w-lg lg:max-w-6xl lg:px-8"></div>
       {/* Header */}
-      <header className="sticky top-0 z-[600] gradient-primary px-4 py-3 flex items-center justify-between">
+      <header className="z-[600] shrink-0 gradient-primary px-4 py-3 flex items-center justify-between">
         <div className="flex items-center gap-2">
           <BrandLogo
             imageClassName="w-20 h-20 rounded-xl object-contain"
@@ -4681,7 +4618,7 @@ const EmployeePanel = () => {
       </header>
 
       {/* Tabs */}
-      <div className="sticky top-[104px] z-[500] flex border-b border-border bg-card shadow-sm pointer-events-auto">
+      <div className="z-[500] flex shrink-0 border-b border-border bg-card shadow-sm pointer-events-auto">
         <motion.span
           className="absolute bottom-0 left-0 h-0.5 w-1/3 bg-secondary will-change-transform"
           animate={{ x: `${activeTabIndex * 100}%` }}
@@ -4691,7 +4628,7 @@ const EmployeePanel = () => {
           onClick={() => {
             setTab("new");
             setShowFilters(false);
-            window.scrollTo(0, 0);
+            scrollPanelToTop();
           }}
           className={`relative flex-1 py-3 text-sm font-medium flex items-center justify-center gap-2 transition-colors duration-150 ${tab === "new" ? "text-secondary" : "text-muted-foreground"
             }`}
@@ -4703,7 +4640,7 @@ const EmployeePanel = () => {
           onClick={() => {
             setTab("history");
             setShowFilters(false);
-            window.scrollTo(0, 0);
+            scrollPanelToTop();
           }}
           className={`relative flex-1 py-3 text-sm font-medium flex items-center justify-center gap-2 transition-colors duration-150 ${tab === "history" ? "text-secondary" : "text-muted-foreground"
             }`}
@@ -4714,7 +4651,7 @@ const EmployeePanel = () => {
           onClick={() => {
             setTab("reports");
             setShowFilters(false);
-            window.scrollTo(0, 0);
+            scrollPanelToTop();
           }}
           className={`relative flex-1 py-3 text-sm font-medium flex items-center justify-center gap-2 transition-colors duration-150 ${tab === "reports" ? "text-secondary" : "text-muted-foreground"
             }`}
@@ -4726,46 +4663,18 @@ const EmployeePanel = () => {
 
       {/* Content */}
       <div
-        ref={tabsContainerRef}
-        className="min-h-[calc(100vh-152px)] overflow-visible overscroll-y-contain"
+        ref={contentScrollRef}
+        className="min-h-0 flex-1 overflow-y-auto overflow-x-hidden overscroll-contain [-webkit-overflow-scrolling:touch]"
       >
-        {isMobileTabs ? (
-          <motion.div
-            className="flex w-full touch-pan-y overscroll-y-contain"
-            style={{ x: tabX }}
-            drag="x"
-            dragDirectionLock
-            dragElastic={0.05}
-            dragMomentum={false}
-            dragConstraints={{
-              left: -tabsContainerWidth * 2,
-              right: 0,
-            }}
-            onDragEnd={handleTabDragEnd}
-          >
-            <div className="w-full min-w-full shrink-0 p-4 pb-28 overscroll-y-contain">
-              {renderNewTab()}
-            </div>
-
-            <div className="w-full min-w-full shrink-0 p-4 pb-28 overscroll-y-contain">
-              {renderHistoryTab()}
-            </div>
-
-            <div className="w-full min-w-full shrink-0 p-4 pb-28 overscroll-y-contain">
-              {renderReportsTab()}
-            </div>
-          </motion.div>
-        ) : (
-          <div className="p-4 pb-28 lg:py-8">
-            <AnimatePresence mode="wait" initial={false}>
-              {tab === "new"
-                ? renderNewTab()
-                : tab === "history"
-                  ? renderHistoryTab()
-                  : renderReportsTab()}
-            </AnimatePresence>
-          </div>
-        )}
+        <div className="p-4 pb-44 lg:py-8 lg:pb-32">
+          <AnimatePresence mode="wait" initial={false}>
+            {tab === "new"
+              ? renderNewTab()
+              : tab === "history"
+                ? renderHistoryTab()
+                : renderReportsTab()}
+          </AnimatePresence>
+        </div>
 
         <AnimatePresence>
           {selectedReport && (
