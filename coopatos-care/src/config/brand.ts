@@ -152,8 +152,14 @@ export const saveBrandPreset = (preset: BrandPreset) => {
 };
 
 export const syncBrandPresetFromServer = async () => {
+  const controller = new AbortController();
+  const timeoutId = window.setTimeout(() => controller.abort(), 3500);
+
   try {
-    const response = await fetch(`${API_URL}/brand-settings`);
+    const response = await fetch(`${API_URL}/brand-settings`, {
+      cache: "no-store",
+      signal: controller.signal,
+    });
     const data = await response.json();
 
     if (!response.ok || !data?.preset) return getStoredBrandPreset();
@@ -161,6 +167,8 @@ export const syncBrandPresetFromServer = async () => {
     return saveBrandPreset(mergeBrandPreset(data.preset));
   } catch {
     return getStoredBrandPreset();
+  } finally {
+    window.clearTimeout(timeoutId);
   }
 };
 

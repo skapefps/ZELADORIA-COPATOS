@@ -7,7 +7,15 @@ import { router } from "./routes/index.js";
 
 const app = express();
 
+const productionOrigins = [
+  "https://www.zeladoriacoopatos.com.br",
+  "https://zeladoriacoopatos.com.br",
+  "https://zeladoria-coopatos.vercel.app",
+  "https://zeladoria-coopatos-app.vercel.app",
+];
+
 const configuredOrigins = [
+  ...productionOrigins,
   process.env.PUBLIC_APP_URL,
   process.env.FRONTEND_URL,
   process.env.CORS_ORIGINS,
@@ -21,6 +29,15 @@ const configuredOrigins = [
   .map((origin) => origin.trim().replace(/\/$/, ""))
   .filter(Boolean);
 
+const isAllowedOrigin = (origin: string) => {
+  const normalizedOrigin = origin.replace(/\/$/, "");
+
+  return (
+    configuredOrigins.includes(normalizedOrigin) ||
+    /^https:\/\/[a-z0-9-]+(?:-[a-z0-9-]+)*\.vercel\.app$/i.test(normalizedOrigin)
+  );
+};
+
 const corsOptions: cors.CorsOptions = {
   origin(origin, callback) {
     if (!origin) {
@@ -28,7 +45,7 @@ const corsOptions: cors.CorsOptions = {
       return;
     }
 
-    callback(null, configuredOrigins.includes(origin.replace(/\/$/, "")));
+    callback(null, isAllowedOrigin(origin));
   },
   methods: ["GET", "POST", "PUT", "PATCH", "DELETE", "OPTIONS"],
   allowedHeaders: [
