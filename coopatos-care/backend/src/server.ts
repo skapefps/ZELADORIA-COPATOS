@@ -29,6 +29,8 @@ const configuredOrigins = [
   .map((origin) => origin.trim().replace(/\/$/, ""))
   .filter(Boolean);
 
+//teste//
+
 const isAllowedOrigin = (origin: string) => {
   const normalizedOrigin = origin.replace(/\/$/, "");
 
