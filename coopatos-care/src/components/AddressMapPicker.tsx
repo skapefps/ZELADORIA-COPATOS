@@ -10,6 +10,7 @@ type AddressMapPickerProps = {
   value: Coordinates;
   onChange: (coordinates: Coordinates) => void;
   label?: string;
+  onAddressResolved?: (address: string) => void;
 };
 
 type LeafletLatLng = {
@@ -60,16 +61,58 @@ export const AddressMapPicker = ({
   value,
   onChange,
   label = "Ajuste o ponto exato",
+  onAddressResolved,
 }: AddressMapPickerProps) => {
   const containerRef = useRef<HTMLDivElement>(null);
   const mapRef = useRef<PickerLeafletMap | null>(null);
   const markerRef = useRef<PickerLeafletMarker | null>(null);
   const onChangeRef = useRef(onChange);
+  const onAddressResolvedRef = useRef(onAddressResolved);
   const initialValueRef = useRef(value);
 
   useEffect(() => {
     onChangeRef.current = onChange;
   }, [onChange]);
+
+  useEffect(() => {
+    onAddressResolvedRef.current = onAddressResolved;
+  }, [onAddressResolved]);
+
+  const resolveAddressFromPin = async (coordinates: Coordinates) => {
+    if (!onAddressResolvedRef.current) return;
+
+    try {
+      const response = await fetch(
+        `https://nominatim.openstreetmap.org/reverse?format=json&lat=${coordinates.lat}&lon=${coordinates.lng}&addressdetails=1`
+      );
+      const data = await response.json();
+      const address = data.address || {};
+      const road = address.road || address.pedestrian || address.residential || "";
+      const houseNumber = address.house_number || "";
+      const suburb = address.suburb || address.neighbourhood || "";
+      const city = address.city || address.town || address.village || "";
+      const state = address.state || "";
+      const postcode = address.postcode || "";
+      const displayAddress =
+        data.display_name ||
+        [
+          [road, houseNumber].filter(Boolean).join(", "),
+          suburb,
+          city,
+          state,
+          postcode,
+          "Brasil",
+        ]
+          .filter(Boolean)
+          .join(", ");
+
+      if (displayAddress) {
+        onAddressResolvedRef.current(displayAddress);
+      }
+    } catch {
+      // O ajuste do ponto continua funcionando mesmo se o provedor não responder.
+    }
+  };
 
   useEffect(() => {
     const L = getLeaflet();
@@ -101,12 +144,16 @@ export const AddressMapPicker = ({
 
     marker.on("dragend", () => {
       const next = marker.getLatLng();
-      onChangeRef.current({ lat: next.lat, lng: next.lng });
+      const coordinates = { lat: next.lat, lng: next.lng };
+      onChangeRef.current(coordinates);
+      resolveAddressFromPin(coordinates);
     });
 
     map.on("click", (event) => {
-      marker.setLatLng([event.latlng.lat, event.latlng.lng]);
-      onChangeRef.current({ lat: event.latlng.lat, lng: event.latlng.lng });
+      const coordinates = { lat: event.latlng.lat, lng: event.latlng.lng };
+      marker.setLatLng([coordinates.lat, coordinates.lng]);
+      onChangeRef.current(coordinates);
+      resolveAddressFromPin(coordinates);
     });
 
     window.setTimeout(() => map.invalidateSize(), 150);

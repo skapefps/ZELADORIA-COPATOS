@@ -649,6 +649,7 @@ const EmployeePanel = () => {
   const audioTimerRef = useRef<number | null>(null);
   const { matricula, logout } = useAuth();
   const [selectedReport, setSelectedReport] = useState<Report | null>(null);
+  const [showReportDetailsModal, setShowReportDetailsModal] = useState(false);
   const [isEditing, setIsEditing] = useState(false);
   const [editCategoryId, setEditCategoryId] = useState("");
   const [editPriority, setEditPriority] = useState("MEDIA");
@@ -702,7 +703,7 @@ const EmployeePanel = () => {
   const [statusFilter, setStatusFilter] = useState("all");
   const [categoryFilter, setCategoryFilter] = useState("all");
   const hasBlockingOverlay = Boolean(
-    selectedReport ||
+    showReportDetailsModal ||
     showMessagesModal ||
     showPrivateChatModal ||
     showParticipantModal ||
@@ -2278,6 +2279,7 @@ const EmployeePanel = () => {
 
       if (report) {
         openReportDetails(report);
+        setShowReportDetailsModal(false);
         setShowMessagesModal(true);
         setNewMessagesCount(0);
         setIsNearBottom(true);
@@ -3010,8 +3012,7 @@ const EmployeePanel = () => {
 
     if (files.length === 0) return;
 
-    setSelectedFiles(files);
-    setCurrentImageIndex(0);
+    const startIndex = selectedFiles.length;
 
     const previews: string[] = [];
 
@@ -3022,11 +3023,28 @@ const EmployeePanel = () => {
         previews.push(reader.result as string);
 
         if (previews.length === files.length) {
-          setImagePreviews(previews);
+          setSelectedFiles((prev) => [...prev, ...files]);
+          setImagePreviews((prev) => [...prev, ...previews]);
+          setCurrentImageIndex(startIndex);
         }
       };
 
       reader.readAsDataURL(file);
+    });
+
+    e.target.value = "";
+  };
+
+  const removeSelectedMediaAt = (index: number) => {
+    setSelectedFiles((prev) => prev.filter((_, fileIndex) => fileIndex !== index));
+    setImagePreviews((prev) => prev.filter((_, fileIndex) => fileIndex !== index));
+    setCurrentImageIndex((prev) => {
+      const nextLength = Math.max(imagePreviews.length - 1, 0);
+
+      if (nextLength === 0) return 0;
+      if (prev >= nextLength) return nextLength - 1;
+
+      return prev;
     });
   };
 
@@ -3582,6 +3600,7 @@ const EmployeePanel = () => {
     setEditPriority(report.priority || "MEDIA");
     setEditDescription(report.description || "");
     setEditReferencePoint(report.referencePoint || "");
+    setShowReportDetailsModal(true);
     loadMessages(report.id);
     loadReportNotes(report.id);
   };
@@ -4066,14 +4085,19 @@ const EmployeePanel = () => {
 
             <button
               type="button"
-              onClick={() => {
-                setImagePreviews([]);
-                setSelectedFiles([]);
-                setCurrentImageIndex(0);
-              }}
+              onClick={() => removeSelectedMediaAt(currentImageIndex)}
               className="absolute top-2 right-2 bg-black/60 text-white rounded-full w-7 h-7 flex items-center justify-center text-xs"
+              title="Remover mídia atual"
             >
               ✕
+            </button>
+
+            <button
+              type="button"
+              onClick={() => fileInputRef.current?.click()}
+              className="absolute bottom-2 right-2 rounded-full bg-secondary px-3 py-1.5 text-xs font-semibold text-white shadow-lg"
+            >
+              + Adicionar
             </button>
           </div>
         ) : (
@@ -4185,6 +4209,7 @@ const EmployeePanel = () => {
           <AddressMapPicker
             value={coords}
             onChange={setCoords}
+            onAddressResolved={setAddress}
             label="Ajustar local exato do chamado"
           />
         )}
@@ -4724,17 +4749,17 @@ const EmployeePanel = () => {
 
         {typeof document !== "undefined" && createPortal(
         <AnimatePresence>
-          {selectedReport && (
+          {showReportDetailsModal && selectedReport && (
             <motion.div
               className="fixed inset-0 z-[50000] flex items-end justify-center bg-black/50 p-0 sm:items-center sm:p-4"
-              onClick={() => setSelectedReport(null)}
+              onClick={() => setShowReportDetailsModal(false)}
               initial={{ opacity: 0 }}
               animate={{ opacity: 1 }}
               exit={{ opacity: 0 }}
             >
               <button
                 type="button"
-                onClick={() => setSelectedReport(null)}
+                onClick={() => setShowReportDetailsModal(false)}
                 className="fixed right-3 z-[50003] flex h-11 w-11 items-center justify-center rounded-full bg-red-50 text-red-600 shadow-xl ring-1 ring-red-100 transition-colors hover:bg-red-100 sm:hidden"
                 style={{ top: "max(0.75rem, env(safe-area-inset-top))" }}
                 aria-label="Fechar detalhes do chamado"
@@ -4760,7 +4785,7 @@ const EmployeePanel = () => {
 
                   <button
                     type="button"
-                    onClick={() => setSelectedReport(null)}
+                    onClick={() => setShowReportDetailsModal(false)}
                     className="flex h-10 w-10 shrink-0 items-center justify-center rounded-full bg-red-50 text-red-600 transition-colors hover:bg-red-100"
                     aria-label="Fechar detalhes do chamado"
                   >
@@ -5073,6 +5098,7 @@ const EmployeePanel = () => {
                           <AddressMapPicker
                             value={editCoords}
                             onChange={setEditCoords}
+                            onAddressResolved={setEditAddress}
                             label="Ajustar local exato do chamado"
                           />
                         </>
@@ -5429,6 +5455,7 @@ const EmployeePanel = () => {
                   <button
                     type="button"
                     onClick={async () => {
+                      setShowReportDetailsModal(false);
                       setShowMessagesModal(true);
                       setNewMessagesCount(0);
                       setIsNearBottom(true);
@@ -5570,6 +5597,7 @@ const EmployeePanel = () => {
           </div>
         )}
 
+        {typeof document !== "undefined" && createPortal(
         <AnimatePresence>
           {showMessagesModal && selectedReport && (
             <motion.div
@@ -5945,136 +5973,9 @@ const EmployeePanel = () => {
               </motion.div>
             </motion.div>
           )}
-        </AnimatePresence>
-
-        <AnimatePresence>
-          {expandedMedia && (
-            <motion.div
-              className="fixed inset-0 z-[70000] bg-black/90 flex items-center justify-center p-4"
-              initial={{ opacity: 0 }}
-              animate={{ opacity: 1 }}
-              exit={{ opacity: 0 }}
-            >
-              <button
-                type="button"
-                onClick={() => setExpandedMedia(null)}
-                className="absolute right-4 top-4 z-10 flex h-10 w-10 items-center justify-center rounded-full bg-white/10 text-white hover:bg-white/20"
-              >
-                <X className="h-6 w-6" />
-              </button>
-              <button
-                type="button"
-                onClick={(e) => {
-                  e.stopPropagation();
-                  const currentMedia = expandedMedia.items[expandedMedia.index];
-
-                  if (currentMedia?.mediaUrl) {
-                    downloadMedia(currentMedia.mediaUrl);
-                  }
-                }}
-                className="absolute top-4 right-16 bg-black/60 hover:bg-black/80 text-white rounded-full px-4 h-10 flex items-center justify-center text-sm"
-              >
-                Baixar
-              </button>
-
-              {expandedMedia.items.length > 1 && (
-                <>
-                  <button
-                    type="button"
-                    onClick={() =>
-                      setExpandedMedia((prev) =>
-                        prev
-                          ? {
-                            ...prev,
-                            index:
-                              prev.index === 0
-                                ? prev.items.length - 1
-                                : prev.index - 1,
-                          }
-                          : prev
-                      )
-                    }
-                    className="absolute left-4 top-1/2 z-10 flex h-11 w-11 -translate-y-1/2 items-center justify-center rounded-full bg-white/10 text-3xl text-white hover:bg-white/20"
-                  >
-                    ‹
-                  </button>
-
-                  <button
-                    type="button"
-                    onClick={() =>
-                      setExpandedMedia((prev) =>
-                        prev
-                          ? {
-                            ...prev,
-                            index:
-                              prev.index === prev.items.length - 1
-                                ? 0
-                                : prev.index + 1,
-                          }
-                          : prev
-                      )
-                    }
-                    className="
-absolute
-right-2
-sm:right-4
-top-1/2
--ztranslate-y-1/2
-z-[10001]
-bg-black/70
-text-white
-rounded-full
-w-12
-h-12
-sm:w-10
-sm:h-10
-flex
-items-center
-justify-center
-text-3xl
-touch-manipulation
-"
-                  >
-                    ›
-                  </button>
-
-                  <div className="absolute bottom-5 left-1/2 -translate-x-1/2 rounded-full bg-white/10 px-3 py-1 text-sm text-white">
-                    {expandedMedia.index + 1} / {expandedMedia.items.length}
-                  </div>
-                </>
-              )}
-
-              {expandedMedia.items[expandedMedia.index]?.resourceType === "audio" ? (
-                <div
-                  className="w-full max-w-md rounded-2xl bg-white p-4"
-                  onClick={(e) => e.stopPropagation()}
-                >
-                  <audio
-                    src={expandedMedia.items[expandedMedia.index]?.mediaUrl}
-                    controls
-                    autoPlay
-                    className="w-[260px] max-w-full block"
-                  />
-                </div>
-              ) : expandedMedia.items[expandedMedia.index]?.resourceType === "video" ? (
-                <video
-                  src={expandedMedia.items[expandedMedia.index]?.mediaUrl}
-                  controls
-                  autoPlay
-                  className="max-h-[85vh] max-w-full rounded-xl bg-black"
-                  onClick={(e) => e.stopPropagation()}
-                />
-              ) : (
-                <img
-                  src={expandedMedia.items[expandedMedia.index]?.mediaUrl}
-                  alt="Mídia ampliada"
-                  className="max-h-[85vh] max-w-full rounded-xl object-contain"
-                  onClick={(e) => e.stopPropagation()}
-                />
-              )}
-            </motion.div>
-          )}
-        </AnimatePresence>
+        </AnimatePresence>,
+        document.body
+        )}
 
         <AnimatePresence>
           {showChatMediaModal && (
@@ -6312,10 +6213,17 @@ touch-manipulation
                         const context = getNotificationContext(notification);
 
                         return (
-                          <button
+                          <div
                             key={notification.id}
-                            type="button"
+                            role="button"
+                            tabIndex={0}
                             onClick={() => openNotification(notification)}
+                            onKeyDown={(event) => {
+                              if (event.key === "Enter" || event.key === " ") {
+                                event.preventDefault();
+                                openNotification(notification);
+                              }
+                            }}
                             className={`group w-full rounded-2xl border p-3 text-left transition hover:-translate-y-0.5 hover:shadow-md ${notification.readAt
                               ? "border-border bg-muted/30"
                               : "border-secondary/40 bg-secondary/10"
@@ -6372,7 +6280,7 @@ touch-manipulation
                                 </div>
                               </div>
                             </div>
-                          </button>
+                          </div>
                         );
                       })}
                     </div>
@@ -7262,136 +7170,161 @@ touch-manipulation
           </div>
         )}
 
-        {expandedMedia && (
-          <div
-            className="fixed inset-0 z-[70000] bg-black/90 flex items-center justify-center p-4"
-            onClick={() => setExpandedMedia(null)}
-            onTouchStart={(e) => {
-              touchStartX.current = e.changedTouches[0].clientX;
-            }}
-            onTouchEnd={(e) => {
-              const endX = e.changedTouches[0].clientX;
-              const diff = touchStartX.current - endX;
-
-              if (!expandedMedia || expandedMedia.items.length <= 1) return;
-
-              if (diff > 50) {
-                setExpandedMedia((prev) =>
-                  prev
-                    ? {
-                      ...prev,
-                      index:
-                        prev.index === prev.items.length - 1 ? 0 : prev.index + 1,
-                    }
-                    : prev
-                );
-              }
-
-              if (diff < -50) {
-                setExpandedMedia((prev) =>
-                  prev
-                    ? {
-                      ...prev,
-                      index:
-                        prev.index === 0 ? prev.items.length - 1 : prev.index - 1,
-                    }
-                    : prev
-                );
-              }
-            }}
-          >
-
-            {expandedMedia.items.length > 1 && (
-              <>
-                <button
-                  type="button"
-                  onClick={(e) => {
-                    e.stopPropagation();
-
-                    setExpandedMedia((prev) =>
-                      prev
-                        ? {
-                          ...prev,
-                          index:
-                            prev.index === 0
-                              ? prev.items.length - 1
-                              : prev.index - 1,
-                        }
-                        : prev
-                    );
+        {typeof document !== "undefined" &&
+          createPortal(
+            <AnimatePresence>
+              {expandedMedia && (
+                <motion.div
+                  className="fixed inset-0 z-[70000] flex items-center justify-center bg-black/90 p-4"
+                  initial={{ opacity: 0 }}
+                  animate={{ opacity: 1 }}
+                  exit={{ opacity: 0 }}
+                  onClick={() => setExpandedMedia(null)}
+                  onTouchStart={(e) => {
+                    touchStartX.current = e.changedTouches[0].clientX;
                   }}
-                  className="
-absolute
-left-2
-sm:left-4
-top-1/2
--ztranslate-y-1/2
-z-[10001]
-bg-black/70
-text-white
-rounded-full
-w-12
-h-12
-sm:w-10
-sm:h-10
-flex
-items-center
-justify-center
-text-3xl
-touch-manipulation
-"
-                >
-                  ‹
-                </button>
+                  onTouchEnd={(e) => {
+                    const endX = e.changedTouches[0].clientX;
+                    const diff = touchStartX.current - endX;
 
-                <button
-                  type="button"
-                  onClick={(e) => {
-                    e.stopPropagation();
+                    if (!expandedMedia || expandedMedia.items.length <= 1) return;
 
-                    setExpandedMedia((prev) =>
-                      prev
-                        ? {
-                          ...prev,
-                          index:
-                            prev.index === prev.items.length - 1
-                              ? 0
-                              : prev.index + 1,
-                        }
-                        : prev
-                    );
+                    if (diff > 50) {
+                      setExpandedMedia((prev) =>
+                        prev
+                          ? {
+                              ...prev,
+                              index:
+                                prev.index === prev.items.length - 1
+                                  ? 0
+                                  : prev.index + 1,
+                            }
+                          : prev
+                      );
+                    }
+
+                    if (diff < -50) {
+                      setExpandedMedia((prev) =>
+                        prev
+                          ? {
+                              ...prev,
+                              index:
+                                prev.index === 0
+                                  ? prev.items.length - 1
+                                  : prev.index - 1,
+                            }
+                          : prev
+                      );
+                    }
                   }}
-                  className="absolute right-4 top-1/2 -translate-y-1/2 bg-black/60 hover:bg-black/80 text-white rounded-full w-10 h-10 flex items-center justify-center text-2xl"
                 >
-                  ›
-                </button>
+                  <button
+                    type="button"
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      downloadMedia(expandedMedia.items[expandedMedia.index]?.mediaUrl);
+                    }}
+                    className="absolute right-16 top-4 z-[70002] flex h-10 items-center justify-center rounded-full bg-black/60 px-4 text-sm text-white hover:bg-black/80"
+                  >
+                    Baixar
+                  </button>
 
-                <div className="absolute bottom-5 left-1/2 -translate-x-1/2 rounded-full bg-black/60 px-3 py-1 text-sm text-white">
-                  {expandedMedia.index + 1} / {expandedMedia.items.length}
-                </div>
-              </>
-            )}
+                  <button
+                    type="button"
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      setExpandedMedia(null);
+                    }}
+                    className="absolute right-4 top-4 z-[70002] flex h-10 w-10 items-center justify-center rounded-full bg-black/60 text-xl text-white hover:bg-black/80"
+                    aria-label="Fechar mídia"
+                  >
+                    <X className="h-5 w-5" />
+                  </button>
 
-            <button
-              type="button"
-              onClick={(e) => {
-                e.stopPropagation();
-                downloadMedia(expandedMedia.items[expandedMedia.index]?.mediaUrl);
-              }}
-              className="absolute top-4 right-16 bg-black/60 hover:bg-black/80 text-white rounded-full px-4 h-10 flex items-center justify-center text-sm"
-            >
-              Baixar
-            </button>
+                  {expandedMedia.items.length > 1 && (
+                    <>
+                      <button
+                        type="button"
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          setExpandedMedia((prev) =>
+                            prev
+                              ? {
+                                  ...prev,
+                                  index:
+                                    prev.index === 0
+                                      ? prev.items.length - 1
+                                      : prev.index - 1,
+                                }
+                              : prev
+                          );
+                        }}
+                        className="absolute left-2 top-1/2 z-[70002] flex h-12 w-12 -translate-y-1/2 touch-manipulation items-center justify-center rounded-full bg-black/70 text-3xl text-white sm:left-4 sm:h-10 sm:w-10"
+                      >
+                        ‹
+                      </button>
 
-            <button
-              type="button"
-              onClick={() => setExpandedMedia(null)}
-              className="absolute top-4 right-4 bg-black/60 hover:bg-black/80 text-white rounded-full w-10 h-10 flex items-center justify-center text-xl"
-            >
-              ✕
-            </button>
-          </div>
-        )}
+                      <button
+                        type="button"
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          setExpandedMedia((prev) =>
+                            prev
+                              ? {
+                                  ...prev,
+                                  index:
+                                    prev.index === prev.items.length - 1
+                                      ? 0
+                                      : prev.index + 1,
+                                }
+                              : prev
+                          );
+                        }}
+                        className="absolute right-2 top-1/2 z-[70002] flex h-12 w-12 -translate-y-1/2 touch-manipulation items-center justify-center rounded-full bg-black/70 text-3xl text-white sm:right-4 sm:h-10 sm:w-10"
+                      >
+                        ›
+                      </button>
+
+                      <div className="absolute bottom-5 left-1/2 z-[70002] -translate-x-1/2 rounded-full bg-black/60 px-3 py-1 text-sm text-white">
+                        {expandedMedia.index + 1} / {expandedMedia.items.length}
+                      </div>
+                    </>
+                  )}
+
+                  {expandedMedia.items[expandedMedia.index]?.resourceType === "audio" ? (
+                    <div
+                      className="w-full max-w-md rounded-2xl bg-white p-4"
+                      onClick={(e) => e.stopPropagation()}
+                    >
+                      <audio
+                        src={expandedMedia.items[expandedMedia.index]?.mediaUrl}
+                        controls
+                        autoPlay
+                        className="block w-[260px] max-w-full"
+                      />
+                    </div>
+                  ) : expandedMedia.items[expandedMedia.index]?.resourceType === "video" ? (
+                    <video
+                      src={expandedMedia.items[expandedMedia.index]?.mediaUrl}
+                      controls
+                      autoPlay
+                      playsInline
+                      className="max-h-[85vh] max-w-full rounded-xl bg-black"
+                      onClick={(e) => e.stopPropagation()}
+                    />
+                  ) : (
+                    <img
+                      src={expandedMedia.items[expandedMedia.index]?.mediaUrl}
+                      alt="Mídia ampliada"
+                      className="max-h-[85vh] max-w-full rounded-xl object-contain"
+                      onClick={(e) => e.stopPropagation()}
+                    />
+                  )}
+                </motion.div>
+              )}
+            </AnimatePresence>,
+            document.body
+          )}
 
       </div>
     </div>
