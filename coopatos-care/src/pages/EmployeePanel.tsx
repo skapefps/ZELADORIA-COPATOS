@@ -1,4 +1,5 @@
 import React, { useEffect, useRef, useState } from "react";
+import { createPortal } from "react-dom";
 import { useNavigate } from "react-router-dom";
 import { io } from "socket.io-client";
 import EmojiPicker, { Theme } from "emoji-picker-react";
@@ -4675,22 +4676,33 @@ const EmployeePanel = () => {
           </AnimatePresence>
         </div>
 
+        {typeof document !== "undefined" && createPortal(
         <AnimatePresence>
           {selectedReport && (
             <motion.div
-              className="fixed inset-0 z-[2000] flex items-end justify-center bg-black/50 p-0 sm:items-center sm:p-4"
+              className="fixed inset-0 z-[50000] flex items-end justify-center bg-black/50 p-0 sm:items-center sm:p-4"
               onClick={() => setSelectedReport(null)}
               initial={{ opacity: 0 }}
               animate={{ opacity: 1 }}
               exit={{ opacity: 0 }}
             >
+              <button
+                type="button"
+                onClick={() => setSelectedReport(null)}
+                className="fixed right-3 z-[50003] flex h-11 w-11 items-center justify-center rounded-full bg-red-50 text-red-600 shadow-xl ring-1 ring-red-100 transition-colors hover:bg-red-100 sm:hidden"
+                style={{ top: "max(0.75rem, env(safe-area-inset-top))" }}
+                aria-label="Fechar detalhes do chamado"
+              >
+                <X className="h-5 w-5" />
+              </button>
+
               <motion.div
                 initial={{ opacity: 0, scale: 0.92, y: 20 }}
                 onClick={(e) => e.stopPropagation()}
                 animate={{ opacity: 1, scale: 1, y: 0 }}
                 exit={{ opacity: 0, scale: 0.75, y: 40 }}
                 transition={{ duration: 0.18, ease: "easeInOut" }}
-                className="relative z-[2001] flex max-h-[calc(100svh-0.5rem)] w-full max-w-lg flex-col overflow-hidden rounded-t-3xl border border-border bg-card shadow-2xl sm:max-h-[90vh] sm:rounded-2xl lg:max-w-3xl"
+                className="relative z-[50001] flex max-h-[calc(100svh-0.5rem)] w-full max-w-lg flex-col overflow-hidden rounded-t-3xl border border-border bg-card shadow-2xl sm:max-h-[90vh] sm:rounded-2xl lg:max-w-3xl"
               >
                 <div className="safe-modal-top flex shrink-0 items-center justify-between gap-3 border-b border-border bg-card px-5 pb-4">
                   <div className="min-w-0">
@@ -5448,6 +5460,7 @@ const EmployeePanel = () => {
             </motion.div>
           )}
         </AnimatePresence>
+        , document.body)}
 
         {showParticipantModal && (
           <div
