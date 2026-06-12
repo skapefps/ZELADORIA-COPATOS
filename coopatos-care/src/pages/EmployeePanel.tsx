@@ -520,6 +520,25 @@ const AudioMessage = ({ url, apiUrl }: { url: string; apiUrl: string }) => {
   );
 };
 
+const formatChatDate = (value: string) =>
+  new Date(value).toLocaleDateString("pt-BR", {
+    day: "2-digit",
+    month: "2-digit",
+    year: "numeric",
+  });
+
+const formatChatTime = (value: string) =>
+  new Date(value).toLocaleTimeString("pt-BR", {
+    hour: "2-digit",
+    minute: "2-digit",
+  });
+
+const formatChatDateTime = (value: string) =>
+  `${formatChatDate(value)} às ${formatChatTime(value)}`;
+
+const isSameChatDay = (first: string, second: string) =>
+  new Date(first).toDateString() === new Date(second).toDateString();
+
 
 const EmployeePanel = () => {
   const employee = JSON.parse(localStorage.getItem("employee") || "{}");
@@ -682,10 +701,27 @@ const EmployeePanel = () => {
   const [searchTerm, setSearchTerm] = useState("");
   const [statusFilter, setStatusFilter] = useState("all");
   const [categoryFilter, setCategoryFilter] = useState("all");
+  const hasBlockingOverlay = Boolean(
+    selectedReport ||
+    showMessagesModal ||
+    showPrivateChatModal ||
+    showParticipantModal ||
+    showNotificationsPanel ||
+    showTeamPanel ||
+    showChatMediaModal ||
+    showLogoutConfirm ||
+    expandedMedia
+  );
 
   const scrollPanelToTop = () => {
     contentScrollRef.current?.scrollTo({ top: 0, behavior: "smooth" });
   };
+
+  useEffect(() => {
+    if (hasBlockingOverlay) {
+      setShowQuickMenu(false);
+    }
+  }, [hasBlockingOverlay]);
 
   const refreshReports = async () => {
     try {
@@ -3713,12 +3749,21 @@ const EmployeePanel = () => {
   };
 
   const renderMessages = () => {
-    return messages.map((msg) => {
+    return messages.map((msg, index) => {
       const isMine = msg.senderId === employee.id;
+      const showDateSeparator =
+        index === 0 || !isSameChatDay(messages[index - 1].createdAt, msg.createdAt);
 
       return (
+        <React.Fragment key={msg.id}>
+        {showDateSeparator && (
+          <div className="flex justify-center py-2">
+            <span className="rounded-full border border-border bg-card px-3 py-1 text-[11px] font-semibold text-muted-foreground shadow-sm">
+              {formatChatDate(msg.createdAt)}
+            </span>
+          </div>
+        )}
         <motion.div
-          key={msg.id}
           ref={(el) => {
             messageRefs.current[msg.id] = el;
           }}
@@ -3770,7 +3815,7 @@ const EmployeePanel = () => {
               )}
 
               <span>
-                • {new Date(msg.createdAt).toLocaleString("pt-BR")}
+                • {formatChatDateTime(msg.createdAt)}
               </span>
 
               {isMine && (
@@ -3927,6 +3972,7 @@ const EmployeePanel = () => {
             )}
           </div>
         </motion.div>
+        </React.Fragment>
       );
     });
   };
@@ -5527,7 +5573,7 @@ const EmployeePanel = () => {
         <AnimatePresence>
           {showMessagesModal && selectedReport && (
             <motion.div
-              className="fixed inset-0 z-[9999] bg-black/60 flex items-center justify-center p-4"
+              className="fixed inset-0 z-[60000] bg-black/60 flex items-center justify-center p-4"
               initial={{ opacity: 0 }}
               animate={{ opacity: 1 }}
               exit={{ opacity: 0 }}
@@ -5904,7 +5950,7 @@ const EmployeePanel = () => {
         <AnimatePresence>
           {expandedMedia && (
             <motion.div
-              className="fixed inset-0 z-[12000] bg-black/90 flex items-center justify-center p-4"
+              className="fixed inset-0 z-[70000] bg-black/90 flex items-center justify-center p-4"
               initial={{ opacity: 0 }}
               animate={{ opacity: 1 }}
               exit={{ opacity: 0 }}
@@ -6033,7 +6079,7 @@ touch-manipulation
         <AnimatePresence>
           {showChatMediaModal && (
             <motion.div
-              className="fixed inset-0 z-[11000] bg-black/60 flex items-center justify-center p-4"
+              className="fixed inset-0 z-[61000] bg-black/60 flex items-center justify-center p-4"
               onClick={() => setShowChatMediaModal(false)}
               initial={{ opacity: 0 }}
               animate={{ opacity: 1 }}
@@ -6137,6 +6183,7 @@ touch-manipulation
           )}
         </AnimatePresence>
 
+        {!hasBlockingOverlay && (
         <div className="fixed bottom-5 right-5 z-[9000]">
           <AnimatePresence>
             {showQuickMenu && (
@@ -6206,6 +6253,7 @@ touch-manipulation
             )}
           </motion.button>
         </div>
+        )}
 
         <AnimatePresence>
           {showNotificationsPanel && (
@@ -6612,16 +6660,26 @@ touch-manipulation
                       Nenhuma mensagem ainda.
                     </p>
                   ) : (
-                    privateMessages.map((msg) => {
+                    privateMessages.map((msg, index) => {
 
                       const isMine = msg.senderId === employee.id;
                       const isEditingThisMessage = editingPrivateMessageId === msg.id;
                       const isSelected = selectedPrivateMessageIds.includes(msg.id);
                       const canSelectMessage = isMine;
+                      const showDateSeparator =
+                        index === 0 ||
+                        !isSameChatDay(privateMessages[index - 1].createdAt, msg.createdAt);
 
                       return (
+                        <React.Fragment key={msg.id}>
+                        {showDateSeparator && (
+                          <div className="flex justify-center py-2">
+                            <span className="rounded-full border border-border bg-card px-3 py-1 text-[11px] font-semibold text-muted-foreground shadow-sm">
+                              {formatChatDate(msg.createdAt)}
+                            </span>
+                          </div>
+                        )}
                         <div
-                          key={msg.id}
                           ref={(el) => {
                             privateMessageRefs.current[msg.id] = el;
                           }}
@@ -6878,10 +6936,7 @@ touch-manipulation
 
                               <div className="mt-1 flex items-center justify-end gap-1 text-[10px] opacity-60">
                                 <span>
-                                  {new Date(msg.createdAt).toLocaleTimeString("pt-BR", {
-                                    hour: "2-digit",
-                                    minute: "2-digit",
-                                  })}
+                                  {formatChatDateTime(msg.createdAt)}
                                 </span>
 
                                 {isMine && (
@@ -6895,6 +6950,7 @@ touch-manipulation
                             </div>
                           </motion.div>
                         </div>
+                        </React.Fragment>
                       );
                     })
 
@@ -7208,7 +7264,7 @@ touch-manipulation
 
         {expandedMedia && (
           <div
-            className="fixed inset-0 z-[9999] bg-black/90 flex items-center justify-center p-4"
+            className="fixed inset-0 z-[70000] bg-black/90 flex items-center justify-center p-4"
             onClick={() => setExpandedMedia(null)}
             onTouchStart={(e) => {
               touchStartX.current = e.changedTouches[0].clientX;
