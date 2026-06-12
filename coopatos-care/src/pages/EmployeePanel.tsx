@@ -684,7 +684,6 @@ const EmployeePanel = () => {
 
   const scrollPanelToTop = () => {
     contentScrollRef.current?.scrollTo({ top: 0, behavior: "smooth" });
-    window.scrollTo({ top: 0, behavior: "smooth" });
   };
 
   const refreshReports = async () => {
@@ -4186,7 +4185,7 @@ const EmployeePanel = () => {
       animate={{ opacity: 1 }}
       exit={{ opacity: 0 }}
       transition={{ duration: 0.15 }}
-      className="space-y-4 pb-8 touch-pan-y lg:grid lg:grid-cols-3 lg:items-start lg:gap-4 lg:space-y-0"
+      className="space-y-4 pb-8 touch-pan-y lg:grid lg:grid-cols-3 lg:items-stretch lg:gap-4 lg:space-y-0"
     >
       <div className="lg:col-span-3 mb-3 flex justify-end">
         <Button
@@ -4391,7 +4390,7 @@ const EmployeePanel = () => {
       animate={{ opacity: 1 }}
       exit={{ opacity: 0 }}
       transition={{ duration: 0.15 }}
-      className="space-y-4 pb-8 touch-pan-y lg:grid lg:grid-cols-3 lg:items-start lg:gap-4 lg:space-y-0"
+      className="space-y-4 pb-8 touch-pan-y lg:grid lg:grid-cols-3 lg:items-stretch lg:gap-4 lg:space-y-0"
     >
       <div className="lg:col-span-3 mb-3 flex justify-end">
         <Button
@@ -4586,7 +4585,7 @@ const EmployeePanel = () => {
   const activeTabIndex = Math.max(tabsOrder.indexOf(tab), 0);
 
   return (
-    <div className="flex h-screen max-h-screen flex-col overflow-hidden bg-background supports-[height:100dvh]:h-dvh supports-[height:100dvh]:max-h-dvh">
+    <div className="app-viewport flex flex-col overflow-hidden bg-background">
       <div className="mx-auto w-full max-w-lg lg:max-w-6xl lg:px-8"></div>
       {/* Header */}
       <header className="z-[600] shrink-0 gradient-primary px-4 py-3 flex items-center justify-between">
@@ -4664,9 +4663,9 @@ const EmployeePanel = () => {
       {/* Content */}
       <div
         ref={contentScrollRef}
-        className="min-h-0 flex-1 overflow-y-auto overflow-x-hidden overscroll-contain [-webkit-overflow-scrolling:touch]"
+        className="employee-panel-scroll min-h-0 flex-1 overflow-y-auto overflow-x-hidden"
       >
-        <div className="p-4 pb-44 lg:py-8 lg:pb-32">
+        <div className="mx-auto w-full max-w-[1440px] p-4 pb-44 lg:py-8 lg:pb-36">
           <AnimatePresence mode="wait" initial={false}>
             {tab === "new"
               ? renderNewTab()
@@ -4679,7 +4678,7 @@ const EmployeePanel = () => {
         <AnimatePresence>
           {selectedReport && (
             <motion.div
-              className="fixed inset-0 bg-black/50 flex items-center justify-center z-[2000] p-4"
+              className="fixed inset-0 z-[2000] flex items-end justify-center bg-black/50 p-0 sm:items-center sm:p-4"
               onClick={() => setSelectedReport(null)}
               initial={{ opacity: 0 }}
               animate={{ opacity: 1 }}
@@ -4691,21 +4690,27 @@ const EmployeePanel = () => {
                 animate={{ opacity: 1, scale: 1, y: 0 }}
                 exit={{ opacity: 0, scale: 0.75, y: 40 }}
                 transition={{ duration: 0.18, ease: "easeInOut" }}
-                className="relative z-[2001] bg-card rounded-2xl p-5 w-full max-w-lg lg:max-w-3xl max-h-[90vh] overflow-y-auto shadow-2xl border border-border"
+                className="relative z-[2001] flex max-h-[calc(100svh-0.5rem)] w-full max-w-lg flex-col overflow-hidden rounded-t-3xl border border-border bg-card shadow-2xl sm:max-h-[90vh] sm:rounded-2xl lg:max-w-3xl"
               >
-                <button
-                  type="button"
-                  onClick={() => setSelectedReport(null)}
-                  className="sticky top-0 ml-auto z-20 flex h-8 w-8 items-center justify-center rounded-full bg-red-50 text-red-600 hover:bg-red-100 transition-colors"
-                >
-                  <X className="w-4 h-4" />
-                </button>
-                <div className="mb-5">
-                  <p className="text-xs text-muted-foreground">Detalhes do chamado</p>
-                  <h2 className="text-xl font-bold text-foreground">
-                    Chamado #{selectedReport.id}
-                  </h2>
+                <div className="safe-modal-top flex shrink-0 items-center justify-between gap-3 border-b border-border bg-card px-5 pb-4">
+                  <div className="min-w-0">
+                    <p className="text-xs text-muted-foreground">Detalhes do chamado</p>
+                    <h2 className="truncate text-xl font-bold text-foreground">
+                      Chamado #{selectedReport.id}
+                    </h2>
+                  </div>
+
+                  <button
+                    type="button"
+                    onClick={() => setSelectedReport(null)}
+                    className="flex h-10 w-10 shrink-0 items-center justify-center rounded-full bg-red-50 text-red-600 transition-colors hover:bg-red-100"
+                    aria-label="Fechar detalhes do chamado"
+                  >
+                    <X className="w-5 h-5" />
+                  </button>
                 </div>
+
+                <div className="employee-modal-scroll min-h-0 flex-1 overflow-y-auto p-5 pb-10">
 
                 {selectedReport.images && selectedReport.images.length > 0 && (
                   <>
@@ -5438,6 +5443,7 @@ const EmployeePanel = () => {
                     </>
                   )}
                 </div>
+                </div>
               </motion.div>
             </motion.div>
           )}
@@ -5524,7 +5530,7 @@ const EmployeePanel = () => {
               >
                 {/* Header */}
                 {/* Header */}
-                <div className="border-b border-border px-5 py-4 sm:px-6">
+                <div className="safe-modal-top border-b border-border px-5 pb-4 sm:px-6">
                   <div className="flex items-start justify-between gap-4">
                     <div className="min-w-0 pl-1 sm:pl-2">
                       <h2 className="text-xl sm:text-2xl font-bold text-foreground leading-tight">
@@ -6027,7 +6033,7 @@ touch-manipulation
                 exit={{ opacity: 0, scale: 0.92 }}
                 className="w-full max-w-3xl max-h-[85vh] overflow-hidden rounded-3xl bg-card shadow-2xl border border-border flex flex-col"
               >
-                <div className="flex items-center justify-between border-b border-border p-4">
+                <div className="safe-modal-top flex items-center justify-between border-b border-border px-4 pb-4">
                   <div>
                     <h2 className="text-lg font-bold">Mídias da conversa</h2>
                     <p className="text-sm text-muted-foreground">
@@ -6204,7 +6210,7 @@ touch-manipulation
                 onClick={(e) => e.stopPropagation()}
                 className="w-full max-w-md max-h-[80vh] overflow-hidden rounded-3xl bg-card shadow-2xl border border-border flex flex-col"
               >
-                <div className="flex items-center justify-between border-b border-border p-4">
+                <div className="safe-modal-top flex items-center justify-between border-b border-border px-4 pb-4">
                   <div>
                     <h2 className="text-lg font-bold">Notificações</h2>
                     <p className="text-xs text-muted-foreground">
@@ -6332,7 +6338,7 @@ touch-manipulation
                 onClick={(e) => e.stopPropagation()}
                 className="w-full max-w-md max-h-[80vh] overflow-hidden rounded-3xl bg-card shadow-2xl border border-border flex flex-col"
               >
-                <div className="flex items-center justify-between border-b border-border p-4">
+                <div className="safe-modal-top flex items-center justify-between border-b border-border px-4 pb-4">
                   <div>
                     <h2 className="text-lg font-bold">Equipe</h2>
                     <p className="text-xs text-muted-foreground">
@@ -6449,7 +6455,7 @@ touch-manipulation
                 onClick={(e) => e.stopPropagation()}
                 className="mobile-full-height relative w-full sm:h-[75vh] sm:max-h-[75vh] sm:max-w-lg rounded-none border border-border bg-card shadow-2xl sm:rounded-3xl flex flex-col overflow-hidden"
               >
-                <div className="flex items-center justify-between border-b border-border p-4">
+                <div className="safe-modal-top flex items-center justify-between border-b border-border px-4 pb-4">
                   <div>
                     <h2 className="text-base font-bold">
                       {getPrivateChatTitle()}

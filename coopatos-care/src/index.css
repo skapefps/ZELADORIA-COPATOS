@@ -118,6 +118,23 @@
     height: 100vh;
     max-height: 100vh;
   }
+  .app-viewport {
+    height: 100vh;
+    max-height: 100vh;
+    min-height: 100vh;
+  }
+  .employee-panel-scroll,
+  .employee-modal-scroll {
+    -webkit-overflow-scrolling: touch;
+    overscroll-behavior-y: contain;
+    touch-action: pan-y;
+  }
+  .employee-panel-scroll {
+    scroll-padding-bottom: 9rem;
+  }
+  .safe-modal-top {
+    padding-top: max(1rem, env(safe-area-inset-top));
+  }
   @supports (height: 100dvh) {
     .modal-max-h-90 {
       max-height: 90dvh;
@@ -131,6 +148,18 @@
     .mobile-full-height {
       height: 100dvh;
       max-height: 100dvh;
+    }
+    .app-viewport {
+      height: 100dvh;
+      max-height: 100dvh;
+      min-height: 100dvh;
+    }
+  }
+  @supports (height: 100svh) {
+    .app-viewport {
+      height: 100svh;
+      max-height: 100svh;
+      min-height: 100svh;
     }
   }
   .gradient-primary {
