@@ -5977,10 +5977,11 @@ const EmployeePanel = () => {
         document.body
         )}
 
+        {typeof document !== "undefined" && createPortal(
         <AnimatePresence>
           {showChatMediaModal && (
             <motion.div
-              className="fixed inset-0 z-[61000] bg-black/60 flex items-center justify-center p-4"
+              className="fixed inset-0 z-[66000] flex items-end justify-center bg-black/60 p-0 sm:items-center sm:p-4"
               onClick={() => setShowChatMediaModal(false)}
               initial={{ opacity: 0 }}
               animate={{ opacity: 1 }}
@@ -5991,7 +5992,7 @@ const EmployeePanel = () => {
                 onClick={(e) => e.stopPropagation()}
                 animate={{ opacity: 1, scale: 1 }}
                 exit={{ opacity: 0, scale: 0.92 }}
-                className="w-full max-w-3xl max-h-[85vh] overflow-hidden rounded-3xl bg-card shadow-2xl border border-border flex flex-col"
+                className="flex h-[calc(100svh-0.5rem)] max-h-[calc(100svh-0.5rem)] w-full max-w-3xl flex-col overflow-hidden rounded-t-3xl border border-border bg-card shadow-2xl sm:h-auto sm:max-h-[85vh] sm:rounded-3xl"
               >
                 <div className="safe-modal-top flex items-center justify-between border-b border-border px-4 pb-4">
                   <div>
@@ -6010,7 +6011,7 @@ const EmployeePanel = () => {
                   </button>
                 </div>
 
-                <div className="overflow-y-auto p-4">
+                <div className="employee-modal-scroll min-h-0 flex-1 overflow-y-auto p-4 pb-[calc(1rem+env(safe-area-inset-bottom))]">
                   {chatMedia.length === 0 ? (
                     <p className="py-10 text-center text-sm text-muted-foreground">
                       Nenhuma mídia enviada nesta conversa.
@@ -6082,7 +6083,9 @@ const EmployeePanel = () => {
               </motion.div>
             </motion.div>
           )}
-        </AnimatePresence>
+        </AnimatePresence>,
+        document.body
+        )}
 
         {!hasBlockingOverlay && (
         <div className="fixed bottom-5 right-5 z-[9000]">
@@ -6156,10 +6159,11 @@ const EmployeePanel = () => {
         </div>
         )}
 
+        {typeof document !== "undefined" && createPortal(
         <AnimatePresence>
           {showNotificationsPanel && (
             <motion.div
-              className="fixed inset-0 z-[9100] bg-black/50 flex items-end sm:items-center justify-center p-4"
+              className="fixed inset-0 z-[65000] flex items-end justify-center bg-black/50 p-0 sm:items-center sm:p-4"
               initial={{ opacity: 0 }}
               animate={{ opacity: 1 }}
               exit={{ opacity: 0 }}
@@ -6170,9 +6174,9 @@ const EmployeePanel = () => {
                 animate={{ opacity: 1, y: 0, scale: 1 }}
                 exit={{ opacity: 0, y: 40, scale: 0.98 }}
                 onClick={(e) => e.stopPropagation()}
-                className="w-full max-w-md max-h-[80vh] overflow-hidden rounded-3xl bg-card shadow-2xl border border-border flex flex-col"
+                className="flex h-[calc(100svh-0.5rem)] max-h-[calc(100svh-0.5rem)] w-full max-w-md flex-col overflow-hidden rounded-t-3xl border border-border bg-card shadow-2xl sm:h-auto sm:max-h-[82vh] sm:rounded-3xl"
               >
-                <div className="safe-modal-top flex items-center justify-between border-b border-border px-4 pb-4">
+                <div className="safe-modal-top flex shrink-0 items-center justify-between border-b border-border px-4 pb-4">
                   <div>
                     <h2 className="text-lg font-bold">Notificações</h2>
                     <p className="text-xs text-muted-foreground">
@@ -6202,7 +6206,7 @@ const EmployeePanel = () => {
                   </div>
                 </div>
 
-                <div className="overflow-y-auto p-3">
+                <div className="employee-modal-scroll min-h-0 flex-1 overflow-y-auto p-3 pb-[calc(1rem+env(safe-area-inset-bottom))]">
                   {notifications.length === 0 ? (
                     <p className="py-10 text-center text-sm text-muted-foreground">
                       Nenhuma notificação ainda.
@@ -6289,12 +6293,15 @@ const EmployeePanel = () => {
               </motion.div>
             </motion.div>
           )}
-        </AnimatePresence>
+        </AnimatePresence>,
+        document.body
+        )}
 
+        {typeof document !== "undefined" && createPortal(
         <AnimatePresence>
           {showTeamPanel && (
             <motion.div
-              className="fixed inset-0 z-[9100] bg-black/50 flex items-end sm:items-center justify-center p-4"
+              className="fixed inset-0 z-[65000] flex items-end justify-center bg-black/50 p-0 sm:items-center sm:p-4"
               initial={{ opacity: 0 }}
               animate={{ opacity: 1 }}
               exit={{ opacity: 0 }}
@@ -6305,9 +6312,9 @@ const EmployeePanel = () => {
                 animate={{ opacity: 1, y: 0, scale: 1 }}
                 exit={{ opacity: 0, y: 40, scale: 0.98 }}
                 onClick={(e) => e.stopPropagation()}
-                className="w-full max-w-md max-h-[80vh] overflow-hidden rounded-3xl bg-card shadow-2xl border border-border flex flex-col"
+                className="flex h-[calc(100svh-0.5rem)] max-h-[calc(100svh-0.5rem)] w-full max-w-md flex-col overflow-hidden rounded-t-3xl border border-border bg-card shadow-2xl sm:h-auto sm:max-h-[82vh] sm:rounded-3xl"
               >
-                <div className="safe-modal-top flex items-center justify-between border-b border-border px-4 pb-4">
+                <div className="safe-modal-top flex shrink-0 items-center justify-between border-b border-border px-4 pb-4">
                   <div>
                     <h2 className="text-lg font-bold">Equipe</h2>
                     <p className="text-xs text-muted-foreground">
@@ -6325,7 +6332,7 @@ const EmployeePanel = () => {
                   </button>
                 </div>
 
-                <div className="border-b border-border p-3 space-y-2">
+                <div className="shrink-0 space-y-2 border-b border-border p-3">
                   <Input
                     value={teamSearch}
                     onChange={(e) => setTeamSearch(e.target.value)}
@@ -6353,7 +6360,7 @@ const EmployeePanel = () => {
                   </Select>
                 </div>
 
-                <div className="overflow-y-auto p-3">
+                <div className="employee-modal-scroll min-h-0 flex-1 overflow-y-auto p-3 pb-[calc(1rem+env(safe-area-inset-bottom))]">
                   {filteredTeamEmployees.length === 0 ? (
                     <p className="py-10 text-center text-sm text-muted-foreground">
                       Nenhum funcionário encontrado.
@@ -6406,12 +6413,15 @@ const EmployeePanel = () => {
               </motion.div>
             </motion.div>
           )}
-        </AnimatePresence>
+        </AnimatePresence>,
+        document.body
+        )}
 
+        {typeof document !== "undefined" && createPortal(
         <AnimatePresence>
           {showPrivateChatModal && privateConversation && (
             <motion.div
-              className="fixed inset-0 z-[9200] bg-black/60 flex items-end sm:items-center justify-center p-0 sm:p-4"
+              className="fixed inset-0 z-[62000] flex items-end justify-center bg-black/60 p-0 sm:items-center sm:p-4"
               initial={{ opacity: 0 }}
               animate={{ opacity: 1 }}
               exit={{ opacity: 0 }}
@@ -6422,7 +6432,7 @@ const EmployeePanel = () => {
                 animate={{ opacity: 1, y: 0, scale: 1 }}
                 exit={{ opacity: 0, y: 40, scale: 0.98 }}
                 onClick={(e) => e.stopPropagation()}
-                className="mobile-full-height relative w-full sm:h-[75vh] sm:max-h-[75vh] sm:max-w-lg rounded-none border border-border bg-card shadow-2xl sm:rounded-3xl flex flex-col overflow-hidden"
+                className="relative flex h-[calc(100svh-0.5rem)] max-h-[calc(100svh-0.5rem)] w-full flex-col overflow-hidden rounded-t-3xl border border-border bg-card shadow-2xl sm:h-[75vh] sm:max-h-[75vh] sm:max-w-lg sm:rounded-3xl"
               >
                 <div className="safe-modal-top flex items-center justify-between border-b border-border px-4 pb-4">
                   <div>
@@ -6557,7 +6567,7 @@ const EmployeePanel = () => {
 
                 <div
                   ref={privateMessagesContainerRef}
-                  className="min-h-0 flex-1 overflow-y-auto overscroll-contain bg-muted/30 p-3 space-y-2 touch-pan-y"
+                  className="employee-modal-scroll min-h-0 flex-1 overflow-y-auto overscroll-contain bg-muted/30 p-3 space-y-2 touch-pan-y"
                 >
                   {loadingPrivateMessages ? (
                     <p className="py-10 text-center text-sm text-muted-foreground">
@@ -7094,7 +7104,9 @@ const EmployeePanel = () => {
               </motion.div>
             </motion.div>
           )}
-        </AnimatePresence>
+        </AnimatePresence>,
+        document.body
+        )}
 
         {showLogoutConfirm && (
           <div
